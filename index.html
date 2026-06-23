@@ -14,24 +14,51 @@
         <div class="menu-item dropdown-container">
           <div class="menu-label">File</div>
           <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-open-folder">Open Workspace Folder... <span class="hotkey">Ctrl+O</span></div>
+            <div class="dropdown-item" id="action-new-file">New File <span class="hotkey">Ctrl+N</span></div>
+            <div class="dropdown-item" id="action-open-file">Open File... <span class="hotkey">Ctrl+O</span></div>
+            <div class="dropdown-item" id="action-open-folder">Open Workspace... <span class="hotkey">Ctrl+K Ctrl+O</span></div>
+            <div class="dropdown-separator"></div>
+            <div class="dropdown-item" id="action-save-file">Save <span class="hotkey">Ctrl+S</span></div>
+            <div class="dropdown-separator"></div>
+            <div class="dropdown-item" id="action-export-pdf">Export PDF</div>
+            <div class="dropdown-separator"></div>
+            <div class="dropdown-item" id="action-exit">Exit</div>
+          </div>
+        </div>
+        <div class="menu-item dropdown-container">
+          <div class="menu-label">Edit</div>
+          <div class="dropdown-menu">
+            <div class="dropdown-item" id="action-undo">Undo <span class="hotkey">Ctrl+Z</span></div>
+            <div class="dropdown-item" id="action-redo">Redo <span class="hotkey">Ctrl+Y</span></div>
           </div>
         </div>
         <div class="menu-item dropdown-container">
           <div class="menu-label">View</div>
           <div class="dropdown-menu">
-            <div class="dropdown-item" id="action-toggle-layout">Switch Workspace Layout <span class="hotkey">Ctrl+M</span></div>
+            <div class="dropdown-item" id="action-toggle-layout">Switch Layout <span class="hotkey">Ctrl+M</span></div>
+            <div class="dropdown-item" id="action-toggle-word-wrap">Toggle Word Wrap <span class="hotkey">Alt+Z</span></div>
+            <div class="dropdown-item" id="action-toggle-sidebar">Toggle Sidebar <span class="hotkey">Ctrl+B</span></div>
           </div>
         </div>
         <div class="menu-item dropdown-container">
           <div class="menu-label">Terminal</div>
           <div class="dropdown-menu">
             <div class="dropdown-item" id="action-toggle-logs">Toggle Log Console <span class="hotkey">Ctrl+`</span></div>
+            <div class="dropdown-item" id="action-clear-logs">Clear Logs</div>
+            <div class="dropdown-separator"></div>
+            <div class="dropdown-item" id="action-restart-lsp">Restart Tinymist LSP</div>
+          </div>
+        </div>
+        <div class="menu-item dropdown-container">
+          <div class="menu-label">Help</div>
+          <div class="dropdown-menu">
+            <div class="dropdown-item" id="action-docs-typstry">Typstry Documentation</div>
+            <div class="dropdown-item" id="action-docs-typst">Typst Reference</div>
           </div>
         </div>
       </div>
       <div class="titlebar-center" data-tauri-drag-region>
-        <div class="titlebar-text">Typstry Pro</div>
+        <div class="titlebar-text">Typstry</div>
       </div>
       <div class="titlebar-right">
         <div class="titlebar-button" id="titlebar-minimize">
@@ -49,14 +76,48 @@
       <div id="explorer-sidebar"></div>
       <div class="resizer" id="explorer-resizer"></div>
       <div id="workspace-viewport">
-        <div id="input-container-wrapper">
+        <div id="welcome-screen">
+          <div class="welcome-header">
+            <img src="/assets/typstry-ico.svg" alt="Typstry Logo" class="welcome-logo">
+            <div class="welcome-title-container">
+              <h1>Welcome back to Typstry</h1>
+              <p>The editor for what's next</p>
+            </div>
+          </div>
+          
+          <div class="welcome-section">
+            <div class="welcome-section-title">GET STARTED</div>
+            <div class="welcome-item" id="welcome-new-file">
+              <span class="welcome-item-icon">+</span>
+              <span class="welcome-item-text">New File</span>
+              <span class="welcome-item-hotkey">Ctrl-N</span>
+            </div>
+            <div class="welcome-item" id="welcome-open-project">
+              <span class="welcome-item-icon">📁</span>
+              <span class="welcome-item-text">Open Project</span>
+              <span class="welcome-item-hotkey">Ctrl-K Ctrl-O</span>
+            </div>
+          </div>
+          
+          <div class="welcome-section">
+            <div class="welcome-section-title">RECENT PROJECTS</div>
+            <!-- Dynamic recent projects would go here, stub for now -->
+            <div class="welcome-item">
+              <span class="welcome-item-icon">📁</span>
+              <span class="welcome-item-text">typstry</span>
+              <span class="welcome-item-hotkey">Ctrl-1</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="input-container-wrapper" class="hidden">
           <div id="code-editor-pane" class="input-pane"></div>
           <div id="wysiwym-editor-pane" class="input-pane hidden">
             <div class="wysiwym-container"></div>
           </div>
         </div>
-        <div class="resizer" id="editor-preview-resizer"></div>
-        <div id="preview-container-wrapper">
+        <div class="resizer hidden" id="editor-preview-resizer"></div>
+        <div id="preview-container-wrapper" class="hidden">
           <div class="preview-actions">
             <button id="undock-preview-btn" title="Undock Preview" style="padding: 4px 8px; cursor: pointer; border: 1px solid var(--ui-border); background: var(--ui-bg); color: var(--ui-text); border-radius: 4px; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H8v1.5h4.5v4.5H14V2zm-2 10H4V6h3.5V4.5H3.5a.5.5 0 0 0-.5.5v7.5a.5.5 0 0 0 .5.5h8.5a.5.5 0 0 0 .5-.5V9H12v3z"/></svg>

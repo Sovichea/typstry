@@ -7,6 +7,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { undo, redo } from "@codemirror/commands";
 import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment } from "./editor/extensions";
 import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
@@ -93,11 +94,8 @@ class TypstryWorkspaceController {
   private diagnosticCount = document.getElementById("diagnostic-count")!;
 
   public async bootstrap() {
-    this.setLspStatus({ kind: "starting", message: "Preparing toolchain" });
-    await this.ensureDependencies();
     this.initCodeMirror();
     this.initExplorer();
-    await this.initLsp();
     this.bindGlobalEvents();
     this.initResizers();
     this.initUndockPreview();
@@ -105,6 +103,42 @@ class TypstryWorkspaceController {
     this.initWordWrap();
     this.renderLogConsole();
     this.setLogConsoleVisible(false);
+    this.updateWorkspaceViewportVisibility();
+
+    await getCurrentWindow().show();
+
+    this.setLspStatus({ kind: "starting", message: "Preparing toolchain" });
+    await this.ensureDependencies();
+    await this.initLsp();
+  }
+
+  private updateWorkspaceViewportVisibility() {
+    const welcomeScreen = document.getElementById("welcome-screen");
+    const inputWrapper = document.getElementById("input-container-wrapper");
+    const previewWrapper = document.getElementById("preview-container-wrapper");
+    const resizer = document.getElementById("editor-preview-resizer");
+    const explorerSidebar = document.getElementById("explorer-sidebar");
+    const explorerResizer = document.getElementById("explorer-resizer");
+
+    if (this.activeFilePath || this.workspaceRootPath) {
+      welcomeScreen?.classList.add("hidden");
+      inputWrapper?.classList.remove("hidden");
+      previewWrapper?.classList.remove("hidden");
+      resizer?.classList.remove("hidden");
+    } else {
+      welcomeScreen?.classList.remove("hidden");
+      inputWrapper?.classList.add("hidden");
+      previewWrapper?.classList.add("hidden");
+      resizer?.classList.add("hidden");
+    }
+
+    if (this.workspaceRootPath) {
+      explorerSidebar?.classList.remove("hidden");
+      explorerResizer?.classList.remove("hidden");
+    } else {
+      explorerSidebar?.classList.add("hidden");
+      explorerResizer?.classList.add("hidden");
+    }
   }
 
   private initThemeSelector() {
@@ -266,6 +300,7 @@ class TypstryWorkspaceController {
       if (this.activeMode === "WYSIWYM") {
         this.mapMarkupToWysiwym(contents);
       }
+      this.updateWorkspaceViewportVisibility();
     } catch (e) {
       console.error("Failed to load file:", e);
       alert("Failed to load file: " + e);
@@ -940,6 +975,7 @@ class TypstryWorkspaceController {
       if (typeof selected === "string") {
         this.workspaceRootPath = selected;
         this.explorer.loadWorkspace(selected);
+        this.updateWorkspaceViewportVisibility();
       }
     });
 
@@ -948,10 +984,103 @@ class TypstryWorkspaceController {
       if (typeof selected === "string") {
         this.workspaceRootPath = selected;
         this.explorer.loadWorkspace(selected);
+        this.updateWorkspaceViewportVisibility();
       }
     });
+
+    document.getElementById("action-new-file")?.addEventListener("click", () => {
+      this.activeFilePath = null;
+      this.editorInstance.dispatch({
+        changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
+      });
+      this.setLspStatus({ kind: "preview-ready", message: "New Unsaved File" });
+      this.updateWorkspaceViewportVisibility();
+    });
+
+    document.getElementById("action-open-file")?.addEventListener("click", async () => {
+      const selected = await open({ multiple: false });
+      if (typeof selected === "string") {
+        this.loadFile(selected);
+      }
+    });
+
+    document.getElementById("action-save-file")?.addEventListener("click", async () => {
+      if (this.activeFilePath) {
+        try {
+          const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+          const content = this.editorInstance.state.doc.toString();
+          await writeTextFile(this.activeFilePath, content);
+          this.setLspStatus({ kind: "preview-ready", message: "File saved" });
+        } catch (e) {
+          console.error("Save failed:", e);
+        }
+      }
+    });
+
+    document.getElementById("action-export-pdf")?.addEventListener("click", async () => {
+      if (this.activeFilePath) {
+        this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
+        const content = this.editorInstance.state.doc.toString();
+        try {
+          const pdfPath = await invoke<string>("compile_typst_document", {
+            sourceCode: content,
+            filePath: this.activeFilePath
+          });
+          this.setLspStatus({ kind: "preview-ready", message: `Exported to ${pdfPath}` });
+        } catch (error) {
+          this.setLspStatus({ kind: "error", message: `Export failed: ${error}` });
+        }
+      }
+    });
+
+    document.getElementById("action-exit")?.addEventListener("click", () => {
+      getCurrentWindow().close();
+    });
+
+    document.getElementById("action-undo")?.addEventListener("click", () => {
+      undo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch });
+    });
+
+    document.getElementById("action-redo")?.addEventListener("click", () => {
+      redo({ state: this.editorInstance.state, dispatch: this.editorInstance.dispatch });
+    });
+
+    document.getElementById("action-toggle-word-wrap")?.addEventListener("click", () => {
+      document.getElementById("word-wrap-toggle")?.click();
+    });
+
+    document.getElementById("action-toggle-sidebar")?.addEventListener("click", () => {
+      document.getElementById("explorer-sidebar")?.classList.toggle("hidden");
+    });
+
+    document.getElementById("action-clear-logs")?.addEventListener("click", () => {
+      this.logConsoleClear.click();
+    });
+
+    document.getElementById("action-restart-lsp")?.addEventListener("click", async () => {
+      this.setLspStatus({ kind: "starting", message: "Restarting LSP..." });
+      await this.initLsp();
+    });
+
+    document.getElementById("action-docs-typstry")?.addEventListener("click", () => {
+      openUrl("https://github.com/sovichea/typstry");
+    });
+
+    document.getElementById("action-docs-typst")?.addEventListener("click", () => {
+      openUrl("https://typst.app/docs");
+    });
+
     document.getElementById("action-toggle-layout")?.addEventListener("click", () => this.switchViewLayoutMode());
     document.getElementById("action-toggle-logs")?.addEventListener("click", () => this.toggleLogConsole());
+
+    // Welcome Screen Actions
+    document.getElementById("welcome-new-file")?.addEventListener("click", () => {
+      document.getElementById("action-new-file")?.click();
+    });
+    
+    document.getElementById("welcome-open-project")?.addEventListener("click", () => {
+      document.getElementById("action-open-folder")?.click();
+    });
 
     // Menu Bar Dropdown logic
     const dropdownContainers = document.querySelectorAll(".dropdown-container");

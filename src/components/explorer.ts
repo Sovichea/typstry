@@ -3,6 +3,48 @@ import { join } from "@tauri-apps/api/path";
 
 export interface FileNode { name: string; path: string; isDirectory: boolean; children?: FileNode[]; }
 
+function getFileIconSvg(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  
+  switch (ext) {
+    case 'typ':
+      // Typst logoish (Blue)
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="#239dad"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm-2 16c-2.05 0-3.81-1.24-4.58-3h1.71c.63.9 1.68 1.5 2.87 1.5 1.93 0 3.5-1.57 3.5-3.5S13.93 9.5 12 9.5c-1.35 0-2.52.78-3.1 1.9l1.6 1.6h-4V9l1.3 1.3C8.69 8.92 10.23 8 12 8c2.76 0 5 2.24 5 5s-2.24 5-5 5z"/></svg>`;
+    
+    case 'pdf':
+      // PDF document (Red)
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="#E53935"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z"/></svg>`;
+      
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'webp':
+    case 'svg':
+    case 'ico':
+      // Image (Green)
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="#4CAF50"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
+      
+    case 'toml':
+    case 'json':
+    case 'yaml':
+    case 'yml':
+    case 'xml':
+      // Settings / Config (Yellow)
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="#FFB300"><path d="M19.3 16.9c.4-.7.7-1.5.8-2.4l2.8-.4c.1-.8.1-1.7 0-2.5l-2.8-.4c-.1-.9-.4-1.7-.8-2.4l1.9-2.1c-.6-.6-1.2-1.1-1.9-1.5l-2.4 1.4c-.7-.4-1.5-.7-2.3-.9l-.6-2.7h-2.5l-.6 2.7c-.8.2-1.6.5-2.3.9L6.2 4.4c-.6.4-1.3.9-1.9 1.5l1.9 2.1c-.4.7-.7 1.5-.8 2.4l-2.8.4c-.1.8-.1 1.7 0 2.5l2.8.4c.1.9.4 1.7.8 2.4l-1.9 2.1c.6.6 1.2 1.1 1.9 1.5l2.4-1.4c.7.4 1.5.7 2.3.9l.6 2.7h2.5l.6-2.7c.8-.2 1.6-.5 2.3-.9l2.4 1.4c.6-.4 1.3-.9 1.9-1.5l-1.9-2.1zM12 15c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z"/></svg>`;
+      
+    case 'md':
+    case 'txt':
+    case 'csv':
+      // Text file (Grey)
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="#90A4AE"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+      
+    default:
+      // Generic File (Blue-ish)
+      return `<svg width="16" height="16" viewBox="0 0 24 24" fill="#519aba"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+  }
+}
+
 export class WorkspaceExplorer {
   constructor(private container: HTMLElement, private onFileSelected: (filePath: string) => void) {}
 
@@ -61,10 +103,10 @@ export class WorkspaceExplorer {
       iconContainer.className = "tree-icon";
       if (node.isDirectory) {
         // Folder icon
-        iconContainer.innerHTML = `<svg viewBox="0 0 16 16" fill="currentColor" color="#e8a838"><path d="M7 2l2 2h5v9H2V2h5zm0 1H3v9h10V5H8.5L6.5 3H7z"/></svg>`;
+        iconContainer.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" color="#e8a838"><path d="M7 2l2 2h5v9H2V2h5zm0 1H3v9h10V5H8.5L6.5 3H7z"/></svg>`;
       } else {
         // File icon
-        iconContainer.innerHTML = `<svg viewBox="0 0 16 16" fill="currentColor" color="#519aba"><path d="M13.85 4.44l-3.28-3.3-.35-.14H2.5l-.5.5v13l.5.5h11l.5-.5V4.8l-.15-.36zM13 14H3V2h6.5v3.5h3.5V14zm-1.2-8.5H9V2.7l2.8 2.8z"/></svg>`;
+        iconContainer.innerHTML = getFileIconSvg(node.name);
       }
       label.appendChild(iconContainer);
 

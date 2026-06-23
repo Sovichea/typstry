@@ -8,11 +8,12 @@
   "app": {
     "windows": [
       {
-        "title": "Typstry Pro",
+        "title": "Typstry",
         "width": 1400,
         "height": 900,
         "resizable": true,
-        "decorations": false
+        "decorations": false,
+        "visible": false
       }
     ],
     "security": {

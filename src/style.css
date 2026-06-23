@@ -64,16 +64,23 @@ body, html { width: 100vw; height: 100vh; background-color: var(--ui-bg); overfl
 }
 
 .dropdown-item {
-  padding: 8px 16px;
+  padding: 6px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   color: var(--ui-text);
   font-size: 13px;
+  cursor: pointer;
 }
 
 .dropdown-item:hover {
   background-color: var(--ui-hover);
+}
+
+.dropdown-separator {
+  height: 1px;
+  background-color: var(--ui-border);
+  margin: 4px 0;
 }
 
 .dropdown-item .hotkey {
@@ -166,3 +173,18 @@ body, html { width: 100vw; height: 100vh; background-color: var(--ui-bg); overfl
 .tree-icon { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-right: 6px; flex-shrink: 0; }
 .tree-text { overflow: hidden; text-overflow: ellipsis; flex-grow: 1; }
 .collapsed .tree-children { display: none; }
+
+/* Welcome Screen */
+#welcome-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: var(--ui-bg); color: var(--ui-text); overflow-y: auto; padding: 40px; }
+#welcome-screen.hidden { display: none !important; }
+.welcome-header { display: flex; align-items: center; margin-bottom: 50px; }
+.welcome-logo { width: 64px; height: 64px; margin-right: 20px; }
+.welcome-title-container h1 { font-size: 24px; font-weight: 500; margin: 0; color: var(--ui-header-text); }
+.welcome-title-container p { font-size: 14px; color: var(--ui-text); opacity: 0.7; margin: 4px 0 0 0; font-style: italic; }
+.welcome-section { width: 100%; max-width: 450px; margin-bottom: 30px; }
+.welcome-section-title { font-size: 11px; font-weight: 600; color: var(--ui-text); opacity: 0.5; letter-spacing: 1px; margin-bottom: 12px; border-bottom: 1px solid var(--ui-border); padding-bottom: 8px; }
+.welcome-item { display: flex; align-items: center; padding: 4px 12px; border-radius: 6px; cursor: pointer; margin-bottom: 0; transition: background-color 0.15s; }
+.welcome-item:hover { background-color: var(--ui-hover); }
+.welcome-item-icon { width: 20px; font-size: 14px; margin-right: 12px; display: flex; justify-content: center; opacity: 0.8; }
+.welcome-item-text { flex: 1; font-size: 14px; color: var(--ui-header-text); }
+.welcome-item-hotkey { font-size: 12px; color: var(--ui-text); opacity: 0.5; }
