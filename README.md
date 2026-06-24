@@ -12,6 +12,8 @@ A lightweight, local-first Typst editor with seamless Code and WYSIWYM toggles, 
   <img src="./assets/screenshot-welcome.png" alt="Typstry Editor View" width="800"/>
   <br/><br/>
   <img src="./assets/screenshot-editor.png" alt="Typstry Welcome Screen" width="800"/>
+  <br/><br/>
+  <img src="./assets/screenshot-editor-2.png" alt="Typstry Welcome Screen" width="800"/>
 </p>
 
 ## Key Features

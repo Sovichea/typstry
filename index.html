@@ -109,10 +109,9 @@
         </div>
 
         <div id="input-container-wrapper" class="hidden">
-          <div id="code-editor-pane" class="input-pane">
-            <div id="editor-tab-bar" class="editor-tab-bar" role="tablist" aria-label="Open files"></div>
-            <div id="editor-visual-toolbar" class="editor-visual-toolbar" aria-label="Editor tools">
-              <div class="toolbar-group">
+          <div id="editor-tab-bar" class="editor-tab-bar" role="tablist" aria-label="Open files"></div>
+          <div id="editor-visual-toolbar" class="editor-visual-toolbar" aria-label="Editor tools">
+            <div class="toolbar-group">
                 <button type="button" class="toolbar-button" data-tool="save" title="Save" aria-label="Save">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>
                 </button>
@@ -263,15 +262,22 @@
                 </button>
               </div>
             </div>
-            <div id="editor-font-breadcrumb" class="editor-font-breadcrumb hidden" role="status" aria-live="polite">
+            <div id="code-editor-pane" class="input-pane" style="flex: 1; min-height: 0;">
+              <div id="editor-font-breadcrumb" class="editor-font-breadcrumb hidden" role="status" aria-live="polite">
               <span id="editor-font-breadcrumb-text"></span>
               <button id="editor-font-download" type="button"></button>
               <button id="editor-font-dismiss" type="button" aria-label="Dismiss font notice">x</button>
             </div>
             <div id="code-render-pane"></div>
           </div>
-          <div id="wysiwym-editor-pane" class="input-pane hidden">
-            <div class="wysiwym-container"></div>
+          <div id="wysiwym-editor-pane" class="input-pane hidden" style="display: flex; flex-direction: row; flex: 1; min-height: 0;">
+            <div class="wysiwym-container" style="flex: 1;"></div>
+            <div id="wysiwym-inspector-pane" class="inspector-pane" style="width: 250px; border-left: 1px solid var(--ui-border); background: var(--ui-bg); display: flex; flex-direction: column;">
+              <div class="inspector-header" style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid var(--ui-border); font-size: 12px; text-transform: uppercase;">Properties</div>
+              <div id="inspector-content" style="padding: 12px; flex: 1; overflow-y: auto; font-size: 13px;">
+                <p style="color: var(--ui-header-text); font-style: italic;">Select a block to edit its properties.</p>
+              </div>
+            </div>
           </div>
         </div>
         <div class="resizer hidden" id="editor-preview-resizer"></div>

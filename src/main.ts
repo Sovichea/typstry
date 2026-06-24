@@ -670,7 +670,7 @@ class TypstryWorkspaceController {
     if (!candidate) {
       this.dismissedEditorFontPromptId = null;
       this.hideEditorFontBreadcrumb();
-      this.applyEditorFontStack(systemMonospaceFontStack);
+      this.applyEditorFontStack(systemMonospaceFontStack, null);
       return;
     }
 
@@ -758,7 +758,7 @@ class TypstryWorkspaceController {
       await this.loadEditorFont(candidate);
       this.markEditorFontDownloaded(candidate);
       const fontStack = `"${candidate.fontFamily}", ${systemMonospaceFontStack}`;
-      this.applyEditorFontStack(fontStack);
+      this.applyEditorFontStack(fontStack, candidate.fontFamily);
       if (!fromCache || showNotice) {
         this.dismissedEditorFontPromptId = null;
       }
@@ -794,7 +794,7 @@ class TypstryWorkspaceController {
     this.loadedEditorFonts.add(candidate.id);
   }
 
-  private applyEditorFontStack(fontStack: string) {
+  private applyEditorFontStack(fontStack: string, fontFamily: string | null = null) {
     if (this.appliedEditorFontStack === fontStack) {
       return;
     }
@@ -803,6 +803,12 @@ class TypstryWorkspaceController {
     this.editorInstance.dispatch({
       effects: editorFontCompartment.reconfigure(editorFontTheme(fontStack))
     });
+
+    if (fontFamily) {
+      document.documentElement.style.setProperty("--active-unicode-font", `"${fontFamily}"`);
+    } else {
+      document.documentElement.style.removeProperty("--active-unicode-font");
+    }
   }
 
   private initExplorer() {
@@ -858,6 +864,145 @@ class TypstryWorkspaceController {
   }
 
   private async runVisualToolbarTool(tool: string) {
+    if (this.activeMode === "WYSIWYM" && tool !== "toggle-mode") {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && this.wysiwymContainer.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        const selectedText = range.toString();
+        const anchorNode = sel.anchorNode!;
+        const wysiwymBlock = (anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode)?.closest('.wysiwym-block') as HTMLElement;
+
+        // Handle inline formatting
+        const inlineMap: Record<string, [string, string, string]> = {
+          "bold": ["*", "*", "strong text"],
+          "italic": ["_", "_", "emphasized text"],
+          "underline": ["#underline[", "]", "text"],
+          "strikethrough": ["#strike[", "]", "text"],
+          "highlight": ["#highlight[", "]", "text"],
+          "inline-code": ["`", "`", "code"],
+          "footnote": ["#footnote[", "]", "note"],
+          "label": ["<", ">", "label"],
+          "reference": ["@", "", "label"],
+          "inline-math": ["$", "$", "x"],
+          "subscript": ["_", "", "sub"],
+          "superscript": ["^", "", "sup"]
+        };
+
+        if (inlineMap[tool]) {
+          const [prefix, suffix, placeholder] = inlineMap[tool];
+          
+          let existingSpan: HTMLElement | null = null;
+          let node: Node | null = anchorNode;
+          const className = `wysiwym-${tool}`;
+          while (node && node !== this.wysiwymContainer) {
+             if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).classList.contains(className)) {
+                 existingSpan = node as HTMLElement;
+                 break;
+             }
+             node = node.parentNode;
+          }
+
+          if (existingSpan) {
+              const prev = existingSpan.previousSibling;
+              const next = existingSpan.nextSibling;
+              if (prev && prev.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).classList.contains("wysiwym-marker")) {
+                  prev.parentNode?.removeChild(prev);
+              }
+              if (next && next.nodeType === Node.ELEMENT_NODE && (next as HTMLElement).classList.contains("wysiwym-marker")) {
+                  next.parentNode?.removeChild(next);
+              }
+              const parent = existingSpan.parentNode;
+              if (parent) {
+                  while (existingSpan.firstChild) {
+                      parent.insertBefore(existingSpan.firstChild, existingSpan);
+                  }
+                  parent.removeChild(existingSpan);
+              }
+          } else {
+              const textToWrap = selectedText || placeholder;
+              const newNode = document.createTextNode(`${prefix}${textToWrap}${suffix}`);
+              range.deleteContents();
+              range.insertNode(newNode);
+          }
+        } else if (wysiwymBlock) {
+          // Handle block-level formatting
+          this.wysiwymContainer.classList.add("serialize-mode");
+          const currentText = wysiwymBlock.innerText;
+          this.wysiwymContainer.classList.remove("serialize-mode");
+
+          if (tool.startsWith("heading-")) {
+            const level = tool.split("-")[1];
+            const headingRegex = new RegExp(`^={${level}}\\s+`);
+            if (headingRegex.test(currentText)) {
+              wysiwymBlock.innerText = currentText.replace(/^=+\s*/, "");
+            } else {
+              wysiwymBlock.innerText = "=".repeat(Number(level)) + " " + currentText.replace(/^=+\s*/, "");
+            }
+          } else if (tool === "bullet-list") {
+            if (currentText.startsWith("- ")) wysiwymBlock.innerText = currentText.replace(/^- \s*/, "");
+            else wysiwymBlock.innerText = "- " + currentText.replace(/^[-+]\s*/, "");
+          } else if (tool === "numbered-list") {
+            if (currentText.startsWith("+ ")) wysiwymBlock.innerText = currentText.replace(/^\+ \s*/, "");
+            else wysiwymBlock.innerText = "+ " + currentText.replace(/^[-+]\s*/, "");
+          } else if (tool === "align-center") {
+            if (currentText.startsWith("#align(center)[\n") && currentText.endsWith("\n]")) {
+               wysiwymBlock.innerText = currentText.substring(16, currentText.length - 2).trim();
+            } else {
+               wysiwymBlock.innerText = `#align(center)[\n  ${currentText}\n]`;
+            }
+          } else if (tool === "align-right") {
+            if (currentText.startsWith("#align(right)[\n") && currentText.endsWith("\n]")) {
+               wysiwymBlock.innerText = currentText.substring(15, currentText.length - 2).trim();
+            } else {
+               wysiwymBlock.innerText = `#align(right)[\n  ${currentText}\n]`;
+            }
+          } else if (tool === "blockquote") {
+            if (currentText.startsWith("#quote(block: true)[\n") && currentText.endsWith("\n]")) {
+               wysiwymBlock.innerText = currentText.substring(21, currentText.length - 2).trim();
+            } else {
+               wysiwymBlock.innerText = `#quote(block: true)[\n  ${currentText}\n]`;
+            }
+          }
+        }
+      }
+
+      // If snippet tools
+      if (["table", "figure", "bibliography", "math-block", "outline", "pagebreak"].includes(tool)) {
+          const snippetMap: Record<string, string> = {
+            "table": `#table(\n  columns: 3,\n  [Header 1], [Header 2], [Header 3],\n  [Cell 1], [Cell 2], [Cell 3],\n)\n`,
+            "figure": `#figure(\n  image("image.png", width: 80%),\n  caption: [Caption],\n)\n`,
+            "bibliography": `#bibliography("refs.bib")\n`,
+            "math-block": `$\n  x = frac(-b plus.minus sqrt(b^2 - 4 a c), 2 a)\n$\n`,
+            "outline": `#outline()\n`,
+            "pagebreak": `#pagebreak()\n`
+          };
+          const snippetDiv = document.createElement("div");
+          snippetDiv.className = "wysiwym-block body";
+          snippetDiv.innerText = snippetMap[tool];
+          
+          if (sel && sel.rangeCount > 0 && this.wysiwymContainer.contains(sel.anchorNode)) {
+             const anchorNode = sel.anchorNode!;
+             const wysiwymBlock = (anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode)?.closest('.wysiwym-block') as HTMLElement;
+             if (wysiwymBlock && wysiwymBlock.parentNode) {
+                 wysiwymBlock.parentNode.insertBefore(snippetDiv, wysiwymBlock.nextSibling);
+             } else {
+                 this.wysiwymContainer.appendChild(snippetDiv);
+             }
+          } else {
+             this.wysiwymContainer.appendChild(snippetDiv);
+          }
+      }
+
+      // Push DOM state to CodeMirror
+      const markup = this.mapWysiwymToMarkup();
+      this.editorInstance.dispatch({
+        changes: { from: 0, to: this.editorInstance.state.doc.length, insert: markup }
+      });
+      // Re-render WYSIWYM from the clean markup to parse styles properly
+      this.mapMarkupToWysiwym(markup);
+      return; // Exit early so it doesn't trigger CodeMirror-specific logic below
+    }
+
     switch (tool) {
       case "save":
         await this.saveActiveFile();
@@ -986,6 +1131,10 @@ $
       case "toggle-mode":
         this.switchViewLayoutMode();
         break;
+    }
+
+    if (this.activeMode === "WYSIWYM" && tool !== "toggle-mode") {
+      this.mapMarkupToWysiwym(this.editorInstance.state.doc.toString());
     }
   }
 
@@ -2119,6 +2268,7 @@ $
       this.mapMarkupToWysiwym(this.editorInstance.state.doc.toString());
       this.codePane.classList.add("hidden");
       this.wysiwymPane.classList.remove("hidden");
+      this.editorVisualToolbar.classList.add("wysiwym-active");
     } else {
       this.activeMode = "CODE";
       const markup = this.mapWysiwymToMarkup();
@@ -2127,6 +2277,7 @@ $
       });
       this.wysiwymPane.classList.add("hidden");
       this.codePane.classList.remove("hidden");
+      this.editorVisualToolbar.classList.remove("wysiwym-active");
     }
   }
 
@@ -2442,6 +2593,26 @@ $
       }
     });
 
+    this.wysiwymContainer.addEventListener("click", async (e) => {
+      if (e.ctrlKey) {
+        const target = e.target as HTMLElement;
+        const linkSpan = target.closest(".wysiwym-link");
+        if (linkSpan) {
+          const url = linkSpan.getAttribute("data-url");
+          if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+            const trust = window.confirm(`Do you want to open this external link in your browser?\n\n${url}`);
+            if (trust) {
+              try {
+                await openUrl(url);
+              } catch (err) {
+                console.error("Failed to open URL", err);
+              }
+            }
+          }
+        }
+      }
+    });
+
     this.previewPane.addEventListener("click", (e) => {
       const target = e.target as Element;
       // Typst compiler often outputs 'data-source' or 'data-typst-source' containing line mapping
@@ -2472,15 +2643,204 @@ $
     });
   }
 
+  private getBlocksFromMarkup(markup: string): string[] {
+    const blocks: string[] = [];
+    let currentBlock: string[] = [];
+    let inTable = false;
+    let inCode = false;
+    let inQuote = false;
+    let inMath = false;
+
+    const flush = () => {
+      if (currentBlock.length > 0) {
+        blocks.push(currentBlock.join("\n"));
+        currentBlock = [];
+      }
+    };
+
+    const lines = markup.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (inCode) {
+        currentBlock.push(line);
+        if (trimmed.startsWith("```")) { inCode = false; flush(); }
+      } else if (inTable) {
+        currentBlock.push(line);
+        if (trimmed.startsWith(")")) { inTable = false; flush(); }
+      } else if (inQuote) {
+        currentBlock.push(line);
+        if (trimmed.startsWith("]")) { inQuote = false; flush(); }
+      } else if (inMath) {
+        currentBlock.push(line);
+        if (trimmed.startsWith("$")) { inMath = false; flush(); }
+      } else {
+        if (trimmed.startsWith("```")) {
+          flush();
+          inCode = true;
+          currentBlock.push(line);
+          if (trimmed.length > 3 && trimmed.endsWith("```")) { inCode = false; flush(); }
+        } else if (trimmed.startsWith("#table(")) {
+          flush();
+          inTable = true;
+          currentBlock.push(line);
+        } else if (trimmed.startsWith("#quote[")) {
+          flush();
+          inQuote = true;
+          currentBlock.push(line);
+        } else if (trimmed === "$") {
+          flush();
+          inMath = true;
+          currentBlock.push(line);
+        } else if (trimmed.startsWith("=")) {
+          flush();
+          blocks.push(line);
+        } else if (trimmed === "") {
+          flush();
+        } else {
+          currentBlock.push(line);
+        }
+      }
+    }
+    flush();
+    return blocks;
+  }
+
+  private renderInlineFormatting(text: string): string {
+    let html = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    html = html.replace(/\*([^\*]+)\*/g, '<span class="wysiwym-marker">*</span><span class="wysiwym-bold">$1</span><span class="wysiwym-marker">*</span>');
+    html = html.replace(/_([^_]+)_/g, '<span class="wysiwym-marker">_</span><span class="wysiwym-italic">$1</span><span class="wysiwym-marker">_</span>');
+    html = html.replace(/#underline\[([^\]]+)\]/g, '<span class="wysiwym-marker">#underline[</span><span class="wysiwym-underline">$1</span><span class="wysiwym-marker">]</span>');
+    html = html.replace(/#strike\[([^\]]+)\]/g, '<span class="wysiwym-marker">#strike[</span><span class="wysiwym-strike">$1</span><span class="wysiwym-marker">]</span>');
+    html = html.replace(/#highlight\[([^\]]+)\]/g, '<span class="wysiwym-marker">#highlight[</span><span class="wysiwym-highlight">$1</span><span class="wysiwym-marker">]</span>');
+    html = html.replace(/`([^`]+)`/g, '<span class="wysiwym-marker">`</span><span class="wysiwym-inline-code">$1</span><span class="wysiwym-marker">`</span>');
+    html = html.replace(/#link\("([^"]+)"\)\[([^\]]+)\](?:&lt;([^&]+)&gt;)?/g, (match, url, text, label) => {
+       const labelMarkup = label ? `<span class="wysiwym-marker">&lt;${label}&gt;</span>` : '';
+       return `<span class="wysiwym-marker">#link("${url}")[</span><span class="wysiwym-link" data-url="${url}">${text}</span><span class="wysiwym-marker">]</span>${labelMarkup}`;
+    });
+    html = html.replace(/#footnote\[([^\]]+)\]/g, '<span class="wysiwym-marker">#footnote[</span><span class="wysiwym-footnote">$1</span><span class="wysiwym-marker">]</span>');
+
+    return html;
+  }
+
   private mapMarkupToWysiwym(markup: string) {
     this.wysiwymContainer.innerHTML = "";
-    markup.split("\n").forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
+    const blocks = this.getBlocksFromMarkup(markup);
+    blocks.forEach(blockText => {
+      if (!blockText.trim()) return;
       const block = document.createElement("div");
-      block.className = "wysiwym-block " + (trimmed.startsWith("=") ? "heading" : "body");
-      block.contentEditable = "true";
-      block.textContent = trimmed.startsWith("=") ? trimmed.replace(/^=\s*/, "") : trimmed;
+      
+      const trimmed = blockText.trim();
+      if (trimmed.startsWith("=")) {
+        block.className = "wysiwym-block heading";
+        const match = trimmed.match(/^(=+)/);
+        block.dataset.level = match ? match[1].length.toString() : "1";
+        const content = trimmed.replace(/^=+\s*/, "");
+        block.innerHTML = this.renderInlineFormatting(content);
+        block.contentEditable = "true";
+      } else if (trimmed.startsWith("#table(")) {
+        block.className = "wysiwym-block table-block";
+        block.contentEditable = "false"; // Do not allow editing raw table text container
+
+        let innerContent = trimmed.substring(7); // remove `#table(`
+        if (innerContent.endsWith(")")) innerContent = innerContent.substring(0, innerContent.length - 1);
+
+        const cells: string[] = [];
+        const namedArgs: string[] = [];
+        let currentPart = "";
+        let bDepth = 0;
+        let pDepth = 0;
+        let qDepth = 0;
+        
+        for (let i = 0; i < innerContent.length; i++) {
+            const c = innerContent[i];
+            if (c === '[') bDepth++;
+            else if (c === ']') bDepth--;
+            else if (c === '(') pDepth++;
+            else if (c === ')') pDepth--;
+            else if (c === '"') qDepth = 1 - qDepth;
+            
+            if (c === ',' && bDepth === 0 && pDepth === 0 && qDepth === 0) {
+                const part = currentPart.trim();
+                if (part) {
+                    const colonIdx = part.indexOf(':');
+                    if (colonIdx > 0 && !part.startsWith("[") && !part.startsWith('"')) {
+                        namedArgs.push(part);
+                    } else {
+                        cells.push(part);
+                    }
+                }
+                currentPart = "";
+            } else {
+                currentPart += c;
+            }
+        }
+        const lastPart = currentPart.trim();
+        if (lastPart) {
+            const colonIdx = lastPart.indexOf(':');
+            if (colonIdx > 0 && !lastPart.startsWith("[") && !lastPart.startsWith('"')) {
+                namedArgs.push(lastPart);
+            } else {
+                cells.push(lastPart);
+            }
+        }
+
+        let colCount = 2;
+        const colArg = namedArgs.find(a => a.startsWith("columns:"));
+        if (colArg) {
+            const val = colArg.split(":")[1].trim();
+            if (!isNaN(Number(val))) colCount = Number(val);
+            else if (val.startsWith("(") && val.endsWith(")")) colCount = val.split(",").length;
+        }
+
+        block.dataset.namedArgs = JSON.stringify(namedArgs);
+        block.dataset.cols = colCount.toString();
+
+        const tableEl = document.createElement("table");
+        tableEl.className = "wysiwym-table";
+        let rowEl = document.createElement("tr");
+        
+        for (let i = 0; i < cells.length; i++) {
+            let cellContent = cells[i];
+            if (cellContent.startsWith("[") && cellContent.endsWith("]")) {
+                cellContent = cellContent.substring(1, cellContent.length - 1);
+            }
+            const td = document.createElement("td");
+            td.contentEditable = "true";
+            td.innerHTML = this.renderInlineFormatting(cellContent);
+            rowEl.appendChild(td);
+
+            if ((i + 1) % colCount === 0 || i === cells.length - 1) {
+                tableEl.appendChild(rowEl);
+                rowEl = document.createElement("tr");
+            }
+        }
+        
+        const headerEl = document.createElement("div");
+        headerEl.className = "wysiwym-table-header";
+        headerEl.innerText = "Table (" + colCount + " columns)";
+        block.appendChild(headerEl);
+        block.appendChild(tableEl);
+
+      } else if (trimmed.startsWith("#") || trimmed.startsWith("$") || trimmed.startsWith("```") || trimmed.startsWith("<") || trimmed.startsWith("@")) {
+        block.className = "wysiwym-block function";
+        block.innerHTML = blockText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        block.contentEditable = "true";
+      } else if (trimmed.startsWith("- ") || trimmed.startsWith("+ ")) {
+        block.className = "wysiwym-block list";
+        block.innerHTML = this.renderInlineFormatting(blockText);
+        block.contentEditable = "true";
+      } else {
+        block.className = "wysiwym-block body";
+        block.innerHTML = this.renderInlineFormatting(blockText);
+        block.contentEditable = "true";
+      }
+      
       this.wysiwymContainer.appendChild(block);
     });
   }
@@ -2508,9 +2868,40 @@ $
   }
 
   private mapWysiwymToMarkup(): string {
-    return Array.from(this.wysiwymContainer.querySelectorAll(".wysiwym-block"))
-      .map(b => b.classList.contains("heading") ? `= ${b.textContent?.trim()}` : b.textContent?.trim())
-      .join("\n");
+    this.wysiwymContainer.classList.add("serialize-mode");
+    const markup = Array.from(this.wysiwymContainer.querySelectorAll(".wysiwym-block"))
+      .map((b: any) => {
+         if (b.classList.contains("heading")) {
+            const level = parseInt(b.getAttribute("data-level") || "1", 10);
+            return `${"=".repeat(level)} ${b.innerText || b.textContent || ""}`;
+         } else if (b.classList.contains("table-block")) {
+            let markup = `#table(\n`;
+            let namedArgs: string[] = [];
+            try {
+                namedArgs = JSON.parse(b.dataset.namedArgs || "[]");
+            } catch(e){}
+            for (const arg of namedArgs) {
+                markup += `  ${arg},\n`;
+            }
+            const cells = Array.from(b.querySelectorAll("td")).map((td: any) => {
+                let txt = td.innerText.trim();
+                return `[${txt}]`;
+            });
+            const cols = parseInt(b.dataset.cols || "2", 10);
+            for (let i = 0; i < cells.length; i++) {
+               markup += `  ${cells[i]},`;
+               if ((i + 1) % cols === 0 && i !== cells.length - 1) markup += "\n";
+               else markup += " ";
+            }
+            if (!markup.endsWith("\n")) markup += "\n";
+            markup += ")";
+            return markup;
+         }
+         return b.innerText || b.textContent || "";
+      })
+      .join("\n\n");
+    this.wysiwymContainer.classList.remove("serialize-mode");
+    return markup;
   }
 
   private initResizers() {
