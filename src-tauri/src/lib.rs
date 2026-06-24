@@ -38,6 +38,41 @@ fn read_workspace_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
 }
 
 #[tauri::command]
+fn move_to_trash(path: String) -> Result<(), String> {
+    trash::delete(&path).map_err(|e| format!("Failed to move to trash: {}", e))
+}
+
+#[tauri::command]
+fn reveal_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open finder: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            std::process::Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| format!("Failed to open file manager: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn resolve_preview_main(
     file_path: String,
     workspace_root_path: Option<String>,
@@ -493,7 +528,30 @@ pub fn run() {
             process: Mutex::new(None),
         })
         .setup(|app| {
-            // Native menu disabled in favor of custom HTML menu bar
+            tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+                .title("Typstry")
+                .inner_size(1400.0, 900.0)
+                .resizable(true)
+                .decorations(false)
+                .visible(false)
+                .initialization_script(r#"
+                    window.addEventListener('contextmenu', e => {
+                        e.preventDefault();
+                        if (window !== window.parent) {
+                            window.parent.postMessage({ 
+                                type: 'SHOW_PREVIEW_CONTEXT_MENU', 
+                                x: e.clientX, 
+                                y: e.clientY 
+                            }, '*');
+                        }
+                    });
+                    window.addEventListener('click', e => {
+                        if (window !== window.parent) {
+                            window.parent.postMessage({ type: 'HIDE_CONTEXT_MENU' }, '*');
+                        }
+                    });
+                "#)
+                .build()?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -501,6 +559,8 @@ pub fn run() {
             check_typst_document,
             read_workspace_file,
             read_workspace_dir,
+            move_to_trash,
+            reveal_in_explorer,
             resolve_preview_main,
             ensure_toolchain,
             start_tinymist_lsp,

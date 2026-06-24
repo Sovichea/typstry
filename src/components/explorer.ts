@@ -49,7 +49,10 @@ export class WorkspaceExplorer {
   constructor(private container: HTMLElement, private onFileSelected: (filePath: string) => void) {}
 
   public async loadWorkspace(rootPath: string) {
-    this.container.innerHTML = `<div class="explorer-loading">Scanning Workspace...</div>`;
+    const isFirstLoad = !this.container.querySelector(".file-tree-branch");
+    if (isFirstLoad) {
+      this.container.innerHTML = `<div class="explorer-loading">Scanning Workspace...</div>`;
+    }
     try {
       const nodes = await this.readDirectoryRecursive(rootPath);
       this.container.innerHTML = "";
@@ -87,7 +90,9 @@ export class WorkspaceExplorer {
       li.className = node.isDirectory ? "tree-folder collapsed" : "tree-file";
 
       const label = document.createElement("div");
-      label.className = "tree-item";
+      label.className = "tree-item explorer-item-target";
+      label.dataset.path = node.path;
+      label.dataset.isDir = String(node.isDirectory);
       // Base padding + depth padding
       label.style.paddingLeft = `${depth * 12 + 8}px`;
 
@@ -143,5 +148,118 @@ export class WorkspaceExplorer {
     }
     fragment.appendChild(ul);
     return fragment;
+  }
+
+  public showInlineInput(targetDirPath: string | null, type: "file" | "folder" | "rename", defaultValue: string = "", onComplete: (name: string | null) => void) {
+    let parentContainer: HTMLElement;
+    let depth = 0;
+    let targetLabel: HTMLElement | null = null;
+
+    if (type === "rename" && targetDirPath) {
+       targetLabel = this.container.querySelector(`[data-path="${targetDirPath.replace(/\\/g, '\\\\')}"]`) as HTMLElement;
+       if (!targetLabel) { onComplete(null); return; }
+       parentContainer = targetLabel.parentElement!;
+       depth = parseInt(targetLabel.style.paddingLeft || "8") / 12; 
+       // Subtract 8 base padding: depth = (padding - 8) / 12. But wait, let's just use the padding of the target label.
+    } else if (targetDirPath) {
+       targetLabel = this.container.querySelector(`[data-path="${targetDirPath.replace(/\\/g, '\\\\')}"]`) as HTMLElement;
+       if (!targetLabel) {
+           parentContainer = this.container.querySelector(".file-tree-branch") as HTMLElement;
+       } else {
+           const li = targetLabel.parentElement!;
+           li.classList.remove("collapsed"); // Expand folder
+           let childrenContainer = li.querySelector(".tree-children") as HTMLElement;
+           if (!childrenContainer) {
+               childrenContainer = document.createElement("div");
+               childrenContainer.className = "tree-children";
+               const newBranch = document.createElement("ul");
+               newBranch.className = "file-tree-branch";
+               childrenContainer.appendChild(newBranch);
+               li.appendChild(childrenContainer);
+           }
+           parentContainer = childrenContainer.querySelector(".file-tree-branch") as HTMLElement;
+           depth = (parseInt(targetLabel.style.paddingLeft || "8") - 8) / 12 + 1;
+       }
+    } else {
+       parentContainer = this.container.querySelector(".file-tree-branch") as HTMLElement;
+    }
+
+    if (!parentContainer) { onComplete(null); return; }
+
+    const inputLi = document.createElement("li");
+    inputLi.className = type === "folder" ? "tree-folder" : "tree-file";
+    
+    const label = document.createElement("div");
+    label.className = "tree-item";
+    let paddingLeft = type === "rename" && targetLabel ? targetLabel.style.paddingLeft : `${depth * 12 + 8}px`;
+    label.style.paddingLeft = paddingLeft;
+
+    const chevronSpacer = document.createElement("span");
+    chevronSpacer.className = "tree-chevron-spacer";
+    label.appendChild(chevronSpacer);
+
+    const iconContainer = document.createElement("span");
+    iconContainer.className = "tree-icon";
+    if (type === "folder") {
+        iconContainer.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" color="#e8a838"><path d="M7 2l2 2h5v9H2V2h5zm0 1H3v9h10V5H8.5L6.5 3H7z"/></svg>`;
+    } else {
+        iconContainer.innerHTML = getFileIconSvg(defaultValue || "new.typ");
+    }
+    label.appendChild(iconContainer);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "explorer-inline-input";
+    input.value = defaultValue;
+    input.style.width = "100%";
+    input.style.background = "transparent";
+    input.style.border = "1px solid #007acc";
+    input.style.color = "var(--text-color)";
+    input.style.outline = "none";
+    input.style.marginLeft = "4px";
+
+    if (type === "rename" && targetLabel) {
+       targetLabel.style.display = "none";
+       inputLi.appendChild(label);
+       parentContainer.insertBefore(inputLi, targetLabel.nextSibling);
+    } else {
+       label.appendChild(input);
+       inputLi.appendChild(label);
+       parentContainer.insertBefore(inputLi, parentContainer.firstChild);
+    }
+
+    if (type === "rename") {
+       label.appendChild(input);
+    }
+
+    input.focus();
+    if (defaultValue) {
+      const dotIndex = defaultValue.lastIndexOf(".");
+      if (dotIndex > 0) input.setSelectionRange(0, dotIndex);
+      else input.select();
+    }
+
+    let isHandled = false;
+    const finish = (value: string | null) => {
+        if (isHandled) return;
+        isHandled = true;
+        inputLi.remove();
+        if (type === "rename" && targetLabel) targetLabel.style.display = "";
+        onComplete(value);
+    };
+
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            finish(input.value.trim());
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            finish(null);
+        }
+    });
+
+    input.addEventListener("blur", () => {
+        finish(input.value.trim() || null);
+    });
   }
 }

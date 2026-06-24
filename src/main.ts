@@ -58,6 +58,7 @@ class TypstryWorkspaceController {
   private workspaceRootPath: string | null = null;
   private currentVersion = 1;
   private isLoadingFile = false;
+  private clipboardFilePath: string | null = null;
   private lspReady = false;
   private readonly lspSyncDebounceMs = 350;
   private readonly forwardSyncDebounceMs = 120;
@@ -102,6 +103,7 @@ class TypstryWorkspaceController {
     this.initUndockPreview();
     this.initThemeSelector();
     this.initWordWrap();
+    this.initContextMenu();
     this.renderLogConsole();
     this.setLogConsoleVisible(false);
     this.updateWorkspaceViewportVisibility();
@@ -143,6 +145,332 @@ class TypstryWorkspaceController {
       explorerResizer?.classList.add("hidden");
       appMenus?.classList.add("hidden");
     }
+  }
+
+  private initContextMenu() {
+    const contextMenu = document.getElementById("context-menu");
+    if (!contextMenu) return;
+
+    let targetPath = "";
+    let isTargetDir = false;
+
+    // Hide context menu on click anywhere
+    document.addEventListener("click", () => {
+      contextMenu.style.display = "none";
+    });
+
+    // Handle clicks inside the context menu using event delegation
+    contextMenu.addEventListener("click", async (e) => {
+      const item = (e.target as HTMLElement).closest(".dropdown-item");
+      if (!item) return;
+
+      const action = item.id;
+      
+      switch (action) {
+        case "ctx-new-file":
+          if (this.workspaceRootPath) {
+            this.explorer.showInlineInput(targetPath, "file", "", async (name) => {
+              if (name) {
+                const { join, dirname } = await import("@tauri-apps/api/path");
+                const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+                let parentDir = this.workspaceRootPath!;
+                if (targetPath) parentDir = isTargetDir ? targetPath : await dirname(targetPath);
+                
+                const newPath = await join(parentDir, name);
+                try {
+                   await writeTextFile(newPath, "");
+                   if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
+                   this.loadFile(newPath);
+                } catch(e) { alert("Failed to create file: " + e); }
+              }
+            });
+          } else {
+            document.getElementById("action-new-file")?.click();
+          }
+          break;
+        case "ctx-open-project":
+          document.getElementById("action-open-folder")?.click();
+          break;
+        case "ctx-export-pdf":
+          document.getElementById("action-export-pdf")?.click();
+          break;
+        case "ctx-copy-text":
+          document.execCommand("copy");
+          break;
+        case "ctx-paste-text":
+          try {
+            const text = await navigator.clipboard.readText();
+            this.editorInstance.dispatch(this.editorInstance.state.replaceSelection(text));
+          } catch (err) {
+            console.error("Failed to read clipboard:", err);
+          }
+          break;
+        case "ctx-cut-text":
+          document.execCommand("cut");
+          break;
+        case "ctx-undo":
+          document.getElementById("action-undo")?.click();
+          break;
+        case "ctx-redo":
+          document.getElementById("action-redo")?.click();
+          break;
+        case "ctx-fs-new-folder":
+          if (targetPath || this.workspaceRootPath) {
+            this.explorer.showInlineInput(targetPath, "folder", "", async (name) => {
+              if (name) {
+                const { join, dirname } = await import("@tauri-apps/api/path");
+                const { mkdir } = await import("@tauri-apps/plugin-fs");
+                let parentDir = this.workspaceRootPath!;
+                if (targetPath) {
+                   parentDir = isTargetDir ? targetPath : await dirname(targetPath);
+                }
+                const newDirPath = await join(parentDir, name);
+                try {
+                  await mkdir(newDirPath);
+                  if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
+                } catch(e) { alert("Failed to create folder: " + e); }
+              }
+            });
+          }
+          break;
+        case "ctx-fs-rename":
+          if (targetPath) {
+            const { basename } = await import("@tauri-apps/api/path");
+            const oldName = await basename(targetPath);
+            this.explorer.showInlineInput(targetPath, "rename", oldName, async (newName) => {
+              if (newName && newName !== oldName) {
+                const { join, dirname } = await import("@tauri-apps/api/path");
+                const { rename } = await import("@tauri-apps/plugin-fs");
+                const dir = await dirname(targetPath);
+                const newPath = await join(dir, newName);
+                try {
+                  await rename(targetPath, newPath);
+                  if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
+                  if (this.activeFilePath === targetPath) {
+                     this.activeFilePath = newPath;
+                  }
+                } catch(e) { alert("Failed to rename: " + e); }
+              }
+            });
+          }
+          break;
+        case "ctx-fs-delete":
+          if (targetPath) {
+            const { confirm } = await import("@tauri-apps/plugin-dialog");
+            const isConfirmed = await confirm("Are you sure you want to move this " + (isTargetDir ? "folder" : "file") + " to the Trash?", { title: "Confirm Delete", kind: "warning" });
+            if (isConfirmed) {
+              try {
+                await invoke("move_to_trash", { path: targetPath });
+                if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
+                if (this.activeFilePath === targetPath) {
+                   this.activeFilePath = null;
+                   this.editorInstance.dispatch({ changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" } });
+                   this.updateWorkspaceViewportVisibility();
+                }
+              } catch(e) { alert("Failed to move to trash: " + e); }
+            }
+          }
+          break;
+        case "ctx-fs-copy":
+          if (targetPath) {
+            if (isTargetDir) {
+               alert("Copying directories directly is not yet supported.");
+            } else {
+               this.clipboardFilePath = targetPath;
+            }
+          }
+          break;
+        case "ctx-fs-reveal":
+          if (targetPath) {
+             invoke("reveal_in_explorer", { path: targetPath }).catch(console.error);
+          }
+          break;
+        case "ctx-fs-copy-rel-path":
+          if (targetPath && this.workspaceRootPath) {
+             const relPath = targetPath.replace(this.workspaceRootPath, "").replace(/^[\\\/]/, "");
+             navigator.clipboard.writeText(relPath.replace(/\\/g, "/")).catch(console.error);
+          }
+          break;
+        case "ctx-fs-copy-abs-path":
+          if (targetPath) {
+             navigator.clipboard.writeText(targetPath).catch(console.error);
+          }
+          break;
+        case "ctx-editor-format":
+          if (this.activeFilePath && this.lspReady && this.lspClient) {
+             // Currently relying on Tinymist for formatting. Wait for proper textDocument/formatting support in TinyMist LSP client implementation, or trigger save.
+             document.getElementById("action-save-file")?.click();
+          }
+          break;
+        case "ctx-editor-toggle-comment":
+          import("@codemirror/commands").then(({ toggleLineComment }) => {
+            toggleLineComment(this.editorInstance);
+          });
+          break;
+        case "ctx-editor-select-all":
+          import("@codemirror/commands").then(({ selectAll }) => {
+            selectAll(this.editorInstance);
+          });
+          break;
+        case "ctx-preview-open-external":
+          if (this.activeFilePath) {
+             const { dirname, join, basename } = await import("@tauri-apps/api/path");
+             const dir = await dirname(this.activeFilePath);
+             const name = await basename(this.activeFilePath);
+             const pdfName = name.replace(/\.typ$/i, ".pdf");
+             const pdfPath = await join(dir, pdfName);
+             const { open } = await import("@tauri-apps/plugin-shell");
+             open(pdfPath).catch(console.error);
+          }
+          break;
+        case "ctx-fs-paste":
+          if (this.clipboardFilePath) {
+             const { basename, join, dirname } = await import("@tauri-apps/api/path");
+             const { copyFile } = await import("@tauri-apps/plugin-fs");
+             
+             let parentDir = this.workspaceRootPath!;
+             if (targetPath) {
+                 parentDir = isTargetDir ? targetPath : await dirname(targetPath);
+             }
+             
+             try {
+                const name = await basename(this.clipboardFilePath);
+                // Basic strategy to prevent overwriting: prefix with "Copy of "
+                const newName = "Copy of " + name;
+                const newPath = await join(parentDir, newName);
+                await copyFile(this.clipboardFilePath, newPath);
+                if (this.workspaceRootPath) this.explorer.loadWorkspace(this.workspaceRootPath);
+             } catch(e) { alert("Failed to paste file: " + e); }
+          }
+          break;
+      }
+    });
+
+    document.addEventListener("contextmenu", (e) => {
+      // Prevent the default browser context menu globally
+      e.preventDefault();
+      
+      const target = e.target as HTMLElement;
+      let menuItems = "";
+
+      const explorerItem = target.closest(".explorer-item-target") as HTMLElement;
+      const isExplorer = target.closest("#explorer-sidebar");
+      const isEditor = target.closest(".cm-editor") || target.closest("#code-render-pane");
+      const isPreview = target.closest("#preview-container-wrapper");
+
+      targetPath = explorerItem?.dataset?.path || "";
+      isTargetDir = explorerItem?.dataset?.isDir === "true";
+
+      if (explorerItem) {
+        menuItems = `
+          <div class="dropdown-item" id="ctx-new-file">New File</div>
+          <div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-fs-rename">Rename</div>
+          <div class="dropdown-item" id="ctx-fs-delete">Delete</div>
+          ${!isTargetDir ? '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File</div>' : ''}
+          ${this.clipboardFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File</div>' : ''}
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div>
+          <div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div>
+          <div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+K Ctrl+O</span></div>
+        `;
+      } else if (isExplorer) {
+        targetPath = this.workspaceRootPath || "";
+        menuItems = `
+          <div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div>
+          <div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div>
+          ${this.clipboardFilePath ? '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-paste">Paste File</div>' : ''}
+          ${this.workspaceRootPath ? '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal Workspace in Explorer</div>' : ''}
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+K Ctrl+O</span></div>
+        `;
+      } else if (isEditor) {
+        menuItems = `
+          <div class="dropdown-item" id="ctx-copy-text">Copy <span class="hotkey">Ctrl+C</span></div>
+          <div class="dropdown-item" id="ctx-paste-text">Paste <span class="hotkey">Ctrl+V</span></div>
+          <div class="dropdown-item" id="ctx-cut-text">Cut <span class="hotkey">Ctrl+X</span></div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-editor-toggle-comment">Toggle Line Comment <span class="hotkey">Ctrl+/</span></div>
+          <div class="dropdown-item" id="ctx-editor-format">Format Document <span class="hotkey">Shift+Alt+F</span></div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-undo">Undo <span class="hotkey">Ctrl+Z</span></div>
+          <div class="dropdown-item" id="ctx-redo">Redo <span class="hotkey">Ctrl+Y</span></div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-editor-select-all">Select All <span class="hotkey">Ctrl+A</span></div>
+        `;
+      } else if (isPreview) {
+        menuItems = `
+          <div class="dropdown-item" id="ctx-preview-open-external">Open in External Viewer</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-export-pdf">Export PDF</div>
+        `;
+      } else {
+        // Default fallback menu
+        menuItems = `
+          <div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+K Ctrl+O</span></div>
+        `;
+      }
+
+      contextMenu.innerHTML = menuItems;
+      contextMenu.style.display = "block";
+      
+      // Ensure menu doesn't go off-screen
+      const rect = contextMenu.getBoundingClientRect();
+      let x = e.clientX;
+      let y = e.clientY;
+      if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width;
+      if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height;
+      
+      contextMenu.style.left = `${x}px`;
+      contextMenu.style.top = `${y}px`;
+    });
+
+    const previewMenuBtn = document.getElementById("preview-menu-btn");
+    if (previewMenuBtn) {
+      previewMenuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menuItems = `
+          <div class="dropdown-item" id="ctx-preview-open-external">Open in External Viewer</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-export-pdf">Export PDF</div>
+        `;
+        contextMenu.innerHTML = menuItems;
+        contextMenu.style.display = "block";
+        const rect = previewMenuBtn.getBoundingClientRect();
+        contextMenu.style.left = `${rect.right - contextMenu.offsetWidth}px`;
+        contextMenu.style.top = `${rect.bottom + 4}px`;
+      });
+    }
+
+    // Handle messages from the injected script in the preview iframe
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "HIDE_CONTEXT_MENU") {
+         contextMenu.style.display = "none";
+      } else if (e.data?.type === "SHOW_PREVIEW_CONTEXT_MENU" && this.previewIframe) {
+        const iframeRect = this.previewIframe.getBoundingClientRect();
+        let x = iframeRect.left + e.data.x;
+        let y = iframeRect.top + e.data.y;
+
+        const menuItems = `
+          <div class="dropdown-item" id="ctx-preview-open-external">Open in External Viewer</div>
+          <div class="dropdown-separator"></div>
+          <div class="dropdown-item" id="ctx-export-pdf">Export PDF</div>
+        `;
+        contextMenu.innerHTML = menuItems;
+        contextMenu.style.display = "block";
+        
+        // Ensure menu doesn't go off-screen
+        const menuRect = contextMenu.getBoundingClientRect();
+        if (x + menuRect.width > window.innerWidth) x = window.innerWidth - menuRect.width;
+        if (y + menuRect.height > window.innerHeight) y = window.innerHeight - menuRect.height;
+        
+        contextMenu.style.left = `${x}px`;
+        contextMenu.style.top = `${y}px`;
+      }
+    });
   }
 
   private initThemeSelector() {
@@ -578,6 +906,9 @@ class TypstryWorkspaceController {
       style.id = "typstry-disable-preview-ripple";
       style.textContent = ".typst-jump-ripple{display:none!important;animation:none!important;}";
       doc.head.appendChild(style);
+
+      // Try to disable the native context menu inside the preview iframe
+      doc.addEventListener("contextmenu", e => e.preventDefault());
     } catch {
       // The preview server may be cross-origin; in that case Tinymist owns its internals.
     }
