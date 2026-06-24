@@ -1,8 +1,7 @@
 use serde_json::json;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -12,10 +11,28 @@ fn read_workspace_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
 use tokio::sync::mpsc;
 
+#[cfg(windows)]
+fn disable_webview_context_menus(webview: tauri::webview::PlatformWebview) {
+    unsafe {
+        if let Ok(core_webview) = webview.controller().CoreWebView2() {
+            if let Ok(settings) = core_webview.Settings() {
+                let _ = settings.SetAreDefaultContextMenusEnabled(false);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn disable_webview_context_menus(_webview: tauri::webview::PlatformWebview) {}
+
 struct LspState {
+    generation: AtomicU64,
     tx: Mutex<Option<mpsc::Sender<String>>>,
     process: Mutex<Option<tokio::process::Child>>,
 }
@@ -384,6 +401,7 @@ async fn start_tinymist_lsp(
 ) -> Result<(), String> {
     use tauri::Manager;
 
+    let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
     *state.tx.lock().unwrap() = None;
     let existing_process = state.process.lock().unwrap().take();
     if let Some(mut child) = existing_process {
@@ -400,6 +418,7 @@ async fn start_tinymist_lsp(
     let mut command = tokio::process::Command::new(&tinymist_exe);
     command
         .arg("lsp")
+        .env("VSCODE_PROXY_URI", "http://tauri.localhost/{{port}}")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -431,7 +450,13 @@ async fn start_tinymist_lsp(
                     .await
                     .is_err()
                 {
-                    let _ = app_clone.emit("lsp-status", "stopped");
+                    let current_generation = app_clone
+                        .state::<LspState>()
+                        .generation
+                        .load(Ordering::SeqCst);
+                    if current_generation == generation {
+                        let _ = app_clone.emit("lsp-status", "stopped");
+                    }
                     return;
                 }
                 header.push(byte[0]);
@@ -454,7 +479,13 @@ async fn start_tinymist_lsp(
                     .await
                     .is_err()
                 {
-                    let _ = app_clone.emit("lsp-status", "stopped");
+                    let current_generation = app_clone
+                        .state::<LspState>()
+                        .generation
+                        .load(Ordering::SeqCst);
+                    if current_generation == generation {
+                        let _ = app_clone.emit("lsp-status", "stopped");
+                    }
                     return;
                 }
                 if let Ok(json_str) = String::from_utf8(content) {
@@ -493,7 +524,13 @@ async fn start_tinymist_lsp(
                 .await
                 .is_err()
             {
-                let _ = app_clone.emit("lsp-status", "stopped");
+                let current_generation = app_clone
+                    .state::<LspState>()
+                    .generation
+                    .load(Ordering::SeqCst);
+                if current_generation == generation {
+                    let _ = app_clone.emit("lsp-status", "stopped");
+                }
                 break;
             }
             let _ = tokio::io::AsyncWriteExt::flush(&mut stdin).await;
@@ -524,34 +561,14 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(LspState {
+            generation: AtomicU64::new(0),
             tx: Mutex::new(None),
             process: Mutex::new(None),
         })
         .setup(|app| {
-            tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
-                .title("Typstry")
-                .inner_size(1400.0, 900.0)
-                .resizable(true)
-                .decorations(false)
-                .visible(false)
-                .initialization_script(r#"
-                    window.addEventListener('contextmenu', e => {
-                        e.preventDefault();
-                        if (window !== window.parent) {
-                            window.parent.postMessage({ 
-                                type: 'SHOW_PREVIEW_CONTEXT_MENU', 
-                                x: e.clientX, 
-                                y: e.clientY 
-                            }, '*');
-                        }
-                    });
-                    window.addEventListener('click', e => {
-                        if (window !== window.parent) {
-                            window.parent.postMessage({ type: 'HIDE_CONTEXT_MENU' }, '*');
-                        }
-                    });
-                "#)
-                .build()?;
+            if let Some(webview) = app.get_webview_window("main") {
+                let _ = webview.with_webview(disable_webview_context_menus);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

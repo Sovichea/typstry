@@ -44,14 +44,21 @@ export type LspLogEntry = {
   source?: string;
 };
 
+export type LspEditorSelection = {
+  anchor: number;
+  head?: number;
+};
+
 export class TinymistLspClient {
   private requestId = 0;
   private editorView?: EditorView;
+  private latestPreviewUrl = "";
+  private latestPreviewDataPlaneUrl = "";
 
   constructor(
     private onSvgPreviewStream: (svgContent: string) => void,
     private onStatus: (status: LspStatus) => void = () => {},
-    private onInverseSync: (position: LspSourcePosition, defaultCursorPos: number) => number | void = () => {},
+    private onInverseSync: (position: LspSourcePosition, defaultCursorPos: number) => number | LspEditorSelection | void = () => {},
     private onDiagnostics: (uri: string, diagnostics: LspDiagnostic[], version?: number) => void = () => {},
     private onLog: (entry: LspLogEntry) => void = () => {}
   ) {}
@@ -135,25 +142,6 @@ export class TinymistLspClient {
         message: payload.error.message ?? JSON.stringify(payload.error)
       });
     }
-
-    // Handle Inverse Sync from Tinymist (clicking preview -> jump editor)
-    if (payload.method === "window/showDocument" && this.editorView) {
-      const position = payload.params?.selection?.start;
-      if (!position || typeof position.line !== "number") return;
-
-      try {
-        const defaultCursorPos = this.editorPositionFromLspPosition(position);
-        const mappedCursorPos = this.onInverseSync(position, defaultCursorPos);
-        const cursorPos = typeof mappedCursorPos === "number" ? mappedCursorPos : defaultCursorPos;
-        this.editorView.dispatch({
-          selection: { anchor: cursorPos },
-          effects: EditorView.scrollIntoView(cursorPos, { y: "center" })
-        });
-        this.editorView.focus();
-      } catch (err) {
-        console.warn("Could not scroll to preview source position", position, err);
-      }
-    }
   }
 
   private editorPositionFromLspPosition(position: LspSourcePosition): number {
@@ -180,21 +168,35 @@ export class TinymistLspClient {
   }
 
   private async initializeLsp() {
-    return new Promise<void>(async (resolve) => {
+    return new Promise<void>(async (resolve, reject) => {
       const id = this.requestId++;
+      let unlisten: (() => void) | undefined;
+      const timeout = window.setTimeout(() => {
+        unlisten?.();
+        reject(new Error("Tinymist initialize timed out"));
+      }, 15000);
 
-      const unlisten = await listen<string>("lsp-rx", (event) => {
+      unlisten = await listen<string>("lsp-rx", (event) => {
         try {
           const payload = JSON.parse(event.payload);
           if (payload.id === id) {
-            unlisten();
+            window.clearTimeout(timeout);
+            unlisten?.();
+            if (payload.error) {
+              reject(new Error(payload.error.message ?? "Tinymist initialize failed"));
+              return;
+            }
             this.sendNotification("initialized", {});
             resolve();
           }
-        } catch (e) {}
+        } catch (e) {
+          window.clearTimeout(timeout);
+          unlisten?.();
+          reject(e);
+        }
       });
 
-      this.sendRequest("initialize", {
+      void this.sendRequest("initialize", {
         processId: null,
         capabilities: {
           textDocument: {
@@ -212,6 +214,9 @@ export class TinymistLspClient {
           }
         },
         initializationOptions: {
+          exportPdf: "never",
+          exportSvg: "never",
+          formatterMode: "typstyle",
           preview: {
             background: {
               enabled: true,
@@ -219,6 +224,9 @@ export class TinymistLspClient {
             }
           },
           tinymist: {
+            exportPdf: "never",
+            exportSvg: "never",
+            formatterMode: "typstyle",
             preview: {
               background: {
                 enabled: true,
@@ -236,11 +244,6 @@ export class TinymistLspClient {
     return this.sendNotification("textDocument/didOpen", {
       textDocument: { uri, languageId: "typst", version, text }
     });
-  }
-
-  public notifyTextOpen(uri: string, path: string, text: string, version: number): Promise<string> {
-    this.openTextDocument(uri, text, version);
-    return this.startPreview(path);
   }
 
   public startPreview(path: string): Promise<string> {
@@ -308,6 +311,45 @@ export class TinymistLspClient {
     });
   }
 
+  public getPreviewHtml(): Promise<string> {
+    return new Promise<string>(async (resolve) => {
+      const id = this.requestId++;
+      let unlisten: (() => void) | undefined;
+      const timeout = setTimeout(() => {
+        unlisten?.();
+        resolve("");
+      }, 3000);
+
+      unlisten = await listen<string>("lsp-rx", (event) => {
+        try {
+          const payload = JSON.parse(event.payload);
+          if (payload.id !== id) return;
+
+          clearTimeout(timeout);
+          unlisten?.();
+          resolve(typeof payload.result === "string" ? payload.result : "");
+        } catch {
+          clearTimeout(timeout);
+          unlisten?.();
+          resolve("");
+        }
+      });
+
+      this.sendRequest("workspace/executeCommand", {
+        command: "tinymist.getResources",
+        arguments: ["/preview/index.html"]
+      }, id);
+    });
+  }
+
+  public getLatestPreviewUrl(): string {
+    return this.latestPreviewUrl;
+  }
+
+  public getLatestPreviewDataPlaneUrl(): string {
+    return this.latestPreviewDataPlaneUrl;
+  }
+
   private sendRequest(method: string, params: any, customId?: number): Promise<void> {
     return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", id: customId ?? this.requestId++, method, params }) });
   }
@@ -321,22 +363,36 @@ export class TinymistLspClient {
   }
 
   private normalizePreviewUrl(result: string | TinymistPreviewResult | null | undefined): string {
+    this.latestPreviewUrl = "";
+    this.latestPreviewDataPlaneUrl = "";
+
     if (typeof result === "string") {
-      return result.startsWith("http") ? result : `http://${result}`;
+      this.latestPreviewUrl = result.startsWith("http") ? result : `http://${result}`;
+      this.latestPreviewDataPlaneUrl = this.latestPreviewUrl.replace(/^http/, "ws");
+      return this.latestPreviewUrl;
     }
 
     if (result?.staticServerAddr) {
-      return result.staticServerAddr.startsWith("http")
+      const previewUrl = result.staticServerAddr.startsWith("http")
         ? result.staticServerAddr
         : `http://${result.staticServerAddr}`;
+      this.latestPreviewUrl = previewUrl;
+      this.latestPreviewDataPlaneUrl = result.dataPlanePort
+        ? `ws://127.0.0.1:${result.dataPlanePort}`
+        : previewUrl.replace(/^http/, "ws");
+      return previewUrl;
     }
 
     if (result?.staticServerPort) {
-      return `http://127.0.0.1:${result.staticServerPort}`;
+      this.latestPreviewUrl = `http://127.0.0.1:${result.staticServerPort}`;
+      this.latestPreviewDataPlaneUrl = `ws://127.0.0.1:${result.dataPlanePort ?? result.staticServerPort}`;
+      return this.latestPreviewUrl;
     }
 
     if (result?.dataPlanePort) {
-      return `http://127.0.0.1:${result.dataPlanePort}`;
+      this.latestPreviewUrl = `http://127.0.0.1:${result.dataPlanePort}`;
+      this.latestPreviewDataPlaneUrl = `ws://127.0.0.1:${result.dataPlanePort}`;
+      return this.latestPreviewUrl;
     }
 
     return "";
@@ -354,8 +410,45 @@ export class TinymistLspClient {
         this.sendResponse(payload.id, null);
         return;
       case "workspace/configuration": {
+        this.emitLog(3, "Configuration requested: " + JSON.stringify(payload.params), "workspace/configuration");
         const count = Array.isArray(payload.params?.items) ? payload.params.items.length : 0;
-        this.sendResponse(payload.id, Array.from({ length: count }, () => null));
+
+        // tinymist usually asks for multiple items, we should map them based on the section
+        const results = (payload.params?.items || []).map((item: any) => {
+            if (item.section === "tinymist.exportPdf") return "never";
+            if (item.section === "tinymist.exportSvg") return "never";
+            if (item.section === "tinymist.formatterMode") return "typstyle";
+            if (item.section === "tinymist") return { exportPdf: "never", exportSvg: "never", formatterMode: "typstyle" };
+            return null;
+        });
+
+        this.sendResponse(payload.id, results.length > 0 ? results : Array.from({ length: count }, () => null));
+        return;
+      }
+      case "window/showDocument": {
+        this.sendResponse(payload.id, { success: true });
+        if (this.editorView) {
+          const position = payload.params?.selection?.start;
+          if (!position || typeof position.line !== "number") return;
+
+          try {
+            const defaultCursorPos = this.editorPositionFromLspPosition(position);
+            const mappedSelection = this.onInverseSync(position, defaultCursorPos);
+            const selection = typeof mappedSelection === "number"
+              ? { anchor: mappedSelection }
+              : mappedSelection && typeof mappedSelection.anchor === "number"
+                ? mappedSelection
+                : { anchor: defaultCursorPos };
+            const scrollPos = selection.head ?? selection.anchor;
+            this.editorView.dispatch({
+              selection,
+              effects: EditorView.scrollIntoView(scrollPos, { y: "center" })
+            });
+            this.editorView.focus();
+          } catch (err) {
+            console.warn("Could not scroll to preview source position", position, err);
+          }
+        }
         return;
       }
       default:

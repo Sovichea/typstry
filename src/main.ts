@@ -49,8 +49,7 @@ type PreviewHighlightMapping = {
 };
 
 class TypstryWorkspaceController {
-  private readonly previewTaskId = "default_preview";
-  private readonly previewHighlightPrefix = "#highlight[";
+  private readonly previewHighlightPrefix = '#text(fill:rgb("#fe0102"))[';
   private readonly previewHighlightSuffix = "]";
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
@@ -66,6 +65,7 @@ class TypstryWorkspaceController {
   private pendingLspSyncPath: string | null = null;
   private pendingLspSyncText: string | null = null;
   private pendingForwardSyncTimer: number | null = null;
+  private pendingPreviewSyncPollTimer: number | null = null;
   private suppressNextForwardSync = false;
   private previewHighlightMapping: PreviewHighlightMapping | null = null;
   private readonly previewOnlyVersions = new Set<number>();
@@ -825,20 +825,122 @@ class TypstryWorkspaceController {
     this.previewHighlightMapping = previewHighlight.mapping;
     const version = ++this.currentVersion;
     this.previewOnlyVersions.add(version);
+
+    if (this.pendingPreviewSyncPollTimer) {
+      window.clearInterval(this.pendingPreviewSyncPollTimer);
+    }
+
     await this.lspClient.notifyTextChange(
       this.filePathToUri(this.activeFilePath),
       previewHighlight.text,
       version
     );
+
+    // Tell Tinymist to navigate to the correct page and rough line so the DOM node renders
     window.setTimeout(() => {
-      if (!this.activeFilePath || !this.lspReady || !this.lspClient) return;
-      void this.lspClient.scrollPreview(this.previewTaskId, {
-        event: "panelScrollTo",
-        filepath: this.activeFilePath,
-        line: previewHighlight.scrollLine,
-        character: previewHighlight.scrollCharacter
-      });
-    }, 220);
+      if (this.activeFilePath && this.lspReady && this.lspClient) {
+        void this.lspClient.scrollPreview("default_preview", {
+          event: "panelScrollTo",
+          filepath: this.activeFilePath,
+          line: previewHighlight.scrollLine,
+          character: previewHighlight.scrollCharacter
+        });
+      }
+    }, 10);
+
+    let attempts = 0;
+    const maxAttempts = 15;
+    
+    this.pendingPreviewSyncPollTimer = window.setInterval(() => {
+      attempts++;
+      try {
+        const iframe = this.previewIframe;
+        if (!iframe) throw new Error("No iframe");
+        
+        const iframeDoc = iframe.contentDocument;
+        if (!iframeDoc) throw new Error("No doc");
+
+        const wrapperColor = "#fe0102";
+        const elements = Array.from(iframeDoc.querySelectorAll(`[fill="${wrapperColor}"], [fill="rgb(254, 1, 2)"], [style*="color: ${wrapperColor}"], [style*="color: rgb(254, 1, 2)"]`));
+        
+        let targetEl: Element | null = null;
+        for (const el of elements) {
+           const rect = el.getBoundingClientRect();
+           if (rect.width > 0 && rect.height > 0) {
+               targetEl = el;
+               break;
+           }
+        }
+        
+        if (targetEl) {
+          if (this.pendingPreviewSyncPollTimer) {
+            window.clearInterval(this.pendingPreviewSyncPollTimer);
+            this.pendingPreviewSyncPollTimer = null;
+          }
+          
+          const rect = targetEl.getBoundingClientRect();
+          const iframeWin = iframe.contentWindow;
+          let scrollContainer: Element | null = null;
+          let current = targetEl.parentElement;
+          
+          if (iframeWin) {
+             while (current) {
+                const style = iframeWin.getComputedStyle(current);
+                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                    scrollContainer = current;
+                    break;
+                }
+                current = current.parentElement;
+             }
+          }
+
+          if (scrollContainer) {
+             const containerRect = scrollContainer.getBoundingClientRect();
+             const scrollY = scrollContainer.scrollTop + rect.top - containerRect.top - (containerRect.height / 2) + (rect.height / 2);
+             const scrollX = scrollContainer.scrollLeft + rect.left - containerRect.left - (containerRect.width / 2) + (rect.width / 2);
+             scrollContainer.scrollTo({ top: scrollY, left: scrollX, behavior: 'smooth' });
+          } else if (this.previewPane.scrollHeight > this.previewPane.clientHeight) {
+             const iframeRect = iframe.getBoundingClientRect();
+             const paneRect = this.previewPane.getBoundingClientRect();
+             const absoluteTop = iframeRect.top + rect.top;
+             const absoluteLeft = iframeRect.left + rect.left;
+             
+             const scrollTop = this.previewPane.scrollTop + absoluteTop - paneRect.top - (paneRect.height / 2) + (rect.height / 2);
+             const scrollLeft = this.previewPane.scrollLeft + absoluteLeft - paneRect.left - (paneRect.width / 2) + (rect.width / 2);
+             this.previewPane.scrollTo({ top: scrollTop, left: scrollLeft, behavior: 'smooth' });
+          } else if (iframeWin) {
+             const scrollY = iframeWin.scrollY + rect.top - (iframeWin.innerHeight / 2) + (rect.height / 2);
+             const scrollX = iframeWin.scrollX + rect.left - (iframeWin.innerWidth / 2) + (rect.width / 2);
+             iframeWin.scrollTo({ top: scrollY, left: scrollX, behavior: 'smooth' });
+          }
+
+          this.revertSyncText();
+        } else if (attempts >= maxAttempts) {
+          if (this.pendingPreviewSyncPollTimer) {
+            window.clearInterval(this.pendingPreviewSyncPollTimer);
+            this.pendingPreviewSyncPollTimer = null;
+          }
+          this.revertSyncText();
+        }
+      } catch (e) {
+        if (attempts >= maxAttempts) {
+          if (this.pendingPreviewSyncPollTimer) {
+            window.clearInterval(this.pendingPreviewSyncPollTimer);
+            this.pendingPreviewSyncPollTimer = null;
+          }
+          this.revertSyncText();
+        }
+      }
+    }, 100);
+  }
+
+  private revertSyncText() {
+    if (this.activeFilePath && this.lspReady && this.lspClient && this.editorInstance) {
+        const version = ++this.currentVersion;
+        this.latestDocumentVersion = version;
+        this.previewHighlightMapping = null;
+        this.lspClient.notifyTextChange(this.filePathToUri(this.activeFilePath), this.editorInstance.state.doc.toString(), version);
+    }
   }
 
   private clearPendingForwardSync() {
