@@ -2,16 +2,23 @@ import { EditorView } from "@codemirror/view";
 import { HighlightStyle } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
-export const unicodeLayoutTheme = EditorView.theme({
+export const baseEditorLayoutTheme = EditorView.theme({
   "&": { 
       height: "100%", 
-      fontFamily: "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace, 'MiSans Khmer', sans-serif", 
       fontSize: "14px", 
       lineHeight: "1.7" 
   },
   ".cm-line": { padding: "0 12px", overflow: "visible !important" },
   ".cm-gutters": { borderRight: "1px solid var(--ui-border)" }
 });
+
+export function editorFontTheme(fontFamily: string = "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace") {
+  return EditorView.theme({
+    "&, .cm-content, .cm-gutters": {
+      fontFamily
+    }
+  });
+}
 
 export const typstSyntaxHighlighting = HighlightStyle.define([
   { tag: [tags.keyword, tags.controlKeyword], color: "#7c3aed", fontWeight: "bold" },
@@ -23,7 +30,6 @@ export const typstSyntaxHighlighting = HighlightStyle.define([
   { tag: tags.comment, color: "#008000", fontStyle: "italic" },
   {
     tag: [tags.string, tags.content, tags.literal],
-    color: "#a31515",
-    fontFamily: "system-ui, -apple-system, 'MiSans Khmer', 'Noto Sans Arabic', 'Noto Sans Devanagari', sans-serif"
+    color: "#a31515"
   }
 ]);

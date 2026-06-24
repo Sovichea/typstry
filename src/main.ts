@@ -8,12 +8,15 @@ import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
-import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment } from "./editor/extensions";
+import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, editorFontCompartment } from "./editor/extensions";
+import { editorFontTheme } from "./editor/themes";
 import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
 import { TinymistLspClient } from "./compiler/lsp";
 import type { LspDiagnostic, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
+import miSansKhmerRegularUrl from "./assets/fonts/MiSansKhmer-Regular.woff2?url";
+import miSansKhmerBoldUrl from "./assets/fonts/MiSansKhmer-Bold.woff2?url";
 
 type EditorMode = "CODE" | "WYSIWYM";
 type LogEntryKind = "error" | "warning" | "info" | "log" | "hint";
@@ -48,6 +51,43 @@ type PreviewHighlightMapping = {
   highlightedLineText: string;
 };
 
+type EditorFontCandidate = {
+  id: string;
+  language: string;
+  fontFamily: string;
+  regularUrl?: string;
+  boldUrl?: string;
+  restartRequired?: boolean;
+};
+
+const systemMonospaceFontStack = "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace";
+
+const editorUnicodeFontRules: Array<EditorFontCandidate & { pattern: RegExp }> = [
+  {
+    id: "khmer",
+    language: "Khmer",
+    fontFamily: "MiSans Khmer",
+    regularUrl: miSansKhmerRegularUrl,
+    boldUrl: miSansKhmerBoldUrl,
+    pattern: /[\u1780-\u17FF\u19E0-\u19FF]/
+  },
+  { id: "arabic", language: "Arabic", fontFamily: "MiSans Latin", restartRequired: true, pattern: /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/ },
+  { id: "devanagari", language: "Devanagari", fontFamily: "MiSans Latin", restartRequired: true, pattern: /[\u0900-\u097F]/ },
+  { id: "thai", language: "Thai", fontFamily: "MiSans Latin", restartRequired: true, pattern: /[\u0E00-\u0E7F]/ },
+  { id: "cyrillic", language: "Cyrillic", fontFamily: "MiSans Latin", pattern: /[\u0400-\u04FF]/ },
+  { id: "greek", language: "Greek", fontFamily: "MiSans Latin", pattern: /[\u0370-\u03FF]/ },
+  { id: "japanese", language: "Japanese", fontFamily: "MiSans Latin", restartRequired: true, pattern: /[\u3040-\u30FF]/ },
+  { id: "korean", language: "Korean", fontFamily: "MiSans Latin", restartRequired: true, pattern: /[\u1100-\u11FF\uAC00-\uD7AF]/ },
+  { id: "cjk", language: "CJK", fontFamily: "MiSans Latin", restartRequired: true, pattern: /[\u3400-\u9FFF\uF900-\uFAFF]/ }
+];
+
+const fallbackUnicodeFontRule: EditorFontCandidate = {
+  id: "unicode",
+  language: "Unicode",
+  fontFamily: "MiSans Latin",
+  restartRequired: true
+};
+
 class TypstryWorkspaceController {
   private readonly previewHighlightPrefix = '#text(fill:rgb("#fe0102"))[';
   private readonly previewHighlightSuffix = "]";
@@ -74,12 +114,21 @@ class TypstryWorkspaceController {
   private diagnosticLogEntries: LogConsoleEntry[] = [];
   private lspLogEntries: LogConsoleEntry[] = [];
   private isLogConsoleVisible = false;
+  private activeEditorFontCandidate: EditorFontCandidate | null = null;
+  private appliedEditorFontStack = systemMonospaceFontStack;
+  private dismissedEditorFontPromptId: string | null = null;
+  private readonly loadedEditorFonts = new Set<string>();
 
   private editorInstance!: EditorView;
   private explorer!: WorkspaceExplorer;
   private lspClient!: TinymistLspClient;
 
   private codePane = document.getElementById("code-editor-pane")!;
+  private codeRenderPane = document.getElementById("code-render-pane")!;
+  private editorFontBreadcrumb = document.getElementById("editor-font-breadcrumb")!;
+  private editorFontBreadcrumbText = document.getElementById("editor-font-breadcrumb-text")!;
+  private editorFontDownload = document.getElementById("editor-font-download") as HTMLButtonElement;
+  private editorFontDismiss = document.getElementById("editor-font-dismiss") as HTMLButtonElement;
   private wysiwymPane = document.getElementById("wysiwym-editor-pane")!;
   private wysiwymContainer = this.wysiwymPane.querySelector(".wysiwym-container")!;
   private previewPane = document.getElementById("preview-render-pane")!;
@@ -542,22 +591,181 @@ class TypstryWorkspaceController {
   }
 
   private initCodeMirror() {
+    const initialDocument = "= Welcome to Typstry\nSelect a file from the explorer to begin configuration editing.";
+    this.bindEditorFontBreadcrumb();
     this.editorInstance = new EditorView({
       state: EditorState.create({
-        doc: "= Welcome to Typstry\nSelect a file from the explorer to begin configuration editing.",
+        doc: initialDocument,
         extensions: [
           getEditorExtensions(),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
+              const currentText = update.state.doc.toString();
               this.clearPendingForwardSync();
-              this.handleContentMutation(update.state.doc.toString());
+              this.updateEditorUnicodeFontState(currentText);
+              this.handleContentMutation(currentText);
             } else if (update.selectionSet) {
               this.scheduleForwardSync(this.forwardSyncDebounceMs);
             }
           })
         ]
       }),
-      parent: this.codePane
+      parent: this.codeRenderPane
+    });
+    this.updateEditorUnicodeFontState(initialDocument);
+  }
+
+  private bindEditorFontBreadcrumb() {
+    this.editorFontDownload.addEventListener("click", () => {
+      if (!this.activeEditorFontCandidate) return;
+      void this.downloadAndApplyEditorFont(this.activeEditorFontCandidate);
+    });
+
+    this.editorFontDismiss.addEventListener("click", () => {
+      this.dismissedEditorFontPromptId = this.activeEditorFontCandidate?.id ?? null;
+      this.hideEditorFontBreadcrumb();
+    });
+  }
+
+  private updateEditorUnicodeFontState(text: string) {
+    const candidate = this.detectEditorFontCandidate(text);
+    this.activeEditorFontCandidate = candidate;
+
+    if (!candidate) {
+      this.dismissedEditorFontPromptId = null;
+      this.hideEditorFontBreadcrumb();
+      this.applyEditorFontStack(systemMonospaceFontStack);
+      return;
+    }
+
+    if (this.isEditorFontDownloaded(candidate)) {
+      const showAppliedNotice = this.dismissedEditorFontPromptId !== candidate.id;
+      void this.downloadAndApplyEditorFont(candidate, true, showAppliedNotice);
+      if (!showAppliedNotice) {
+        this.hideEditorFontBreadcrumb();
+      }
+      return;
+    }
+
+    if (this.dismissedEditorFontPromptId === candidate.id) {
+      this.hideEditorFontBreadcrumb();
+      return;
+    }
+
+    this.renderEditorFontPrompt(candidate);
+  }
+
+  private detectEditorFontCandidate(text: string): EditorFontCandidate | null {
+    if (!/[^\u0000-\u007F]/.test(text)) {
+      return null;
+    }
+
+    const rule = editorUnicodeFontRules.find((candidate) => candidate.pattern.test(text));
+    if (rule) {
+      return rule;
+    }
+
+    return fallbackUnicodeFontRule;
+  }
+
+  private renderEditorFontPrompt(candidate: EditorFontCandidate) {
+    this.editorFontBreadcrumbText.textContent = `${candidate.language} text detected. Download ${candidate.fontFamily} for the editor?`;
+    this.editorFontDownload.textContent = `Download ${candidate.fontFamily}`;
+    this.editorFontDownload.disabled = false;
+    this.editorFontDownload.classList.remove("hidden");
+    this.editorFontBreadcrumb.classList.remove("hidden");
+  }
+
+  private renderEditorFontApplied(candidate: EditorFontCandidate) {
+    const restartText = candidate.restartRequired
+      ? " Restart Typstry if glyphs still render incorrectly."
+      : " Restart Typstry if the change does not appear everywhere.";
+    this.editorFontBreadcrumbText.textContent = `${candidate.fontFamily} applied for ${candidate.language}.${restartText}`;
+    this.editorFontDownload.classList.add("hidden");
+    this.editorFontBreadcrumb.classList.remove("hidden");
+  }
+
+  private hideEditorFontBreadcrumb() {
+    this.editorFontBreadcrumb.classList.add("hidden");
+  }
+
+  private isEditorFontDownloaded(candidate: EditorFontCandidate): boolean {
+    return this.getDownloadedEditorFontIds().has(candidate.id);
+  }
+
+  private getDownloadedEditorFontIds(): Set<string> {
+    try {
+      const stored = JSON.parse(localStorage.getItem("typstry-downloaded-editor-fonts") || "[]");
+      return new Set(Array.isArray(stored) ? stored.filter((value): value is string => typeof value === "string") : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  private markEditorFontDownloaded(candidate: EditorFontCandidate) {
+    const downloaded = this.getDownloadedEditorFontIds();
+    downloaded.add(candidate.id);
+    localStorage.setItem("typstry-downloaded-editor-fonts", JSON.stringify([...downloaded]));
+  }
+
+  private async downloadAndApplyEditorFont(candidate: EditorFontCandidate, fromCache = false, showNotice = true) {
+    if (this.activeEditorFontCandidate?.id !== candidate.id) {
+      return;
+    }
+
+    if (!fromCache) {
+      this.editorFontDownload.disabled = true;
+      this.editorFontDownload.textContent = "Downloading...";
+    }
+
+    try {
+      await this.loadEditorFont(candidate);
+      this.markEditorFontDownloaded(candidate);
+      const fontStack = `"${candidate.fontFamily}", ${systemMonospaceFontStack}`;
+      this.applyEditorFontStack(fontStack);
+      if (!fromCache || showNotice) {
+        this.dismissedEditorFontPromptId = null;
+      }
+      if (showNotice) {
+        this.renderEditorFontApplied(candidate);
+      }
+    } catch (error) {
+      this.editorFontBreadcrumbText.textContent = `Could not load ${candidate.fontFamily}: ${String(error)}`;
+      this.editorFontDownload.textContent = `Retry ${candidate.fontFamily}`;
+      this.editorFontDownload.disabled = false;
+      this.editorFontDownload.classList.remove("hidden");
+      this.editorFontBreadcrumb.classList.remove("hidden");
+    }
+  }
+
+  private async loadEditorFont(candidate: EditorFontCandidate) {
+    if (this.loadedEditorFonts.has(candidate.id)) {
+      return;
+    }
+
+    if (candidate.regularUrl) {
+      const regularFace = new FontFace(candidate.fontFamily, `url(${candidate.regularUrl})`, { weight: "400" });
+      document.fonts.add(await regularFace.load());
+    } else {
+      await document.fonts.load(`14px "${candidate.fontFamily}"`);
+    }
+
+    if (candidate.boldUrl) {
+      const boldFace = new FontFace(candidate.fontFamily, `url(${candidate.boldUrl})`, { weight: "700" });
+      document.fonts.add(await boldFace.load());
+    }
+
+    this.loadedEditorFonts.add(candidate.id);
+  }
+
+  private applyEditorFontStack(fontStack: string) {
+    if (this.appliedEditorFontStack === fontStack) {
+      return;
+    }
+
+    this.appliedEditorFontStack = fontStack;
+    this.editorInstance.dispatch({
+      effects: editorFontCompartment.reconfigure(editorFontTheme(fontStack))
     });
   }
 

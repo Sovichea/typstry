@@ -109,7 +109,14 @@
         </div>
 
         <div id="input-container-wrapper" class="hidden">
-          <div id="code-editor-pane" class="input-pane"></div>
+          <div id="code-editor-pane" class="input-pane">
+            <div id="editor-font-breadcrumb" class="editor-font-breadcrumb hidden" role="status" aria-live="polite">
+              <span id="editor-font-breadcrumb-text"></span>
+              <button id="editor-font-download" type="button"></button>
+              <button id="editor-font-dismiss" type="button" aria-label="Dismiss font notice">x</button>
+            </div>
+            <div id="code-render-pane"></div>
+          </div>
           <div id="wysiwym-editor-pane" class="input-pane hidden">
             <div class="wysiwym-container"></div>
           </div>

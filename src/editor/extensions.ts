@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
-import { unicodeLayoutTheme, typstSyntaxHighlighting } from "./themes";
+import { baseEditorLayoutTheme, editorFontTheme, typstSyntaxHighlighting } from "./themes";
 import { syntaxHighlighting } from "@codemirror/language";
 import { typstLanguage } from "./typstLanguage";
 import { editorDiagnosticsExtension } from "./diagnostics";
@@ -14,17 +14,20 @@ import { oneDark } from "@codemirror/theme-one-dark";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
+export const editorFontCompartment = new Compartment();
 
 export function getEditorExtensions(): Extension[] {
   return [
     lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
     drawSelection(), dropCursor(), history(), 
     typstLanguage,
+    baseEditorLayoutTheme,
     editorDiagnosticsExtension,
     indentationMarkers(),
     wrapCompartment.of(EditorView.lineWrapping),
     search({ top: true }),
-    themeCompartment.of([unicodeLayoutTheme, syntaxHighlighting(typstSyntaxHighlighting)]),
+    themeCompartment.of(syntaxHighlighting(typstSyntaxHighlighting)),
+    editorFontCompartment.of(editorFontTheme()),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap])
   ];
 }
@@ -46,8 +49,7 @@ export function getThemeExtension(themeName: string): Extension {
             break;
     }
     
-    // Always append the unicodeLayoutTheme to ensure proper font rendering for Khmer/Unicode
-    baseExtensions.push(unicodeLayoutTheme);
+    baseExtensions.push(syntaxHighlighting(typstSyntaxHighlighting));
     return baseExtensions;
 }
 

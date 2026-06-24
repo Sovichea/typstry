@@ -8,16 +8,6 @@
     src: url('./assets/fonts/MiSansLatin-Bold.woff2') format('woff2');
     font-weight: bold;
 }
-@font-face {
-    font-family: 'MiSans Khmer';
-    src: url('./assets/fonts/MiSansKhmer-Regular.woff2') format('woff2');
-    font-weight: normal;
-}
-@font-face {
-    font-family: 'MiSans Khmer';
-    src: url('./assets/fonts/MiSansKhmer-Bold.woff2') format('woff2');
-    font-weight: bold;
-}
 
 :root {
   --ui-bg: #fcfcfc;
@@ -29,7 +19,7 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body, html { width: 100vw; height: 100vh; background-color: var(--ui-bg); overflow: hidden; color: var(--ui-text); font-family: 'MiSans Latin', 'MiSans Khmer', sans-serif; }
+body, html { width: 100vw; height: 100vh; background-color: var(--ui-bg); overflow: hidden; color: var(--ui-text); font-family: 'MiSans Latin', sans-serif; }
 #app-shell { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .titlebar { display: flex; align-items: center; justify-content: space-between; background-color: var(--ui-bg); color: var(--ui-text); height: 35px; border-bottom: 1px solid var(--ui-border); font-size: 13px; flex-shrink: 0; user-select: none; }
 .titlebar-left { display: flex; align-items: center; padding-left: 10px; flex: 1; }
@@ -96,6 +86,14 @@ body, html { width: 100vw; height: 100vh; background-color: var(--ui-bg); overfl
 #workspace-viewport { display: flex; flex: 1; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
 #input-container-wrapper { width: 50%; height: 100%; display: flex; flex-direction: column; border-right: 1px solid var(--ui-border); min-width: 0; min-height: 0; flex-shrink: 0; }
 .input-pane { width: 100%; height: 100%; overflow: hidden; display: block; position: relative; }
+#code-editor-pane { display: flex; flex-direction: column; min-height: 0; }
+#code-render-pane { flex: 1; min-height: 0; overflow: hidden; }
+.editor-font-breadcrumb { min-height: 30px; display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--ui-border); background: var(--ui-bg); color: var(--ui-text); font-size: 12px; flex-shrink: 0; }
+.editor-font-breadcrumb span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-font-breadcrumb button { height: 22px; border: 1px solid var(--ui-border); border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; flex-shrink: 0; }
+#editor-font-download { padding: 0 8px; font-weight: 700; }
+#editor-font-dismiss { width: 24px; padding: 0; margin-left: auto; }
+.editor-font-breadcrumb button:hover { background: var(--ui-hover); }
 .resizer { width: 4px; cursor: col-resize; flex-shrink: 0; z-index: 10; background: transparent; transition: background-color 0.1s; margin: 0 -2px; }
 .resizer:hover, .resizer.resizing { background-color: #007fd4; }
 .hidden { display: none !important; }
@@ -121,7 +119,7 @@ body, html { width: 100vw; height: 100vh; background-color: var(--ui-bg); overfl
 .log-console-actions button { height: 22px; min-width: 28px; padding: 0 8px; border: 1px solid var(--ui-border); border-radius: 4px; background: var(--ui-bg); color: var(--ui-text); font: inherit; cursor: pointer; }
 .log-console-actions button:hover { background: var(--ui-hover); }
 #log-console-body { flex: 1; overflow: auto; padding: 4px 0; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 12px; }
-.log-console-empty { padding: 12px; color: var(--ui-header-text); font-family: 'MiSans Latin', 'MiSans Khmer', sans-serif; }
+.log-console-empty { padding: 12px; color: var(--ui-header-text); font-family: 'MiSans Latin', sans-serif; }
 .log-group { display: flex; flex-direction: column; width: 100%; }
 .log-group-header { display: flex; align-items: center; width: 100%; padding: 4px 12px; background: transparent; border: none; cursor: pointer; font: inherit; gap: 8px; text-align: left; color: var(--ui-text); }
 .log-group-header:hover { background: var(--ui-hover); }
