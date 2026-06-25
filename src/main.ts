@@ -158,7 +158,6 @@ class TypstryWorkspaceController {
   private logConsoleBody = document.getElementById("log-console-body")!;
   private logConsoleToggle = document.getElementById("log-console-toggle") as HTMLButtonElement;
   private logConsoleClose = document.getElementById("log-console-close") as HTMLButtonElement;
-  private logConsoleClear = document.getElementById("log-console-clear") as HTMLButtonElement;
   private diagnosticCount = document.getElementById("diagnostic-count")!;
 
   public async bootstrap() {
@@ -1520,11 +1519,7 @@ $
       return firstAttemptUrl;
     }
 
-    this.appendLspLog({
-      kind: "warning",
-      source: "preview",
-      message: "Preview startup failed. Restarting Tinymist and retrying once."
-    });
+    console.warn("Preview startup failed. Restarting Tinymist and retrying once.");
     this.setLspStatus({ kind: "starting", message: "Restarting preview" });
 
     try {
@@ -1617,7 +1612,11 @@ $
         return;
       }
 
-      const editorDiagnostics = diagnostics
+      const filteredDiagnostics = diagnostics.filter(
+        (diagnostic) => !diagnostic.message.includes("cannot export multiple images without a page number template")
+      );
+
+      const editorDiagnostics = filteredDiagnostics
         .map((diagnostic) => this.editorDiagnosticFromFallback(diagnostic))
         .filter((diagnostic): diagnostic is EditorDiagnostic => diagnostic !== null);
 
@@ -1625,7 +1624,7 @@ $
         effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
       });
 
-      this.diagnosticLogEntries = diagnostics.map((diagnostic) => ({
+      this.diagnosticLogEntries = filteredDiagnostics.map((diagnostic) => ({
         id: this.nextLogEntryId++,
         kind: diagnostic.severity,
         source: "typst check",
@@ -2037,7 +2036,11 @@ $
       return;
     }
 
-    const editorDiagnostics = diagnostics
+    const filteredDiagnostics = diagnostics.filter(
+      (diagnostic) => !diagnostic.message.includes("cannot export multiple images without a page number template")
+    );
+
+    const editorDiagnostics = filteredDiagnostics
       .map((diagnostic) => this.editorDiagnosticFromLsp(diagnostic))
       .filter((diagnostic): diagnostic is EditorDiagnostic => diagnostic !== null);
 
@@ -2045,7 +2048,7 @@ $
       effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
     });
 
-    this.diagnosticLogEntries = diagnostics.map((diagnostic) => this.logEntryFromDiagnostic(uri, diagnostic));
+    this.diagnosticLogEntries = filteredDiagnostics.map((diagnostic) => this.logEntryFromDiagnostic(uri, diagnostic));
     this.renderLogConsole();
   }
 
@@ -2269,6 +2272,8 @@ $
   private setLogConsoleVisible(visible: boolean) {
     this.isLogConsoleVisible = visible;
     this.logConsole.classList.toggle("hidden", !visible);
+    const resizer = document.getElementById("log-console-resizer");
+    if (resizer) resizer.classList.toggle("hidden", !visible);
     this.updateDiagnosticCount();
   }
 
@@ -2620,7 +2625,8 @@ $
     });
 
     document.getElementById("action-clear-logs")?.addEventListener("click", () => {
-      this.logConsoleClear.click();
+      this.lspLogEntries = [];
+      this.renderLogConsole();
     });
 
     document.getElementById("action-restart-lsp")?.addEventListener("click", async () => {
@@ -2687,10 +2693,6 @@ $
 
     this.logConsoleToggle.addEventListener("click", () => this.toggleLogConsole());
     this.logConsoleClose.addEventListener("click", () => this.setLogConsoleVisible(false));
-    this.logConsoleClear.addEventListener("click", () => {
-      this.lspLogEntries = [];
-      this.renderLogConsole();
-    });
     this.wysiwymContainer.addEventListener("input", () => {
       if (this.activeMode === "WYSIWYM") {
         const generatedMarkup = this.mapWysiwymToMarkup();
@@ -3081,6 +3083,40 @@ $
           document.body.style.userSelect = "";
           this.saveWorkspaceState();
         }
+      });
+    }
+
+    const logConsoleResizer = document.getElementById("log-console-resizer");
+    const logConsole = document.getElementById("log-console");
+    let isResizingLogConsole = false;
+
+    if (logConsoleResizer && logConsole) {
+      logConsoleResizer.addEventListener("mousedown", () => {
+        isResizingLogConsole = true;
+        logConsoleResizer.classList.add("resizing");
+        document.body.style.cursor = "row-resize";
+        document.body.style.userSelect = "none";
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!isResizingLogConsole) return;
+        const statusBarHeight = document.getElementById("status-bar")?.offsetHeight || 26;
+        const newHeight = window.innerHeight - e.clientY - statusBarHeight;
+        const validHeight = Math.max(100, Math.min(newHeight, window.innerHeight * 0.8));
+        logConsole.style.height = `${validHeight}px`;
+      });
+
+      document.addEventListener("mouseup", () => {
+        if (isResizingLogConsole) {
+          isResizingLogConsole = false;
+          logConsoleResizer.classList.remove("resizing");
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+        }
+      });
+      
+      logConsoleResizer.addEventListener("dblclick", () => {
+        this.setLogConsoleVisible(false);
       });
     }
   }

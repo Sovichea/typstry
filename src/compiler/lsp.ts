@@ -136,10 +136,17 @@ export class TinymistLspClient {
     }
 
     if (payload.error) {
+      const errorMessage = payload.error.message ?? JSON.stringify(payload.error);
+      if (
+        errorMessage.includes("cannot register preview to the compiler instance") ||
+        errorMessage.includes("cannot export multiple images without a page number template")
+      ) {
+        return;
+      }
       this.onLog({
         kind: "error",
         source: "response",
-        message: payload.error.message ?? JSON.stringify(payload.error)
+        message: errorMessage
       });
     }
   }
@@ -216,6 +223,7 @@ export class TinymistLspClient {
         initializationOptions: {
           exportPdf: "never",
           exportSvg: "never",
+          exportPng: "never",
           formatterMode: "typstyle",
           preview: {
             background: {
@@ -226,6 +234,7 @@ export class TinymistLspClient {
           tinymist: {
             exportPdf: "never",
             exportSvg: "never",
+            exportPng: "never",
             formatterMode: "typstyle",
             preview: {
               background: {
@@ -417,8 +426,9 @@ export class TinymistLspClient {
         const results = (payload.params?.items || []).map((item: any) => {
             if (item.section === "tinymist.exportPdf") return "never";
             if (item.section === "tinymist.exportSvg") return "never";
+            if (item.section === "tinymist.exportPng") return "never";
             if (item.section === "tinymist.formatterMode") return "typstyle";
-            if (item.section === "tinymist") return { exportPdf: "never", exportSvg: "never", formatterMode: "typstyle" };
+            if (item.section === "tinymist") return { exportPdf: "never", exportSvg: "never", exportPng: "never", formatterMode: "typstyle" };
             return null;
         });
 
@@ -461,7 +471,7 @@ export class TinymistLspClient {
 
   private emitLog(type: number | undefined, message: unknown, source: string) {
     const text = typeof message === "string" ? message : JSON.stringify(message ?? "");
-    if (!text) return;
+    if (!text || text.includes("cannot register preview to the compiler instance") || text.includes("cannot export multiple images without a page number template")) return;
 
     this.onLog({
       kind: this.logKindFromLspType(type),
