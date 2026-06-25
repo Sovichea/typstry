@@ -18,17 +18,18 @@ A lightweight, local-first Typst editor with seamless Code and WYSIWYM toggles, 
 
 ## Key Features
 * **Unicode-First Philosophy**: Traditional code editors treat complex non-Latin scripts as an afterthought. Typstry is engineered from the ground up to perfectly render and align Unicode text, ensuring seamless co-existence of code and complex scripts (like Khmer, Arabic, and Thai) without breaking cursor alignment or word-wrap.
+* **Rich IDE-Grade Autocompletion**: Smart, context-aware suggestions with LSP `sortText` prioritization (which correctly places specific parameters like `numbering` or `supplement` at the top of the list). Intelligently blocks autocomplete from triggering on brackets, punctuation, or spaces to ensure a distraction-free typing flow.
 * **True Local-First Experience**: No cloud dependencies. Everything compiles instantly on your local machine.
-* **Live PDF Preview**: Powered by the highly optimized Tinymist LSP running in a Rust background process.
-* **Focus-Driven UI**: A custom, frameless window design with an intelligent, distraction-free workspace.
+* **Live PDF Preview**: Powered by the highly optimized Tinymist LSP running in a Rust background process with bidirectional scroll sync.
+* **Focus-Driven UI**: A custom, frameless window design, persistent multi-tab workspace state (preserving open tabs, split ratios, and cursor positions), and integrated native-feel search and replace.
 * **Blazing Fast**: Built on Tauri v2 and Bun, resulting in a tiny memory footprint compared to Electron-based editors.
 
 ## Keyboard Shortcuts
-* \`Ctrl + N\`: New File
-* \`Ctrl + K\`, \`Ctrl + O\`: Open Workspace
-* \`Ctrl + B\`: Toggle Explorer Sidebar
-* \`Ctrl + M\`: Switch Layout (Code vs WYSIWYM)
-* \`Ctrl + \` \`: Toggle Log Console
+* `Ctrl + N`: New File
+* `Ctrl + K`, `Ctrl + O`: Open Workspace
+* `Ctrl + B`: Toggle Explorer Sidebar
+* `Ctrl + M`: Switch Layout (Code vs WYSIWYM)
+* `Ctrl + ` `: Toggle Log Console
 
 ## Tech Stack & Architecture
 * **Core Framework**: [Tauri v2](https://v2.tauri.app/)
@@ -112,9 +113,9 @@ The compiled binaries will be placed in `src-tauri/target/release/`.
   - [ ] Status indicators in file explorer
   - [ ] Inline diff viewing
   - [ ] Commit, push, and pull UI
-- [ ] Snippets and custom auto-complete
-  - [ ] Context-aware snippets for Typst
-  - [ ] Auto-complete UI integration
+- [x] Snippets and custom auto-complete
+  - [x] Context-aware snippets for Typst
+  - [x] Auto-complete UI integration
 - [ ] Settings panel / configuration file (`settings.json`)
   - [ ] UI for editing user preferences
   - [ ] Persistent settings storage

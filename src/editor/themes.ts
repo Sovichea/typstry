@@ -9,7 +9,21 @@ export const baseEditorLayoutTheme = EditorView.theme({
       lineHeight: "1.7" 
   },
   ".cm-line": { padding: "0 12px", overflow: "visible !important" },
-  ".cm-gutters": { borderRight: "1px solid var(--ui-border)" }
+  ".cm-gutters": { borderRight: "1px solid var(--ui-border)" },
+  ".cm-matchingBracket": {
+      backgroundColor: "var(--ui-select, rgba(255, 255, 255, 0.2)) !important",
+      outline: "1px solid #007acc !important",
+      borderRadius: "2px"
+  },
+  ".cm-nonmatchingBracket": {
+      backgroundColor: "rgba(255, 0, 0, 0.2) !important",
+      color: "inherit !important"
+  },
+  "& .bracket-color-0, & .bracket-color-0 *": { color: "#ffd700 !important", fontWeight: "bold !important" },
+  "& .bracket-color-1, & .bracket-color-1 *": { color: "#da70d6 !important", fontWeight: "bold !important" },
+  "& .bracket-color-2, & .bracket-color-2 *": { color: "#87cefa !important", fontWeight: "bold !important" },
+  "& .bracket-color-3, & .bracket-color-3 *": { color: "#ff8c00 !important", fontWeight: "bold !important" },
+  "& .bracket-color-4, & .bracket-color-4 *": { color: "#98fb98 !important", fontWeight: "bold !important" }
 });
 
 export function editorFontTheme(fontFamily: string = "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace") {

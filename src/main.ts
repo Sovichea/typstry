@@ -124,6 +124,7 @@ class TypstryWorkspaceController {
   private suppressNextForwardSync = false;
   private previewHighlightMapping: PreviewHighlightMapping | null = null;
   private readonly previewOnlyVersions = new Set<number>();
+  private previewOnlyDiagnosticsSuppressedUntil = 0;
   private latestDocumentVersion = 1;
   private nextLogEntryId = 1;
   private diagnosticLogEntries: LogConsoleEntry[] = [];
@@ -618,7 +619,7 @@ class TypstryWorkspaceController {
       state: EditorState.create({
         doc: initialDocument,
         extensions: [
-          getEditorExtensions(),
+          getEditorExtensions(() => this.lspClient, () => this.activeFilePath ? (this as any).filePathToUri(this.activeFilePath) : "", () => this.flushPendingLspSync()),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               const currentText = update.state.doc.toString();
@@ -871,7 +872,8 @@ class TypstryWorkspaceController {
         const range = sel.getRangeAt(0);
         const selectedText = range.toString();
         const anchorNode = sel.anchorNode!;
-        const wysiwymBlock = (anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode)?.closest('.wysiwym-block') as HTMLElement;
+        const parentEl = (anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode) as HTMLElement;
+        const wysiwymBlock = parentEl?.closest('.wysiwym-block') as HTMLElement;
 
         // Handle inline formatting
         const inlineMap: Record<string, [string, string, string]> = {
@@ -983,7 +985,8 @@ class TypstryWorkspaceController {
           
           if (sel && sel.rangeCount > 0 && this.wysiwymContainer.contains(sel.anchorNode)) {
              const anchorNode = sel.anchorNode!;
-             const wysiwymBlock = (anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode)?.closest('.wysiwym-block') as HTMLElement;
+             const parentEl = (anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode) as HTMLElement;
+             const wysiwymBlock = parentEl?.closest('.wysiwym-block') as HTMLElement;
              if (wysiwymBlock && wysiwymBlock.parentNode) {
                  wysiwymBlock.parentNode.insertBefore(snippetDiv, wysiwymBlock.nextSibling);
              } else {
@@ -1703,15 +1706,19 @@ $
     }
 
     const previewHighlight = this.buildHighlightedPreviewSource(cursor);
-    if (!previewHighlight) return;
+    if (!previewHighlight) {
+      this.clearPendingPreviewSyncPoll();
+      if (this.previewHighlightMapping) {
+        this.revertSyncText();
+      }
+      return;
+    }
 
     this.previewHighlightMapping = previewHighlight.mapping;
     const version = ++this.currentVersion;
     this.previewOnlyVersions.add(version);
-
-    if (this.pendingPreviewSyncPollTimer) {
-      window.clearInterval(this.pendingPreviewSyncPollTimer);
-    }
+    this.previewOnlyDiagnosticsSuppressedUntil = Date.now() + 2000;
+    this.clearPendingPreviewSyncPoll();
 
     await this.lspClient.notifyTextChange(
       this.filePathToUri(this.activeFilePath),
@@ -1827,7 +1834,15 @@ $
           activeTab.latestVersion = version;
         }
         this.previewHighlightMapping = null;
+        this.previewOnlyDiagnosticsSuppressedUntil = Date.now() + 1000;
         this.lspClient.notifyTextChange(this.filePathToUri(this.activeFilePath), this.editorInstance.state.doc.toString(), version);
+    }
+  }
+
+  private clearPendingPreviewSyncPoll() {
+    if (this.pendingPreviewSyncPollTimer) {
+      window.clearInterval(this.pendingPreviewSyncPollTimer);
+      this.pendingPreviewSyncPollTimer = null;
     }
   }
 
@@ -1907,6 +1922,7 @@ $
   private buildHighlightedPreviewSource(cursor: number): { text: string; scrollLine: number; scrollCharacter: number; mapping: PreviewHighlightMapping } | null {
     const range = this.wordRangeAtCursor(cursor);
     if (!range) return null;
+    if (!this.isPreviewHighlightableRange(range)) return null;
 
     const text = this.editorInstance.state.doc.toString();
     const prefix = this.previewHighlightPrefix;
@@ -1966,6 +1982,173 @@ $
     }
 
     return end > start ? { from: line.from + start, to: line.from + end } : null;
+  }
+
+  private isPreviewHighlightableRange(range: { from: number; to: number }): boolean {
+    const doc = this.editorInstance.state.doc;
+    const line = doc.lineAt(range.from);
+    if (range.to > line.to) return false;
+
+    const start = range.from - line.from;
+    const end = range.to - line.from;
+    const lineText = line.text;
+
+    if (this.isInsidePreviewExcludedInlineRegion(lineText, start)) {
+      return false;
+    }
+
+    return !this.isTypstCodeSyntaxRange(lineText, start, end);
+  }
+
+  private isInsidePreviewExcludedInlineRegion(lineText: string, index: number): boolean {
+    let inRaw = false;
+    let inMath = false;
+    let inBlockComment = false;
+
+    for (let i = 0; i < index; i++) {
+      const char = lineText[i];
+      const next = lineText[i + 1];
+
+      if (inBlockComment) {
+        if (char === "*" && next === "/") {
+          inBlockComment = false;
+          i++;
+        }
+        continue;
+      }
+
+      if (!inRaw && !inMath && char === "/" && next === "/") {
+        return true;
+      }
+
+      if (!inRaw && !inMath && char === "/" && next === "*") {
+        inBlockComment = true;
+        i++;
+        continue;
+      }
+
+      if (!inMath && char === "`") {
+        inRaw = !inRaw;
+        continue;
+      }
+
+      if (!inRaw && char === "$") {
+        inMath = !inMath;
+      }
+    }
+
+    return inRaw || inMath || inBlockComment;
+  }
+
+  private isTypstCodeSyntaxRange(lineText: string, start: number, end: number): boolean {
+    for (let hash = 0; hash < start; hash++) {
+      if (lineText[hash] !== "#") continue;
+
+      const span = this.typstCodeExpressionSpan(lineText, hash);
+      if (span && start < span.to && end > span.from) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private typstCodeExpressionSpan(lineText: string, hash: number): { from: number; to: number } | null {
+    let index = this.skipInlineWhitespace(lineText, hash + 1);
+    const expressionStart = index;
+
+    if (index >= lineText.length) {
+      return { from: hash, to: Math.min(hash + 1, lineText.length) };
+    }
+
+    if (!this.isWordChar(lineText[index])) {
+      return { from: hash, to: Math.min(index + 1, lineText.length) };
+    }
+
+    const nameStart = index;
+    while (index < lineText.length && this.isWordChar(lineText[index])) {
+      index += lineText.codePointAt(index)! > 0xffff ? 2 : 1;
+    }
+
+    const name = lineText.slice(nameStart, index);
+    if (this.isLineCodeKeyword(name)) {
+      return { from: expressionStart, to: this.typstKeywordExpressionEnd(lineText, index, name) };
+    }
+
+    let expressionEnd = index;
+    const afterName = this.skipInlineWhitespace(lineText, index);
+    if (lineText[afterName] === "(") {
+      expressionEnd = this.matchingDelimiterEnd(lineText, afterName, "(", ")") ?? lineText.length;
+    }
+
+    return { from: expressionStart, to: expressionEnd };
+  }
+
+  private typstKeywordExpressionEnd(lineText: string, index: number, keyword: string): number {
+    if (keyword !== "set" && keyword !== "show") {
+      return lineText.length;
+    }
+
+    let cursor = this.skipInlineWhitespace(lineText, index);
+    while (cursor < lineText.length && this.isWordChar(lineText[cursor])) {
+      cursor += lineText.codePointAt(cursor)! > 0xffff ? 2 : 1;
+    }
+
+    cursor = this.skipInlineWhitespace(lineText, cursor);
+    if (lineText[cursor] === "(") {
+      return this.matchingDelimiterEnd(lineText, cursor, "(", ")") ?? lineText.length;
+    }
+
+    return lineText.length;
+  }
+
+  private matchingDelimiterEnd(lineText: string, openIndex: number, open: string, close: string): number | null {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = openIndex; i < lineText.length; i++) {
+      const char = lineText[i];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === "\"") {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === "\"") {
+        inString = true;
+        continue;
+      }
+
+      if (char === open) {
+        depth++;
+      } else if (char === close) {
+        depth--;
+        if (depth === 0) {
+          return i + 1;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private skipInlineWhitespace(text: string, index: number): number {
+    let cursor = index;
+    while (cursor < text.length && /\s/.test(text[cursor])) {
+      cursor++;
+    }
+    return cursor;
+  }
+
+  private isLineCodeKeyword(name: string): boolean {
+    return /^(let|set|show|import|include|if|else|for|while|break|continue|return)$/.test(name);
   }
 
   private previousCodePointIndex(text: string, index: number): number | null {
@@ -2028,8 +2211,10 @@ $
 
   private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
     if (typeof version === "number") {
-      if (this.previewOnlyVersions.delete(version)) return;
+      if (this.previewOnlyVersions.has(version)) return;
       if (version < this.latestDocumentVersion) return;
+    } else if (Date.now() < this.previewOnlyDiagnosticsSuppressedUntil) {
+      return;
     }
 
     if (!this.activeFilePath || uri !== this.filePathToUri(this.activeFilePath)) {
@@ -2081,6 +2266,10 @@ $
   }
 
   private appendLspLog(entry: LspLogEntry) {
+    if (entry.kind === "error" && Date.now() < this.previewOnlyDiagnosticsSuppressedUntil) {
+      return;
+    }
+
     this.lspLogEntries.unshift({
       id: this.nextLogEntryId++,
       kind: entry.kind,
@@ -2700,7 +2889,8 @@ $
       }
     });
 
-    this.wysiwymContainer.addEventListener("click", async (e) => {
+    this.wysiwymContainer.addEventListener("click", async (ev) => {
+      const e = ev as MouseEvent;
       if (e.ctrlKey) {
         const target = e.target as HTMLElement;
         const linkSpan = target.closest(".wysiwym-link");
@@ -2826,7 +3016,7 @@ $
     html = html.replace(/#strike\[([^\]]+)\]/g, '<span class="wysiwym-marker">#strike[</span><span class="wysiwym-strike">$1</span><span class="wysiwym-marker">]</span>');
     html = html.replace(/#highlight\[([^\]]+)\]/g, '<span class="wysiwym-marker">#highlight[</span><span class="wysiwym-highlight">$1</span><span class="wysiwym-marker">]</span>');
     html = html.replace(/`([^`]+)`/g, '<span class="wysiwym-marker">`</span><span class="wysiwym-inline-code">$1</span><span class="wysiwym-marker">`</span>');
-    html = html.replace(/#link\("([^"]+)"\)\[([^\]]+)\](?:&lt;([^&]+)&gt;)?/g, (match, url, text, label) => {
+    html = html.replace(/#link\("([^"]+)"\)\[([^\]]+)\](?:&lt;([^&]+)&gt;)?/g, (_match, url, text, label) => {
        const labelMarkup = label ? `<span class="wysiwym-marker">&lt;${label}&gt;</span>` : '';
        return `<span class="wysiwym-marker">#link("${url}")[</span><span class="wysiwym-link" data-url="${url}">${text}</span><span class="wysiwym-marker">]</span>${labelMarkup}`;
     });

@@ -4,6 +4,7 @@ import type { StreamParser, StringStream } from "@codemirror/language";
 type TypstParserState = {
   inBlockComment: boolean;
   inRawBlock: boolean;
+  indentLevel: number;
 };
 
 const keywordPattern = /#(?:let|set|show|import|include|if|else|for|while|break|continue|return|none|auto|true|false)\b/;
@@ -13,7 +14,7 @@ const typstParser: StreamParser<TypstParserState> = {
   name: "typst",
 
   startState() {
-    return { inBlockComment: false, inRawBlock: false };
+    return { inBlockComment: false, inRawBlock: false, indentLevel: 0 };
   },
 
   token(stream: StringStream, state: TypstParserState): string | null {
@@ -62,11 +63,34 @@ const typstParser: StreamParser<TypstParserState> = {
     if (stream.match(/#[A-Za-z_][\w-]*/)) return "variableName";
     if (stream.match(/\b\d+(?:\.\d+)?(?:pt|em|mm|cm|in|deg|%|fr)?\b/)) return "number";
     if (stream.match(/[+\-*/=<>!&|]+/)) return "operator";
-    if (stream.match(/[()[\]{}.,:;]/)) return "punctuation";
+    if (stream.match(/[({[]/)) {
+      state.indentLevel++;
+      return "punctuation";
+    }
+    
+    if (stream.match(/[)}\]]/)) {
+      if (state.indentLevel > 0) state.indentLevel--;
+      return "punctuation";
+    }
+
+    if (stream.match(/[.,:;]/)) return "punctuation";
     if (stream.match(/\*{1,2}|_{1,2}/)) return "strong";
 
     stream.next();
     return null;
+  },
+  
+  languageData: {
+    commentTokens: { line: "//", block: { open: "/*", close: "*/" } },
+    indentOnInput: /^\s*[\}\]]$/,
+    closeBrackets: { brackets: ["(", "[", "{", '"', "'", "*", "_", "$"] }
+  },
+
+  indent(state: TypstParserState, textAfter: string, cx) {
+    if (state.inBlockComment || state.inRawBlock) return null;
+    let indent = state.indentLevel * cx.unit;
+    if (/^[\}\]]/.test(textAfter)) indent -= cx.unit;
+    return indent;
   }
 };
 

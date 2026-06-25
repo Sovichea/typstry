@@ -1,7 +1,7 @@
 import { Extension, Compartment } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
 import { baseEditorLayoutTheme, editorFontTheme, typstSyntaxHighlighting } from "./themes";
 import { syntaxHighlighting } from "@codemirror/language";
@@ -11,12 +11,19 @@ import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 
 import * as uiwThemes from "@uiw/codemirror-themes-all";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { createTypstAutocomplete } from "./autocomplete";
+import { completionKeymap, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { bracketMatching } from "@codemirror/language";
+import { toggleLineComment } from "@codemirror/commands";
+import { bracketColorizer } from "./bracketColorizer";
+import { createHoverTooltip } from "./hover";
+import type { TinymistLspClient } from "../compiler/lsp";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
 export const editorFontCompartment = new Compartment();
 
-export function getEditorExtensions(): Extension[] {
+export function getEditorExtensions(getClient: () => TinymistLspClient | undefined, getUri: () => string, flushLspSync: () => void): Extension[] {
   return [
     lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
     drawSelection(), dropCursor(), history(), 
@@ -26,9 +33,22 @@ export function getEditorExtensions(): Extension[] {
     indentationMarkers(),
     wrapCompartment.of(EditorView.lineWrapping),
     search({ top: true }),
+    closeBrackets(),
+    bracketMatching(),
+    bracketColorizer,
+    createHoverTooltip(getClient, getUri),
+    createTypstAutocomplete(getClient, getUri, flushLspSync),
     themeCompartment.of(syntaxHighlighting(typstSyntaxHighlighting)),
     editorFontCompartment.of(editorFontTheme()),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap])
+    keymap.of([
+      { key: "Mod-/", run: toggleLineComment },
+      indentWithTab, 
+      ...closeBracketsKeymap, 
+      ...defaultKeymap, 
+      ...historyKeymap, 
+      ...searchKeymap, 
+      ...completionKeymap
+    ])
   ];
 }
 

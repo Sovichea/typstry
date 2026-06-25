@@ -18,6 +18,17 @@
   --ui-header-text: #616161;
 }
 
+.bracket-color-0,
+.bracket-color-0 * { color: #ffd700 !important; font-weight: bold !important; }
+.bracket-color-1,
+.bracket-color-1 * { color: #da70d6 !important; font-weight: bold !important; }
+.bracket-color-2,
+.bracket-color-2 * { color: #87cefa !important; font-weight: bold !important; }
+.bracket-color-3,
+.bracket-color-3 * { color: #ff8c00 !important; font-weight: bold !important; }
+.bracket-color-4,
+.bracket-color-4 * { color: #98fb98 !important; font-weight: bold !important; }
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -1281,3 +1292,103 @@ html {
 .horizontal-resizer.resizing {
   background-color: #007fd4;
 }
+
+/* CodeMirror Autocomplete VS Code Styling */
+.cm-tooltip-autocomplete {
+  border: 1px solid var(--border-color) !important;
+  background-color: #252526 !important; /* VS Code dark tooltip */
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-family-mono);
+}
+
+.cm-tooltip-autocomplete > ul > li {
+  padding: 2px 6px !important;
+  display: flex !important;
+  align-items: center;
+  font-size: 13px;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: #094771 !important; /* VS Code selection blue */
+  color: #ffffff !important;
+}
+
+.cm-completionIcon {
+  width: 16px !important;
+  margin-right: 6px !important;
+  opacity: 0.8;
+}
+
+.cm-completionLabel {
+  flex-grow: 1;
+  color: #d4d4d4;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionLabel {
+  color: #ffffff;
+}
+
+.cm-completionDetail {
+  margin-left: 16px !important;
+  color: #9cdcfe !important; /* VS Code variable blue for type */
+  font-style: normal !important;
+  font-size: 0.9em;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail {
+  color: #ffffff !important;
+  opacity: 0.7;
+}
+
+.cm-tooltip-autocomplete .cm-completionInfo {
+  padding: 8px 12px;
+  font-family: var(--font-family-sans);
+  background-color: #252526 !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 4px;
+  max-width: 400px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.typst-hover-tooltip {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 6px; /* Extra padding to prevent scrollbar overlapping text */
+}
+
+/* Custom scrollbar for hover tooltip */
+.typst-hover-tooltip::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.typst-hover-tooltip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.typst-hover-tooltip::-webkit-scrollbar-thumb {
+  background: var(--ui-border);
+  border-radius: 3px;
+}
+
+.typst-hover-tooltip::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-header-text);
+}
+
+.typst-hover-tooltip a.hover-link {
+  color: #3794ff;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.typst-hover-tooltip a.hover-link:hover {
+  text-decoration: underline;
+}
+
+

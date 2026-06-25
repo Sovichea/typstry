@@ -54,6 +54,7 @@ export class TinymistLspClient {
   private editorView?: EditorView;
   private latestPreviewUrl = "";
   private latestPreviewDataPlaneUrl = "";
+  private pendingRequests = new Map<number, { resolve: (res: any) => void; reject: (err: any) => void; timeout?: number }>();
 
   constructor(
     private onSvgPreviewStream: (svgContent: string) => void,
@@ -115,6 +116,21 @@ export class TinymistLspClient {
       return;
     }
 
+    if (payload.id !== undefined && payload.method === undefined) {
+      const id = Number(payload.id);
+      const pending = this.pendingRequests.get(id);
+      if (pending) {
+        this.pendingRequests.delete(id);
+        if (pending.timeout) window.clearTimeout(pending.timeout);
+        if (payload.error) {
+          pending.reject(payload.error);
+        } else {
+          pending.resolve(payload.result);
+        }
+      }
+      return;
+    }
+
     if (payload.method === "tinymist/preview/svgStream") {
       this.onSvgPreviewStream(payload.params.svg);
     }
@@ -151,12 +167,35 @@ export class TinymistLspClient {
     }
   }
 
-  private editorPositionFromLspPosition(position: LspSourcePosition): number {
+  public editorPositionFromLspPosition(position: LspSourcePosition): number {
     const doc = this.editorView!.state.doc;
     const lineNumber = Math.max(1, Math.min(position.line + 1, doc.lines)); // LSP is 0-indexed, CodeMirror line() is 1-indexed
     const lineInfo = doc.line(lineNumber);
     const character = this.utf8ByteOffsetToStringOffset(lineInfo.text, position.character ?? 0);
     return lineInfo.from + character;
+  }
+
+  public lspPositionFromEditorPosition(doc: any, offset: number): LspSourcePosition {
+    const lineInfo = doc.lineAt(offset);
+    const characterOffset = offset - lineInfo.from;
+    return {
+      line: lineInfo.number - 1,
+      character: this.stringOffsetToUtf8ByteOffset(lineInfo.text, characterOffset)
+    };
+  }
+
+  private stringOffsetToUtf8ByteOffset(text: string, stringOffset: number): number {
+    const target = Math.max(0, stringOffset);
+    let bytes = 0;
+    let offset = 0;
+
+    for (const char of text) {
+      if (offset >= target) break;
+      bytes += new TextEncoder().encode(char).length;
+      offset += char.length;
+    }
+
+    return bytes;
   }
 
   private utf8ByteOffsetToStringOffset(text: string, byteOffset: number): number {
@@ -213,7 +252,17 @@ export class TinymistLspClient {
             },
             publishDiagnostics: {
               relatedInformation: true,
-              versionSupport: false
+              versionSupport: true
+            },
+            completion: {
+              contextSupport: true,
+              completionItem: {
+                snippetSupport: true,
+                labelDetailsSupport: true,
+                resolveSupport: {
+                  properties: ['documentation', 'detail', 'additionalTextEdits']
+                }
+              }
             }
           },
           workspace: {
@@ -361,6 +410,23 @@ export class TinymistLspClient {
 
   private sendRequest(method: string, params: any, customId?: number): Promise<void> {
     return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", id: customId ?? this.requestId++, method, params }) });
+  }
+
+  public request(method: string, params: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const id = this.requestId++;
+      const timeout = window.setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`LSP request timeout for ${method}`));
+      }, 5000);
+      
+      this.pendingRequests.set(id, { resolve, reject, timeout });
+      this.sendRequest(method, params, id).catch(err => {
+        this.pendingRequests.delete(id);
+        window.clearTimeout(timeout);
+        reject(err);
+      });
+    });
   }
 
   private sendNotification(method: string, params: any): Promise<void> {
