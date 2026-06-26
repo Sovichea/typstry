@@ -1,10 +1,10 @@
-import { Extension, Compartment } from "@codemirror/state";
+import { Extension, Compartment, type EditorState } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
 import { baseEditorLayoutTheme, editorFontTheme, typstColorHighlighting, typstFontHighlighting, typstFunctionHighlighting } from "./themes";
-import { syntaxHighlighting } from "@codemirror/language";
+import { codeFolding, foldGutter, foldKeymap, foldService, syntaxHighlighting } from "@codemirror/language";
 import { typstLanguage } from "./typstLanguage";
 import { editorDiagnosticsExtension } from "./diagnostics";
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
@@ -18,10 +18,25 @@ import { toggleLineComment } from "@codemirror/commands";
 import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
+import { typstFunctionFoldService } from "./folding";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
 export const editorFontCompartment = new Compartment();
+
+function foldedTypstPlaceholderSuffix(state: EditorState, range: { from: number; to: number }): string {
+  const foldedText = state.doc.sliceString(range.from, range.to).trimEnd();
+  const lastChar = foldedText[foldedText.length - 1] ?? "";
+  return /[)\]}]/.test(lastChar) ? lastChar : "";
+}
+
+function foldedTypstPlaceholderDOM(_view: EditorView, onclick: (event: Event) => void, suffix: string | null): HTMLElement {
+  const placeholder = document.createElement("span");
+  placeholder.className = "cm-foldPlaceholder";
+  placeholder.textContent = ` ... ${suffix ?? ""}`;
+  placeholder.addEventListener("click", onclick);
+  return placeholder;
+}
 
 const preventEscapedBracketAutoClose = EditorView.inputHandler.of((view, from, to, text) => {
   const bracketsToPrevent = ["$", "(", "[", "{", '"', "'", "*", "_"];
@@ -41,10 +56,20 @@ const preventEscapedBracketAutoClose = EditorView.inputHandler.of((view, from, t
 export function getEditorExtensions(getClient: () => TinymistLspClient | undefined, getUri: () => string, flushLspSync: () => void): Extension[] {
   return [
     preventEscapedBracketAutoClose,
-    lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
+    foldService.of(typstFunctionFoldService),
+    lineNumbers(),
+    foldGutter({
+      openText: "v",
+      closedText: ">"
+    }),
+    highlightActiveLineGutter(), highlightActiveLine(),
     drawSelection(), dropCursor(), history(), 
     typstLanguage,
     baseEditorLayoutTheme,
+    codeFolding({
+      preparePlaceholder: foldedTypstPlaceholderSuffix,
+      placeholderDOM: foldedTypstPlaceholderDOM
+    }),
     editorDiagnosticsExtension,
     indentationMarkers(),
     wrapCompartment.of(EditorView.lineWrapping),
@@ -63,6 +88,7 @@ export function getEditorExtensions(getClient: () => TinymistLspClient | undefin
       ...defaultKeymap, 
       ...historyKeymap, 
       ...searchKeymap, 
+      ...foldKeymap,
       ...completionKeymap
     ])
   ];

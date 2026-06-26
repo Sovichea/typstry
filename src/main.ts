@@ -9,8 +9,11 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
+import { foldEffect, foldedRanges, unfoldEffect } from "@codemirror/language";
 import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, editorFontCompartment } from "./editor/extensions";
 import { editorFontTheme } from "./editor/themes";
+import { collectDefaultTypstFunctionFolds } from "./editor/folding";
+import type { EditorFoldRange } from "./editor/folding";
 import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
@@ -79,6 +82,7 @@ type EditorTab = {
   selectionHead: number;
   scrollTop?: number;
   scrollLeft?: number;
+  foldRanges: EditorFoldRange[] | null;
 };
 
 const systemMonospaceFontStack = "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace";
@@ -1287,6 +1291,75 @@ $
     tab.selectionHead = selection.head;
     tab.scrollTop = this.editorInstance.scrollDOM.scrollTop;
     tab.scrollLeft = this.editorInstance.scrollDOM.scrollLeft;
+    tab.foldRanges = this.collectCurrentFoldRanges();
+  }
+
+  private collectCurrentFoldRanges(): EditorFoldRange[] {
+    const ranges: EditorFoldRange[] = [];
+    if (!this.editorInstance) return ranges;
+
+    const docLength = this.editorInstance.state.doc.length;
+    foldedRanges(this.editorInstance.state).between(0, docLength, (from, to) => {
+      if (from < to) {
+        ranges.push({ from, to });
+      }
+    });
+
+    return ranges;
+  }
+
+  private restoreTabFoldState(tab: EditorTab) {
+    const ranges = tab.foldRanges === null
+      ? collectDefaultTypstFunctionFolds(this.editorInstance.state)
+      : this.normalizeFoldRanges(tab.foldRanges, this.editorInstance.state.doc.length);
+
+    tab.foldRanges = ranges;
+    this.applyFoldRanges(ranges);
+  }
+
+  private applyFoldRanges(ranges: EditorFoldRange[]) {
+    const effects = [];
+    const docLength = this.editorInstance.state.doc.length;
+
+    foldedRanges(this.editorInstance.state).between(0, docLength, (from, to) => {
+      effects.push(unfoldEffect.of({ from, to }));
+    });
+
+    for (const range of this.normalizeFoldRanges(ranges, docLength)) {
+      effects.push(foldEffect.of(range));
+    }
+
+    if (effects.length > 0) {
+      this.editorInstance.dispatch({ effects });
+    }
+  }
+
+  private normalizeFoldRanges(value: unknown, docLength: number): EditorFoldRange[] {
+    if (!Array.isArray(value)) return [];
+
+    const ranges: EditorFoldRange[] = [];
+
+    for (let index = 0; index < value.length; index++) {
+      const item = value[index];
+      const range = typeof item === "object" && item !== null
+        ? item as Partial<EditorFoldRange>
+        : typeof item === "number" && typeof value[index + 1] === "number"
+          ? { from: item, to: value[++index] as number }
+          : null;
+
+      if (
+        range &&
+        typeof range.from === "number" &&
+        typeof range.to === "number" &&
+        range.from >= 0 &&
+        range.to <= docLength &&
+        range.from < range.to
+      ) {
+        ranges.push({ from: range.from, to: range.to });
+      }
+    }
+
+    return ranges;
   }
 
   private updateActiveTabContent(content: string) {
@@ -1352,6 +1425,7 @@ $
           this.editorInstance.dispatch({
             changes: { from: 0, to: this.editorInstance.state.doc.length, insert: "" }
           });
+          this.applyFoldRanges([]);
         } finally {
           this.isLoadingFile = false;
         }
@@ -1404,6 +1478,7 @@ $
     } finally {
       this.isLoadingFile = false;
     }
+    this.restoreTabFoldState(tab);
 
     if (tab.scrollTop !== undefined || tab.scrollLeft !== undefined) {
       requestAnimationFrame(() => {
@@ -1487,7 +1562,8 @@ $
         version: 1,
         latestVersion: 1,
         selectionAnchor: 0,
-        selectionHead: 0
+        selectionHead: 0,
+        foldRanges: null
       });
       this.renderEditorTabs();
       await this.activateEditorTab(path);
@@ -2752,7 +2828,8 @@ $
         selectionAnchor: tab.selectionAnchor,
         selectionHead: tab.selectionHead,
         scrollTop: tab.scrollTop,
-        scrollLeft: tab.scrollLeft
+        scrollLeft: tab.scrollLeft,
+        foldRanges: tab.foldRanges
       })),
       inputContainerWidthPct: inputContainer?.style.width ? parseFloat(inputContainer.style.width) : 50,
       explorerSidebarWidthPx: explorerSidebar?.style.width ? parseInt(explorerSidebar.style.width, 10) : 250
@@ -2799,7 +2876,10 @@ $
                selectionAnchor: tabInfo.selectionAnchor || 0,
                selectionHead: tabInfo.selectionHead || 0,
                scrollTop: tabInfo.scrollTop,
-               scrollLeft: tabInfo.scrollLeft
+               scrollLeft: tabInfo.scrollLeft,
+               foldRanges: Array.isArray(tabInfo.foldRanges)
+                 ? this.normalizeFoldRanges(tabInfo.foldRanges, contents.length)
+                 : null
              });
           } catch(e) {
              console.warn("Failed to restore tab:", tabInfo.path, e);
