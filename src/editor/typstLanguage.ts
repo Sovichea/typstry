@@ -453,7 +453,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       }
 
       // Numbers
-      if (stream.match(/\d+(?:\.\d+)?/)) return "number";
+      if (stream.match(/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/)) return "number";
 
       // Math functions and symbols
       if (stream.match(identifierRegex)) {
@@ -523,7 +523,7 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
 
       // Numbers (with unit support)
       if (stream.match(/0x[0-9a-fA-F]+\b/) ||
-          stream.match(/\d+(?:\.\d+)?(?:%|pt|em|mm|cm|in|deg|rad|fr)?(?![\p{L}\p{N}_])/u)) {
+          stream.match(/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:%|pt|em|mm|cm|in|deg|rad|fr)?(?![\p{L}\p{N}_])/u)) {
         return "number";
       }
 

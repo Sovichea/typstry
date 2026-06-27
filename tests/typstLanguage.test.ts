@@ -75,12 +75,14 @@ describe("Typst stream language", () => {
     expect(tokenName(tokens, "x")).toBeUndefined();
   });
 
-  test("tokenizes plain, unit, and percentage numbers consistently", () => {
-    const tokens = parseTokens("#let x = 1\n#let y = 1em\n#let z = 50%");
+  test("tokenizes plain, unit, percentage, and scientific numbers consistently", () => {
+    const tokens = parseTokens("#let x = 1\n#let y = 1em\n#let z = 50%\n#let n = 1e5\n#let m = 1.2e-3");
 
     expect(tokenName(tokens, "1")).toBe("number");
     expect(tokenName(tokens, "1em")).toBe("number");
     expect(tokenName(tokens, "50%")).toBe("number");
+    expect(tokenName(tokens, "1e5")).toBe("number");
+    expect(tokenName(tokens, "1.2e-3")).toBe("number");
   });
 
   test("separates a variable receiver from a called method", () => {
