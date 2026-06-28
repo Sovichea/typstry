@@ -28,6 +28,7 @@ import { EditorFontManager } from "./editor/fontManager";
 import { LayoutController } from "./layout/layoutController";
 import { WorkspaceStateStore } from "./workspace/workspaceStateStore";
 import { RecentProjectsController } from "./workspace/recentProjectsController";
+import { WorkspaceWatcher, type WorkspaceChange } from "./workspace/workspaceWatcher";
 import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
@@ -74,6 +75,8 @@ export class TypstryWorkspaceController {
   private fallbackPreviewGeneration = 0;
   private latestDocumentVersion = 1;
   private openTabs: EditorTab[] = [];
+  private workspaceChangeQueue: Promise<void> = Promise.resolve();
+  private readonly externalConflictPaths = new Set<string>();
   private readonly settingsController = new SettingsController(settings => this.applySettingsToRuntime(settings));
   private readonly toolchainController = new ToolchainController({
     getSelectedVersion: () => this.settingsController.value.toolchain.typstVersion,
@@ -118,6 +121,14 @@ export class TypstryWorkspaceController {
   );
   private readonly workspaceStateStore = new WorkspaceStateStore();
   private readonly recentProjectsController = new RecentProjectsController(path => this.openWorkspace(path));
+  private readonly workspaceWatcher = new WorkspaceWatcher(
+    change => {
+      this.workspaceChangeQueue = this.workspaceChangeQueue
+        .then(() => this.handleWorkspaceChange(change))
+        .catch(error => this.reportWorkspaceWatchError(error));
+    },
+    error => this.reportWorkspaceWatchError(error)
+  );
   private readonly editorToolbarController = new EditorToolbarController({
     getMode: () => this.activeMode,
     getEditor: () => this.editorInstance,
@@ -757,6 +768,7 @@ export class TypstryWorkspaceController {
         activeTab.content = content;
         activeTab.savedContent = content;
         activeTab.isDirty = false;
+        this.externalConflictPaths.delete(filePathKey(activeTab.path));
         this.renderEditorTabs();
       }
       this.setLspStatus({ kind: "preview-ready", message: "File saved" });
@@ -1206,12 +1218,178 @@ export class TypstryWorkspaceController {
     }
   }
 
+  private async handleWorkspaceChange(change: WorkspaceChange): Promise<void> {
+    const workspaceRoot = this.workspaceRootPath;
+    if (!workspaceRoot || filePathKey(change.rootPath) !== filePathKey(workspaceRoot)) return;
+
+    await Promise.all([
+      this.explorer.loadWorkspace(workspaceRoot),
+      this.reloadOpenFilesFromDisk()
+    ]);
+    if (this.workspaceRootPath !== workspaceRoot) return;
+
+    await this.refreshActivePreviewRoot();
+
+    if (this.lspReady && this.lspClient) {
+      const defaultType: 1 | 2 | 3 = change.kind === "create" ? 1 : change.kind === "remove" ? 3 : 2;
+      const lastPathIndex = change.paths.length - 1;
+      const changes = change.paths.map((path, index) => ({
+        uri: filePathToUri(path),
+        type: change.kind === "rename" && change.paths.length > 1
+          ? (index === lastPathIndex ? 1 : 3) as 1 | 3
+          : defaultType
+      }));
+      await this.lspClient.notifyWorkspaceFilesChanged(changes);
+    } else if (this.activeFilePath) {
+      this.scheduleCompilerPreview(this.activeFilePath, this.editorInstance.state.doc.toString());
+    }
+  }
+
+  private async reloadOpenFilesFromDisk(): Promise<void> {
+    for (const tab of [...this.openTabs]) {
+      const pathKey = filePathKey(tab.path);
+      const exists = await invoke<boolean>("workspace_path_exists", { path: tab.path });
+      if (!exists) {
+        if (tab.isDirty) {
+          this.reportExternalConflict(tab.path, "was removed outside Typstry");
+        } else {
+          this.externalConflictPaths.delete(pathKey);
+          await this.closeEditorTab(tab.path, true);
+        }
+        continue;
+      }
+
+      let contents: string;
+      try {
+        contents = await invoke<string>("read_workspace_file", { path: tab.path });
+      } catch (error) {
+        console.warn(`Unable to reload ${tab.path}:`, error);
+        continue;
+      }
+
+      if (contents === tab.savedContent) {
+        this.externalConflictPaths.delete(pathKey);
+        continue;
+      }
+      if (contents === tab.content) {
+        tab.savedContent = contents;
+        tab.isDirty = false;
+        this.externalConflictPaths.delete(pathKey);
+        this.renderEditorTabs();
+        continue;
+      }
+      if (tab.isDirty) {
+        this.reportExternalConflict(tab.path, "changed outside Typstry");
+        continue;
+      }
+
+      this.externalConflictPaths.delete(pathKey);
+      await this.applyExternalFileContent(tab, contents);
+    }
+  }
+
+  private async applyExternalFileContent(tab: EditorTab, contents: string): Promise<void> {
+    const isActive = this.activeFilePath !== null && filePathKey(tab.path) === filePathKey(this.activeFilePath);
+    tab.content = contents;
+    tab.savedContent = contents;
+    tab.isDirty = false;
+
+    if (!isActive) {
+      this.renderEditorTabs();
+      return;
+    }
+
+    const selection = this.editorInstance.state.selection.main;
+    this.isLoadingFile = true;
+    try {
+      this.editorInstance.dispatch({
+        changes: { from: 0, to: this.editorInstance.state.doc.length, insert: contents },
+        selection: {
+          anchor: Math.min(selection.anchor, contents.length),
+          head: Math.min(selection.head, contents.length)
+        }
+      });
+    } finally {
+      this.isLoadingFile = false;
+    }
+
+    this.renderEditorTabs();
+    this.editorFontManager.updateDocument(contents);
+    this.documentOutlineController.update(tab.path, contents);
+    this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head);
+    if (this.activeMode === "WYSIWYM") this.mapMarkupToWysiwym(contents);
+
+    const version = ++this.currentVersion;
+    this.latestDocumentVersion = version;
+    tab.version = version;
+    tab.latestVersion = version;
+    if (this.lspReady && this.lspClient) {
+      await this.lspClient.notifyTextChange(filePathToUri(tab.path), contents, version);
+      void this.runFallbackDiagnostics(tab.path, contents, version);
+      this.setLspStatus({ kind: "preview-ready", message: "Reloaded external file change" });
+    } else {
+      this.scheduleCompilerPreview(tab.path, contents);
+    }
+  }
+
+  private async refreshActivePreviewRoot(): Promise<void> {
+    if (!this.activeFilePath) return;
+    const contents = this.editorInstance.state.doc.toString();
+    const nextPreviewRoot = await invoke<string | null>("resolve_preview_main", {
+      filePath: this.activeFilePath,
+      workspaceRootPath: this.workspaceRootPath,
+      fileContents: contents
+    });
+    const unchanged = nextPreviewRoot === this.previewRootPath || (
+      nextPreviewRoot !== null && this.previewRootPath !== null &&
+      filePathKey(nextPreviewRoot) === filePathKey(this.previewRootPath)
+    );
+    if (unchanged) return;
+
+    this.previewRootPath = nextPreviewRoot;
+    const activeTab = this.getActiveTab();
+    if (activeTab) activeTab.previewRootPath = nextPreviewRoot;
+
+    if (!this.lspReady || !this.lspClient) {
+      this.scheduleCompilerPreview(this.activeFilePath, contents);
+      return;
+    }
+    if (!nextPreviewRoot) {
+      this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: sans-serif;">No preview root found for this library/template file. Diagnostics are still active.</div>`;
+      return;
+    }
+
+    this.previewPane.innerHTML = `<div style="padding: 20px; color: #007acc; font-family: sans-serif;">Restarting live preview...</div>`;
+    const previewUrl = await this.startPreviewWithRestart(nextPreviewRoot, contents);
+    if (previewUrl && this.previewRootPath === nextPreviewRoot) {
+      await this.previewFrame.mount(previewUrl, () => this.lspClient?.getPreviewHtml() ?? Promise.resolve(""));
+    }
+  }
+
+  private reportExternalConflict(path: string, reason: string): void {
+    const pathKey = filePathKey(path);
+    if (this.externalConflictPaths.has(pathKey)) return;
+    this.externalConflictPaths.add(pathKey);
+    this.appendLspLog({
+      kind: "warning",
+      source: "workspace",
+      message: `${fileNameFromPath(path)} ${reason}; unsaved editor content was preserved.`
+    });
+    this.setLspStatus({ kind: "error", message: "External change conflicts with unsaved edits" });
+  }
+
+  private reportWorkspaceWatchError(error: unknown): void {
+    console.error("Workspace watcher failed:", error);
+    this.appendLspLog({ kind: "error", source: "workspace", message: `Workspace watcher failed: ${String(error)}` });
+  }
+
   private async openWorkspace(selected: string) {
     if (this.workspaceRootPath && this.workspaceRootPath !== selected) {
       this.closeProject();
     }
     this.workspaceRootPath = selected;
-    this.explorer.loadWorkspace(selected);
+    await this.explorer.loadWorkspace(selected);
+    await this.workspaceWatcher.start(selected);
     this.updateWorkspaceViewportVisibility();
     this.recentProjectsController.add(selected);
     await this.restoreWorkspaceState(selected);
@@ -1219,6 +1397,8 @@ export class TypstryWorkspaceController {
 
   private closeProject() {
     this.saveWorkspaceState();
+    this.workspaceWatcher.stop();
+    this.externalConflictPaths.clear();
     
     this.workspaceRootPath = null;
     this.activeFilePath = null;
@@ -1242,6 +1422,7 @@ export class TypstryWorkspaceController {
 
   private bindGlobalEvents() {
     window.addEventListener("beforeunload", () => {
+      this.workspaceWatcher.stop();
       this.saveWorkspaceState();
       this.settingsController.flush();
     });

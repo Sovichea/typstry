@@ -427,6 +427,10 @@ export class TinymistLspClient {
     });
   }
 
+  public notifyWorkspaceFilesChanged(changes: { uri: string; type: 1 | 2 | 3 }[]): Promise<void> {
+    return this.sendNotification("workspace/didChangeWatchedFiles", { changes });
+  }
+
   public scrollPreview(taskId: string, request: ScrollPreviewRequest): Promise<void> {
     return this.sendRequest("workspace/executeCommand", {
       command: "tinymist.scrollPreview",

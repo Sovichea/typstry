@@ -9,7 +9,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 tauri = { version = "2.11.0", features = [] }
-tauri-plugin-fs = "2.5.0"
+tauri-plugin-fs = { version = "2.5.0", features = ["watch"] }
 tauri-plugin-shell = "2.3.0"
 tauri-plugin-dialog = "2.2.0"
 serde = { version = "1.0", features = ["derive"] }

@@ -67,6 +67,11 @@ fn read_workspace_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn workspace_path_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
 fn save_workspace_file(path: String, contents: String) -> Result<(), String> {
     std::fs::write(&path, contents).map_err(|e| format!("Failed to save file: {}", e))
 }
@@ -787,6 +792,7 @@ pub fn run() {
             compile_typst_preview,
             check_typst_document,
             read_workspace_file,
+            workspace_path_exists,
             save_workspace_file,
             create_workspace_dir,
             rename_workspace_file,

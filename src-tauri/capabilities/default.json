@@ -22,6 +22,10 @@
     "fs:read-all",
     "fs:write-all",
     {
+      "identifier": "fs:allow-watch",
+      "allow": [{ "path": "**" }]
+    },
+    {
       "identifier": "fs:allow-copy-file",
       "allow": [{ "path": "**" }]
     },

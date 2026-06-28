@@ -50,21 +50,46 @@ function getFileIconSvg(filename: string): string {
 }
 
 export class WorkspaceExplorer {
+  private loadGeneration = 0;
+
   constructor(private container: HTMLElement, private onFileSelected: (filePath: string) => void) {}
 
   public async loadWorkspace(rootPath: string) {
+    const generation = ++this.loadGeneration;
+    const viewState = this.captureViewState();
     const isFirstLoad = !this.container.querySelector(".file-tree-branch");
     if (isFirstLoad) {
       this.container.innerHTML = `<div class="explorer-loading">Scanning Workspace...</div>`;
     }
     try {
       const nodes = await this.readDirectory(rootPath);
+      await this.hydrateExpandedDirectories(nodes, viewState.expandedPaths);
+      if (generation !== this.loadGeneration) return;
       this.container.innerHTML = "";
-      
-      this.container.appendChild(this.renderTree(nodes));
+
+      this.container.appendChild(this.renderTree(nodes, 0, viewState.expandedPaths, viewState.selectedPath));
     } catch {
+      if (generation !== this.loadGeneration) return;
       this.container.innerHTML = `<div class="explorer-error">Access Refused.</div>`;
     }
+  }
+
+  private captureViewState(): { expandedPaths: Set<string>; selectedPath: string | null } {
+    const expandedPaths = new Set<string>();
+    this.container.querySelectorAll<HTMLElement>(".tree-folder:not(.collapsed) > .tree-item[data-path]")
+      .forEach(item => {
+        if (item.dataset.path) expandedPaths.add(item.dataset.path);
+      });
+    const selectedPath = this.container.querySelector<HTMLElement>(".tree-item.selected[data-path]")?.dataset.path ?? null;
+    return { expandedPaths, selectedPath };
+  }
+
+  private async hydrateExpandedDirectories(nodes: FileNode[], expandedPaths: Set<string>): Promise<void> {
+    await Promise.all(nodes.map(async node => {
+      if (!node.isDirectory || !expandedPaths.has(node.path)) return;
+      node.children = await this.readDirectory(node.path);
+      await this.hydrateExpandedDirectories(node.children, expandedPaths);
+    }));
   }
 
   private async readDirectory(dirPath: string): Promise<FileNode[]> {
@@ -77,24 +102,32 @@ export class WorkspaceExplorer {
     return sortFileNodes(nodes);
   }
 
-  private renderTree(nodes: FileNode[], depth: number = 0): DocumentFragment {
+  private renderTree(
+    nodes: FileNode[],
+    depth: number = 0,
+    expandedPaths: Set<string> = new Set(),
+    selectedPath: string | null = null
+  ): DocumentFragment {
     const fragment = document.createDocumentFragment();
     const ul = document.createElement("ul");
     ul.className = "file-tree-branch";
 
     for (const node of nodes) {
       const li = document.createElement("li");
-      li.className = node.isDirectory ? "tree-folder collapsed" : "tree-file";
+      const isExpanded = node.isDirectory && expandedPaths.has(node.path);
+      li.className = node.isDirectory ? `tree-folder${isExpanded ? "" : " collapsed"}` : "tree-file";
 
       const label = document.createElement("div");
-      label.className = "tree-item explorer-item-target";
+      label.className = `tree-item explorer-item-target${selectedPath === node.path ? " selected" : ""}`;
       label.dataset.path = node.path;
       label.dataset.isDir = String(node.isDirectory);
       // Base padding + depth padding
       label.style.paddingLeft = `${depth * 12 + 8}px`;
 
       const chevronContainer = document.createElement("span");
-      chevronContainer.className = node.isDirectory ? "tree-chevron collapsed" : "tree-chevron-spacer";
+      chevronContainer.className = node.isDirectory
+        ? `tree-chevron${isExpanded ? "" : " collapsed"}`
+        : "tree-chevron-spacer";
       if (node.isDirectory) {
         // Down pointing chevron (default expanded, will be rotated -90deg by .collapsed)
         chevronContainer.innerHTML = `<svg viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z"/></svg>`;
@@ -128,6 +161,10 @@ export class WorkspaceExplorer {
         childrenContainer.className = "tree-children";
         let loading = false;
 
+        if (node.children) {
+          childrenContainer.appendChild(this.renderTree(node.children, depth + 1, expandedPaths, selectedPath));
+        }
+
         label.addEventListener("click", async () => {
           const expanding = li.classList.contains("collapsed");
           li.classList.toggle("collapsed", !expanding);
@@ -139,7 +176,7 @@ export class WorkspaceExplorer {
           label.classList.add("loading");
           try {
             node.children = await this.readDirectory(node.path);
-            childrenContainer.replaceChildren(this.renderTree(node.children, depth + 1));
+            childrenContainer.replaceChildren(this.renderTree(node.children, depth + 1, expandedPaths, selectedPath));
           } catch {
             const error = document.createElement("div");
             error.className = "explorer-error";
