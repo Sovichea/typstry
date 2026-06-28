@@ -196,6 +196,7 @@ export class TypstryWorkspaceController {
     document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
     this.forwardSyncDebounceMs = preview.syncDebounceMs;
     this.previewHighlightVisibleMs = preview.highlightDurationMs;
+    this.editorFontManager.configure(editor.codeFont, editor.unicodeFont);
 
     void applyUIThemeVariables(appearance.theme);
 

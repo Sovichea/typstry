@@ -19,6 +19,8 @@ export type AppSettings = {
     editorLineHeight: number;
   };
   editor: {
+    codeFont: CodeEditorFontId;
+    unicodeFont: UnicodeFontPreference;
     wordWrap: boolean;
     tabSize: 2 | 4 | 8;
     lineNumbers: boolean;
@@ -41,6 +43,8 @@ export const defaultAppSettings: AppSettings = {
     editorLineHeight: 1.7
   },
   editor: {
+    codeFont: "fira-mono",
+    unicodeFont: "auto",
     wordWrap: true,
     tabSize: 2,
     lineNumbers: true,
@@ -91,6 +95,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       editorLineHeight: boundedNumber(appearance.editorLineHeight, defaultAppSettings.appearance.editorLineHeight, 1.2, 2.4)
     },
     editor: {
+      codeFont: normalizeCodeEditorFont(editor.codeFont),
+      unicodeFont: normalizeUnicodeFontPreference(editor.unicodeFont),
       wordWrap: booleanValue(editor.wordWrap, defaultAppSettings.editor.wordWrap),
       tabSize,
       lineNumbers: booleanValue(editor.lineNumbers, defaultAppSettings.editor.lineNumbers),
@@ -109,3 +115,9 @@ export function normalizeAppSettings(value: unknown): AppSettings {
 export function cloneDefaultAppSettings(): AppSettings {
   return normalizeAppSettings(defaultAppSettings);
 }
+import {
+  normalizeCodeEditorFont,
+  normalizeUnicodeFontPreference,
+  type CodeEditorFontId,
+  type UnicodeFontPreference
+} from "./editor/fontCatalog";

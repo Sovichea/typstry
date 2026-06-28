@@ -21,7 +21,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src/preview/`: Pure source highlighting, iframe ownership, and forward/inverse preview synchronization state.
   - `src/workspace/`: Typed workspace-state persistence and recent-project rendering.
   - `src/wysiwym/adapter.ts`: WYSIWYM block parsing, DOM rendering, and Typst serialization.
-  - `src/diagnostics/logConsoleController.ts`, `src/editor/fontManager.ts`, `src/editor/toolbarController.ts`, `src/layout/layoutController.ts`: Feature-local DOM/state controllers.
+  - `src/diagnostics/logConsoleController.ts`, `src/editor/fontManager.ts`, `src/editor/toolbarController.ts`, `src/layout/layoutController.ts`: Feature-local DOM/state controllers. `fontCatalog.ts` defines the selectable code and Unicode font engines.
   - `src/editor/typstLanguage.ts`: StreamLanguage-based parser for Typst.
   - `src/editor/extensions.ts`: Custom CodeMirror extensions (autoclose overrides, LSP bridges, themes).
   - `src/editor/themes.ts`: Global HighlightStyle and editor layouts.
@@ -40,7 +40,8 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - `WorkspaceStateStore` owns localStorage persistence under `typstry-workspace-${workspaceRootPath}`. It normalizes stored values, keeps tab paths/selection/scroll/split widths, and reloads content from disk; unsaved tab contents are not persisted across app restart.
 - `RecentProjectsController` owns `typstry-recent-projects` (max 5) and renders paths with DOM APIs rather than interpolated HTML.
 - Application preferences live in the platform app-config `settings.json`; `typstry-word-wrap` and `typstry-theme` localStorage keys are migration inputs only and are removed after the first successful JSON save.
-- `EditorFontManager` scans active text for non-ASCII script ranges; Khmer bundled fonts load via `FontFace`, other script candidates depend on installed fonts and may require restart.
+- MiSans Latin Regular/Bold is bundled and used only for application UI. Fira Mono Regular/Bold is bundled and is the default editor font; DejaVu Sans Mono and System Monospace are alternate catalog entries.
+- `EditorFontManager` keeps base code-font selection separate from Unicode fallback selection. Auto detection only recommends registered script fonts; unmatched Latin Extended, Greek, Cyrillic, or other scripts must not fall back to MiSans Latin.
 
 ### B. Tauri IPC Contract (`src-tauri/src/lib.rs`)
 - File commands: `read_workspace_file`, `save_workspace_file`, `create_workspace_dir`, `rename_workspace_file`, `copy_workspace_file`, `read_workspace_dir`, `move_to_trash`, `reveal_in_explorer`.
@@ -89,7 +90,9 @@ This file serves as a consolidated reference for the architectural decisions, pa
 ## 2. Editor & Syntax Highlight Rules
 
 ### A. Font Fallbacks & Monospace Rendering
-- **Latin Monospace Stack**: Latin monospace fonts are placed *before* language-specific Unicode fallback fonts (like *MiSans Khmer*) in the CSS font stack. This prevents the Unicode font (which has non-monospace Latin glyphs) from overriding monospace rendering for code.
+- **UI vs Code**: MiSans Latin is the UI-only sans-serif family. Fira Mono is the default editor family and every `codeFont` selector entry must be registered as monospace in `fontCatalog.ts`.
+- **Unicode Fallback Stack**: The chosen monospace code font is placed before an optional detector-managed Unicode family. `unicodeFont: "none"` disables the additional fallback; `"auto"` follows script detection.
+- **Detector Catalog**: Do not use a catch-all Unicode recommendation. Add a script pattern, metadata, and load source for each supported font. MiSans Latin is not a valid detector candidate, including for French or Greek text.
 - **String Literals**: Rendered using a monospace font (`var(--editor-code-font)`) because they serve as internal parameters/code arguments rather than output text.
 - **Equations & Raw Blocks**: Rendered in monospace. Both are assigned a unified theme-aware monospace color (`--ui-monospace-color`).
 
@@ -163,3 +166,4 @@ This file serves as a consolidated reference for the architectural decisions, pa
 | **Application Settings** | Keeping theme/wrap in scattered localStorage keys or rebuilding CodeMirror for each preference. | Normalize one versioned `settings.json`, persist it through Rust IPC, and apply editor toggles through compartments. | Native config paths are platform-specific; schema validation, migration, debounced writes, and live reconfiguration must remain separate concerns. |
 | **Frontend Controller Decomposition** | Keeping DOM, timers, persistence, JSON-RPC, preview mapping, and feature actions in a 3,800-line `main.ts`. | Keep `main.ts` composition-only; place orchestration in `appController.ts` and feature state in callback-driven controllers/pure libraries. | Moving one giant class only renames the problem; extract ownership first, keep a single LSP transport, and test pure boundaries before reducing the entry point. |
 | **Workspace Portability** | Recursive explorer startup scans, manual file-URI concatenation, Unix path case-folding, and hardcoded `.exe` names. | Lazy-load folders, centralize path/URI helpers, preserve Unix case, and resolve managed executables with PATH fallback. | Windows, macOS, and Linux differ in path identity and executable naming; portability logic must stay out of feature controllers. |
+| **Editor Font Roles** | Using MiSans Latin as a catch-all code/Unicode recommendation and coupling script fallback to the base editor font. | Bundle MiSans Latin for UI and Fira Mono for code; validate monospace code choices and configure detector-managed Unicode fallback separately. | A UI sans font is not a code font, and unmatched scripts must not produce false download recommendations; `none` must override automatic fallback. |

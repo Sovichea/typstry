@@ -6,6 +6,8 @@ describe("application settings", () => {
     const settings = normalizeAppSettings({ appearance: { theme: "nord" } });
 
     expect(settings.appearance.theme).toBe("nord");
+    expect(settings.editor.codeFont).toBe("fira-mono");
+    expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
   });
@@ -13,7 +15,7 @@ describe("application settings", () => {
   test("rejects unsupported enums and clamps numeric values", () => {
     const settings = normalizeAppSettings({
       appearance: { theme: "unknown", editorFontSize: 80, editorLineHeight: 0.5 },
-      editor: { tabSize: 3 },
+      editor: { tabSize: 3, codeFont: "MiSans Latin", unicodeFont: "unknown-font" },
       preview: { syncDebounceMs: 1, highlightDurationMs: 50000 }
     });
 
@@ -21,6 +23,8 @@ describe("application settings", () => {
     expect(settings.appearance.editorFontSize).toBe(32);
     expect(settings.appearance.editorLineHeight).toBe(1.2);
     expect(settings.editor.tabSize).toBe(2);
+    expect(settings.editor.codeFont).toBe("fira-mono");
+    expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.preview.syncDebounceMs).toBe(50);
     expect(settings.preview.highlightDurationMs).toBe(10000);
   });

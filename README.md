@@ -48,6 +48,8 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
     "editorLineHeight": 1.7
   },
   "editor": {
+    "codeFont": "fira-mono",
+    "unicodeFont": "auto",
     "wordWrap": true,
     "tabSize": 2,
     "lineNumbers": true,
@@ -64,6 +66,8 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
 ```
 
 Invalid or missing fields fall back to bounded defaults. Existing theme and word-wrap values from older releases are migrated from `localStorage` the first time the settings file is created.
+
+MiSans Latin is bundled as the application UI font. Fira Mono Regular/Bold is bundled as the default code font; the code-font selector only lists monospace families registered by the font engine. Unicode fallback is configured separately as automatic detection, no fallback, or a detector-managed font.
 
 ## Tech Stack & Architecture
 * **Core Framework**: [Tauri v2](https://v2.tauri.app/)

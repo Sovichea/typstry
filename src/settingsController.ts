@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { cloneDefaultAppSettings, normalizeAppSettings, type AppSettings, type ThemeName } from "./settings";
+import {
+  codeEditorFonts,
+  unicodeFontPreferenceOptions,
+  type CodeEditorFontId,
+  type UnicodeFontPreference
+} from "./editor/fontCatalog";
 
 type SettingsPayload = { path: string; settings: unknown | null };
 
@@ -61,6 +67,7 @@ export class SettingsController {
   public initializePanel() {
     const overlay = document.getElementById("settings-overlay");
     if (!overlay) return;
+    this.populateFontOptions();
 
     const openSettings = () => {
       this.populatePanel();
@@ -95,6 +102,8 @@ export class SettingsController {
     onChange("settings-theme", (settings, control) => { settings.appearance.theme = control.value as ThemeName; });
     onChange("settings-font-size", (settings, control) => { settings.appearance.editorFontSize = Number(control.value); });
     onChange("settings-line-height", (settings, control) => { settings.appearance.editorLineHeight = Number(control.value); });
+    onChange("settings-code-font", (settings, control) => { settings.editor.codeFont = control.value as CodeEditorFontId; });
+    onChange("settings-unicode-font", (settings, control) => { settings.editor.unicodeFont = control.value as UnicodeFontPreference; });
     onChange("settings-word-wrap", (settings, control) => { settings.editor.wordWrap = (control as HTMLInputElement).checked; });
     onChange("settings-tab-size", (settings, control) => { settings.editor.tabSize = Number(control.value) as 2 | 4 | 8; });
     onChange("settings-line-numbers", (settings, control) => { settings.editor.lineNumbers = (control as HTMLInputElement).checked; });
@@ -171,6 +180,8 @@ export class SettingsController {
     setValue("settings-theme", appearance.theme);
     setValue("settings-font-size", String(appearance.editorFontSize));
     setValue("settings-line-height", String(appearance.editorLineHeight));
+    setValue("settings-code-font", editor.codeFont);
+    setValue("settings-unicode-font", editor.unicodeFont);
     setValue("settings-tab-size", String(editor.tabSize));
     setValue("settings-sync-debounce", String(preview.syncDebounceMs));
     setValue("settings-highlight-duration", String(preview.highlightDurationMs));
@@ -188,5 +199,21 @@ export class SettingsController {
     }
     const status = document.getElementById("settings-save-status");
     if (status && this.loadError) status.textContent = `Using defaults: ${this.loadError}`;
+  }
+
+  private populateFontOptions() {
+    const populate = (id: string, options: ReadonlyArray<{ id: string; label: string }>) => {
+      const select = document.getElementById(id) as HTMLSelectElement | null;
+      if (!select) return;
+      select.replaceChildren(...options.map(item => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.label;
+        return option;
+      }));
+    };
+
+    populate("settings-code-font", codeEditorFonts);
+    populate("settings-unicode-font", unicodeFontPreferenceOptions);
   }
 }

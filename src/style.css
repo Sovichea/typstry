@@ -5,6 +5,22 @@
 }
 
 @font-face {
+  font-family: 'Fira Mono';
+  src: url('./assets/fonts/FiraMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fira Mono';
+  src: url('./assets/fonts/FiraMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'MiSans Latin';
   src: url('./assets/fonts/MiSansLatin-Bold.woff2') format('woff2');
   font-weight: bold;
@@ -39,6 +55,11 @@
 }
 
 :root {
+  --ui-font: 'MiSans Latin';
+  --editor-code-font: 'Fira Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  --editor-unicode-font: sans-serif;
+  --font-family-sans: var(--ui-font), sans-serif;
+  --font-family-mono: var(--editor-code-font);
   --ui-bg: #fcfcfc;
   --ui-text: #333333;
   --ui-hover: #e4e6f1;
@@ -88,7 +109,7 @@ html {
   background-color: var(--ui-bg);
   overflow: hidden;
   color: var(--ui-text);
-  font-family: 'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif;
+  font-family: var(--ui-font), sans-serif;
 }
 
 #app-shell {
@@ -437,7 +458,7 @@ html {
   border-radius: 6px;
   background: transparent;
   color: var(--ui-header-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--ui-font), sans-serif;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -1091,7 +1112,7 @@ html {
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: 'MiSans Latin', var(--active-unicode-font, 'MiSans Khmer'), sans-serif;
+  font-family: var(--ui-font), var(--editor-unicode-font), sans-serif;
 }
 
 .wysiwym-block:focus {
@@ -1140,7 +1161,7 @@ html {
 .wysiwym-block.function {
   background-color: rgba(0, 0, 0, 0.03);
   border: 1px solid var(--ui-border);
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-family: var(--editor-code-font);
   font-size: 0.9em;
 }
 
@@ -1190,7 +1211,7 @@ html {
 .wysiwym-underline { text-decoration: underline; }
 .wysiwym-strike { text-decoration: line-through; }
 .wysiwym-highlight { background-color: rgba(255, 215, 0, 0.4); border-radius: 2px; }
-.wysiwym-inline-code { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; background-color: rgba(0, 0, 0, 0.05); padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
+.wysiwym-inline-code { font-family: var(--editor-code-font); background-color: rgba(0, 0, 0, 0.05); padding: 2px 4px; border-radius: 4px; font-size: 0.9em; }
 .wysiwym-link { color: #007fd4; text-decoration: none; cursor: pointer; }
 .wysiwym-link:hover { text-decoration: underline; }
 .wysiwym-footnote { font-size: 0.8em; vertical-align: super; color: var(--ui-text-muted); background: rgba(0, 0, 0, 0.05); padding: 0 4px; border-radius: 4px; }

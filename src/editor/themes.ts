@@ -1,6 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import { HighlightStyle } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import { codeEditorFontStack } from "./fontCatalog";
 
 export const baseEditorLayoutTheme = EditorView.theme({
   "&": { 
@@ -51,7 +52,7 @@ export const baseEditorLayoutTheme = EditorView.theme({
   "& .bracket-color-4, & .bracket-color-4 *": { color: "var(--editor-bracket-4) !important" }
 });
 
-export function editorFontTheme(fontFamily: string = "'DejaVu Sans Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace") {
+export function editorFontTheme(fontFamily: string = codeEditorFontStack("fira-mono")) {
   return EditorView.theme({
     "&": {
       height: "100%",
@@ -61,7 +62,7 @@ export function editorFontTheme(fontFamily: string = "'DejaVu Sans Mono', ui-mon
       fontFamily: "var(--editor-code-font) !important"
     },
     ".cm-gutters": {
-      fontFamily: "ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace !important"
+      fontFamily: "var(--editor-code-font) !important"
     }
   });
 }
@@ -112,10 +113,10 @@ export const typstFontHighlighting = HighlightStyle.define([
   { tag: [tags.variableName, tags.labelName, tags.special(tags.variableName)], fontFamily: "var(--editor-code-font) !important" },
   { tag: [tags.number, tags.atom, tags.bool, tags.escape], fontFamily: "var(--editor-code-font) !important" },
   { tag: [tags.operator, tags.punctuation], fontFamily: "var(--editor-code-font) !important" },
-  { tag: tags.heading, scale: 1.15, fontFamily: "var(--editor-code-font), var(--active-unicode-font, 'MiSans Khmer'), monospace !important" },
-  { tag: tags.comment, fontFamily: "var(--editor-code-font), var(--active-unicode-font, 'MiSans Khmer'), monospace !important" },
+  { tag: tags.heading, scale: 1.15, fontFamily: "var(--editor-code-font) !important" },
+  { tag: tags.comment, fontFamily: "var(--editor-code-font) !important" },
   { tag: tags.string, fontFamily: "var(--editor-code-font) !important" },
-  { tag: tags.content, fontFamily: "var(--editor-code-font), var(--active-unicode-font, 'MiSans Khmer'), monospace !important" },
+  { tag: tags.content, fontFamily: "var(--editor-code-font) !important" },
   { tag: [tags.literal, tags.monospace], fontFamily: "var(--editor-code-font) !important", color: "var(--ui-monospace-color) !important" },
-  { tag: [tags.strong, tags.emphasis, tags.list, tags.link, tags.url], fontFamily: "var(--editor-code-font), var(--active-unicode-font, 'MiSans Khmer'), monospace !important" }
+  { tag: [tags.strong, tags.emphasis, tags.list, tags.link, tags.url], fontFamily: "var(--editor-code-font) !important" }
 ]);

@@ -7,6 +7,7 @@ This document serves as the core knowledge base and skill reference for the Typs
 - **Desktop Framework:** Tauri v2 (Rust + Webview)
 - **Frontend Core:** Vite + Vanilla TypeScript (No UI frameworks like React or Vue)
 - **Editor Engine:** CodeMirror 6
+- **Bundled Fonts:** MiSans Latin is the UI font. Fira Mono is the default code font; DejaVu Sans Mono remains an alternate bundled monospace choice.
 - **Language Server:** Tinymist LSP spawned by the Rust backend and bridged to the frontend over Tauri IPC (`lsp-rx`, `lsp-status`, `send_lsp_message`). Tinymist preview assets may still use local `127.0.0.1` ports.
 - **CLI Dependencies:** On macOS/Linux, `typst` and `tinymist` must be available in `PATH`. Windows can use managed executables downloaded into Tauri app-local data; all platforms fall back to `PATH`.
 
@@ -35,6 +36,7 @@ The application operates across distinct processes and contexts:
 4. **Controller Boundaries:** DOM-heavy feature controllers own their elements and local state. `appController.ts` coordinates them through callbacks; do not move feature implementations back into the orchestrator.
 5. **WYSIWYM Parsing:** Use `WysiwymAdapter.render()` and `.serialize()` when mapping DOM blocks to Typst. Preserve structural prefixes such as `= ` and table metadata.
 6. **Validation:** Run `bun test`, `bun run build`, `cargo fmt --check`, `cargo check --lib`, and `cargo test --lib` after cross-boundary changes.
+7. **Font Catalogs:** `editor/fontCatalog.ts` is the source of truth for editor font selectors. Code-font entries must be monospace. MiSans Latin is UI-only and must never be added as a code or detector recommendation. New Unicode downloads must be registered with the detector engine and remain separate from the base code font.
 
 ## 4. Common Troubleshooting
 - **LSP Offline Warnings:** Verify `tinymist --version` succeeds or that the managed Windows executable exists. Port `8589` is used for preview assets, not frontend JSON-RPC.
