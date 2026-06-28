@@ -1,6 +1,20 @@
 import { autocompletion, CompletionContext, snippetCompletion, Completion } from "@codemirror/autocomplete";
 import type { TinymistLspClient } from "../compiler/lsp";
 
+type LspCompletionItem = {
+  label: string;
+  labelDetails?: { description?: string; detail?: string };
+  detail?: string;
+  documentation?: string | { value?: string };
+  kind?: number;
+  insertText?: string;
+  textEdit?: { newText?: string };
+  insertTextFormat?: number;
+  sortText?: string;
+};
+
+type LspCompletionResponse = LspCompletionItem[] | { items?: LspCompletionItem[] } | null;
+
 export const typstSnippets = [
   // Document structure
   snippetCompletion("#set document(title: \"${title}\")\n", { label: "#document", detail: "Document Properties" }),
@@ -105,7 +119,7 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
         flushLspSync();
         
         try {
-          const response = await client.request("textDocument/completion", {
+          const response = await client.request<LspCompletionResponse>("textDocument/completion", {
             textDocument: { uri },
             position,
             context: {
@@ -121,7 +135,7 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
           const word = context.matchBefore(/#?[\w-]*/);
           const isHashPrefix = word?.text.startsWith('#');
           
-          const options: Completion[] = items.map((item: any) => {
+          const options: Completion[] = items.map(item => {
             let label = item.label;
             let detail = item.labelDetails?.description ?? item.labelDetails?.detail ?? item.detail;
             let info = typeof item.documentation === 'string' ? item.documentation : item.documentation?.value;
@@ -145,7 +159,7 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
             }
             
             if (item.insertTextFormat === 2) {
-              return snippetCompletion(apply, { label, detail, info, type, sortText: item.sortText } as any);
+              return snippetCompletion(apply, { label, detail, info, type });
             }
             
             return {

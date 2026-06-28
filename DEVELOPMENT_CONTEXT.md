@@ -9,11 +9,19 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - **Run Commands**: `bun install`, `bun run tauri dev`, `bun run tauri build`; frontend build is `tsc && vite build`.
 - **TypeScript Mode**: `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`; unused imports/params fail build.
 - **Core Files**:
-  - `index.html`: Single-page DOM scaffold. `src/main.ts` binds hardcoded element IDs directly, so DOM ID changes must be paired with controller updates.
-  - `src/main.ts`: Main app orchestrator (`TypstryWorkspaceController`), workspace/tabs, commands, preview sync, WYSIWYM mode, diagnostics, localStorage state.
+  - `index.html`: Single-page DOM scaffold. Feature controllers bind hardcoded element IDs, so DOM ID changes must be paired with the controller that owns that element.
+  - `src/main.ts`: Six-line application entry point; imports CSS and starts `TypstryWorkspaceController` after `DOMContentLoaded`.
+  - `src/appController.ts`: Cross-feature orchestrator for workspace/tab/file lifecycle, CodeMirror, LSP coordination, diagnostics mapping, and global commands.
   - `src/settings.ts`: Versioned application-settings schema, defaults, validation, and numeric bounds.
-  - `src/components/explorer.ts`: Recursive workspace file tree, inline create/rename input, direct `read_workspace_dir` IPC use.
-  - `src/compiler/lsp.ts`: Tinymist JSON-RPC client over Tauri IPC events/commands, not a browser WebSocket.
+  - `src/settingsController.ts`: Settings JSON persistence, legacy migration, settings-panel DOM, debounced writes, and runtime-change callback.
+  - `src/components/explorer.ts`: Lazy workspace tree; reads the root once and loads child directories on first expansion.
+  - `src/components/contextMenuController.ts`: Editor/explorer/preview context menus and filesystem actions.
+  - `src/compiler/lspTransport.ts`: Sole Tauri IPC transport for Tinymist JSON-RPC; `jsonRpc.ts` parses and narrows untrusted messages.
+  - `src/compiler/lsp.ts`: Typed Tinymist client and JSON-RPC request router, not a browser WebSocket.
+  - `src/preview/`: Pure source highlighting, iframe ownership, and forward/inverse preview synchronization state.
+  - `src/workspace/`: Typed workspace-state persistence and recent-project rendering.
+  - `src/wysiwym/adapter.ts`: WYSIWYM block parsing, DOM rendering, and Typst serialization.
+  - `src/diagnostics/logConsoleController.ts`, `src/editor/fontManager.ts`, `src/editor/toolbarController.ts`, `src/layout/layoutController.ts`: Feature-local DOM/state controllers.
   - `src/editor/typstLanguage.ts`: StreamLanguage-based parser for Typst.
   - `src/editor/extensions.ts`: Custom CodeMirror extensions (autoclose overrides, LSP bridges, themes).
   - `src/editor/themes.ts`: Global HighlightStyle and editor layouts.
@@ -24,29 +32,32 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src-tauri/src/lib.rs`: IPC commands, filesystem operations, toolchain download, Typst check/compile, Tinymist child-process bridge.
   - `src-tauri/capabilities/default.json`: Grants broad FS/plugin permissions; frontend assumes these commands are available.
 
-### A. Frontend Controller Flow (`src/main.ts`)
+### A. Frontend Controller Flow (`src/appController.ts`)
 - `bootstrap()` order matters: load settings, recent projects, CodeMirror, apply settings, explorer/toolbars/events/settings UI, show window, `ensureDependencies()`, then `initLsp()`.
+- `src/main.ts` must remain composition-only. Controllers own feature DOM and local timers/state; the app controller passes callbacks for cross-feature actions.
 - App visibility: welcome/editor/preview/explorer are toggled by `updateWorkspaceViewportVisibility()` based on `workspaceRootPath` and `activeFilePath`.
 - Open tabs are in-memory `EditorTab` objects with `content`, `savedContent`, dirty flag, preview root, versions, selection, and scroll positions.
-- Workspace persistence is localStorage-only under `typstry-workspace-${workspaceRootPath}`. It stores tab paths/selection/scroll/split widths, then reloads content from disk; unsaved tab contents are not persisted across app restart.
-- Recent projects are localStorage-only under `typstry-recent-projects`, max 5 entries.
+- `WorkspaceStateStore` owns localStorage persistence under `typstry-workspace-${workspaceRootPath}`. It normalizes stored values, keeps tab paths/selection/scroll/split widths, and reloads content from disk; unsaved tab contents are not persisted across app restart.
+- `RecentProjectsController` owns `typstry-recent-projects` (max 5) and renders paths with DOM APIs rather than interpolated HTML.
 - Application preferences live in the platform app-config `settings.json`; `typstry-word-wrap` and `typstry-theme` localStorage keys are migration inputs only and are removed after the first successful JSON save.
-- Unicode editor font detection scans active text for non-ASCII script ranges; Khmer bundled fonts load via `FontFace`, other script candidates depend on installed fonts and may require restart.
+- `EditorFontManager` scans active text for non-ASCII script ranges; Khmer bundled fonts load via `FontFace`, other script candidates depend on installed fonts and may require restart.
 
 ### B. Tauri IPC Contract (`src-tauri/src/lib.rs`)
 - File commands: `read_workspace_file`, `save_workspace_file`, `create_workspace_dir`, `rename_workspace_file`, `copy_workspace_file`, `read_workspace_dir`, `move_to_trash`, `reveal_in_explorer`.
 - Settings commands: `load_app_settings` and `save_app_settings`; Rust owns config-path resolution and pretty JSON disk I/O while TypeScript owns schema normalization.
 - Preview/document commands: `resolve_preview_main`, `check_typst_document`, `compile_typst_document`.
 - Toolchain/LSP commands: `ensure_toolchain`, `start_tinymist_lsp`, `send_lsp_message`.
-- `ensure_toolchain()` downloads Windows `tinymist.exe` v0.15.2 and `typst.exe` v0.15.0 into Tauri app local data via PowerShell. This path is Windows-centric.
-- `start_tinymist_lsp()` kills any prior child, increments a generation guard, spawns local `tinymist.exe lsp`, and forwards stdio JSON-RPC as `lsp-rx`/`lsp-status` events.
+- Executable resolution first checks the OS-appropriate managed filename (`.exe` only on Windows), then falls back to `PATH` for both Typst and Tinymist.
+- `ensure_toolchain()` retains the Windows PowerShell download bootstrap. macOS/Linux require `typst` and `tinymist` in `PATH` and receive an actionable error otherwise.
+- `start_tinymist_lsp()` kills any prior child, increments a generation guard, resolves managed/PATH Tinymist, spawns `tinymist lsp`, and forwards stdio JSON-RPC as `lsp-rx`/`lsp-status` events.
 - `send_lsp_message()` pushes JSON strings into an MPSC channel; frontend must send fully serialized JSON-RPC payloads.
 - `check_typst_document()` writes a hidden sibling `.stem.typstry-check.typ`, compiles SVG with short diagnostics, parses stderr, then deletes temp files.
 - `compile_typst_document()` writes a hidden sibling `.stem.export.typ`, compiles a real PDF to the active file's sibling `.pdf`, deletes the temp input, and returns the PDF path string.
 
 ### C. LSP/Preview Flow (`src/compiler/lsp.ts`)
 - Frontend does not connect directly to `ws://127.0.0.1:8589`; Rust owns Tinymist stdio and frontend listens to `lsp-rx`.
-- `connect()` starts Tinymist, subscribes to `lsp-status` and `lsp-rx`, sends `initialize`, then `initialized`.
+- `TauriLspTransport` owns the single `lsp-rx` and `lsp-status` subscription plus serialized message sends. Do not add per-request event listeners.
+- `connect()` starts Tinymist, attaches the transport once, sends `initialize`, then `initialized`; responses resolve through one typed pending-request map.
 - Initialization disables Tinymist auto export (`exportPdf/exportSvg/exportPng: "never"`) and enables preview background host `127.0.0.1:8589`.
 - `startPreview(path)` must pass raw OS paths, not file URIs. It sends `tinymist.pinMain`, `tinymist.focusMain`, then `tinymist.doStartPreview` with `arguments: [[path]]`.
 - Preview result normalization handles string results and object shapes containing `staticServerAddr`, `staticServerPort`, or `dataPlanePort`.
@@ -58,6 +69,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - Completion flushes pending text sync before asking Tinymist for completions so server state matches the typed prefix.
 - Fallback diagnostics run via `typst compile --diagnostic-format short --format svg` after each sync and are ignored if version/path is stale.
 - LSP diagnostics are ignored for stale versions, temporary preview-only versions, package/preview files, and the known multi-image page template message.
+- `PreviewSyncController` owns forward-sync timers, temporary versions, diagnostic suppression, inverse mapping, and revert scheduling. `PreviewFrame` owns iframe mounting/click capture/scrolling; `sourceHighlight.ts` contains testable pure syntax-range logic.
 - Forward preview sync is a controlled hack: selected word is temporarily wrapped with `#text(fill:rgb("#fe0102"))[...]`, sent as a preview-only version, scrolled into view in the iframe, then reverted to editor text.
 - Preview root resolution checks the active tab's in-memory content first: renderable active files preview themselves even when `main.typ` exists; declaration-only/library files fall back to the nearest `main.typ`, `index.typ`, or `document.typ`.
 - Preview highlight only runs when `activeFilePath === previewRootPath`; library/template files receive diagnostics but no live preview highlight.
@@ -65,11 +77,11 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - Inverse sync maps Tinymist `window/showDocument` source positions back through the temporary highlight mapping when present, then optionally refines the collapsed CodeMirror cursor using the clicked iframe text node/offset. Preview HTML is mounted as `srcdoc` with a `<base>` tag when available so the iframe DOM stays readable while Tinymist assets still resolve. It does not trigger forward preview sync/highlighting.
 
 ### E. WYSIWYM Mode
-- WYSIWYM is a secondary DOM editing view, not the source of truth. Switching from Code to WYSIWYM calls `mapMarkupToWysiwym()`, switching back serializes with `mapWysiwymToMarkup()`.
+- WYSIWYM is a secondary DOM editing view, not the source of truth. `WysiwymAdapter.render()` maps Typst to blocks and `.serialize()` maps blocks back to Typst.
 - Block parsing is lightweight and line-oriented: headings, tables, quotes, math blocks, raw blocks, functions, lists, and body text. It is not a full Typst AST.
 - Inline formatting is regex-based after HTML escaping. Markup markers are hidden in normal view and revealed during serialization with `.serialize-mode`.
 - Table parsing preserves named args in `dataset.namedArgs`, tracks columns in `dataset.cols`, and serializes each cell back as `[cell]`.
-- Toolbar behavior has two branches: WYSIWYM mutates DOM selection/blocks then serializes to CodeMirror; Code mode inserts Typst snippets/wrappers directly into CodeMirror.
+- `EditorToolbarController` has two branches: WYSIWYM mutates DOM selection/blocks then serializes to CodeMirror; Code mode inserts Typst snippets/wrappers directly into CodeMirror.
 - Ctrl-click WYSIWYM links ask for confirmation before opening external URLs through Tauri shell.
 
 ---
@@ -149,3 +161,5 @@ This file serves as a consolidated reference for the architectural decisions, pa
 | **Function Bold Styling** | Bold function names (`fontWeight: "700"`). | Remove bold weight styling from all function highlights. | The user requested normal font weight for functions. |
 | **Contextual Typst Highlighting** | Giving every `#` or identifier one fixed tag and styling only markup delimiters. | Track markup ranges, exclude trailing labels, classify `#` from its following expression, and tag references separately from declarations. | `StreamLanguage` styles only emitted spans; `#emph`, `#values.at(0)`, strings, keywords, heading whitespace, and labels require explicit semantic boundaries. |
 | **Application Settings** | Keeping theme/wrap in scattered localStorage keys or rebuilding CodeMirror for each preference. | Normalize one versioned `settings.json`, persist it through Rust IPC, and apply editor toggles through compartments. | Native config paths are platform-specific; schema validation, migration, debounced writes, and live reconfiguration must remain separate concerns. |
+| **Frontend Controller Decomposition** | Keeping DOM, timers, persistence, JSON-RPC, preview mapping, and feature actions in a 3,800-line `main.ts`. | Keep `main.ts` composition-only; place orchestration in `appController.ts` and feature state in callback-driven controllers/pure libraries. | Moving one giant class only renames the problem; extract ownership first, keep a single LSP transport, and test pure boundaries before reducing the entry point. |
+| **Workspace Portability** | Recursive explorer startup scans, manual file-URI concatenation, Unix path case-folding, and hardcoded `.exe` names. | Lazy-load folders, centralize path/URI helpers, preserve Unix case, and resolve managed executables with PATH fallback. | Windows, macOS, and Linux differ in path identity and executable naming; portability logic must stay out of feature controllers. |

@@ -1,5 +1,5 @@
 import { StreamLanguage } from "@codemirror/language";
-import type { StreamParser, StringStream } from "@codemirror/language";
+import type { IndentContext, StreamParser, StringStream } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
 type TypstParserState = {
@@ -142,7 +142,7 @@ const typstParser: StreamParser<TypstParserState> = {
     closeBrackets: { brackets: ["(", "[", "{", '"', "'", "*", "_", "$"] }
   },
 
-  indent(state: TypstParserState, textAfter: string, cx: any) {
+  indent(state: TypstParserState, textAfter: string, cx: IndentContext) {
     if (state.inBlockComment || state.inRawBlock) return null;
     const indentBrackets = state.bracketStack.filter(b => b === "(" || b === "[" || b === "{");
     let indent = indentBrackets.length * cx.unit;

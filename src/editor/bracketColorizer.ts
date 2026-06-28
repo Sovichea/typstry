@@ -1,4 +1,4 @@
-import { Decoration, EditorView } from "@codemirror/view";
+import { Decoration, EditorView, type ViewUpdate } from "@codemirror/view";
 import { ViewPlugin, DecorationSet } from "@codemirror/view";
 import { MatchDecorator } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
@@ -40,7 +40,7 @@ export const bracketColorizer = ViewPlugin.fromClass(class {
     this.decorations = bracketMatcher.createDeco(view);
   }
   
-  update(update: any) {
+  update(update: ViewUpdate) {
     this.decorations = bracketMatcher.updateDeco(update, this.decorations);
   }
 }, {

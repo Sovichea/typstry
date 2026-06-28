@@ -1351,6 +1351,15 @@ html {
   background-color: var(--ui-hover);
 }
 
+button.welcome-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
 .welcome-item-icon {
   width: 20px;
   font-size: 14px;
@@ -1457,6 +1466,13 @@ html {
   opacity: 1 !important;
   background-color: var(--ui-hover) !important;
   border-radius: 4px !important;
+}
+
+.welcome-empty {
+  padding: 8px 12px;
+  color: var(--ui-text);
+  font-size: 13px;
+  opacity: 0.5;
 }
 
 .horizontal-resizer {

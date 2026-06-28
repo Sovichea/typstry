@@ -3,6 +3,10 @@ import { join } from "@tauri-apps/api/path";
 
 export interface FileNode { name: string; path: string; isDirectory: boolean; children?: FileNode[]; }
 
+export function sortFileNodes(nodes: FileNode[]): FileNode[] {
+  return [...nodes].sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
+}
+
 function getFileIconSvg(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase();
   
@@ -54,7 +58,7 @@ export class WorkspaceExplorer {
       this.container.innerHTML = `<div class="explorer-loading">Scanning Workspace...</div>`;
     }
     try {
-      const nodes = await this.readDirectoryRecursive(rootPath);
+      const nodes = await this.readDirectory(rootPath);
       this.container.innerHTML = "";
       
       const header = document.createElement("div");
@@ -68,16 +72,14 @@ export class WorkspaceExplorer {
     }
   }
 
-  private async readDirectoryRecursive(dirPath: string): Promise<FileNode[]> {
+  private async readDirectory(dirPath: string): Promise<FileNode[]> {
     const entries: {name: string, isDirectory: boolean}[] = await invoke("read_workspace_dir", { path: dirPath });
-    const nodes: FileNode[] = [];
-    for (const entry of entries) {
-      const childPath = await join(dirPath, entry.name);
-      const node: FileNode = { name: entry.name, path: childPath, isDirectory: entry.isDirectory };
-      if (entry.isDirectory) { node.children = await this.readDirectoryRecursive(childPath); }
-      nodes.push(node);
-    }
-    return nodes.sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
+    const nodes = await Promise.all(entries.map(async entry => ({
+      name: entry.name,
+      path: await join(dirPath, entry.name),
+      isDirectory: entry.isDirectory
+    })));
+    return sortFileNodes(nodes);
   }
 
   private renderTree(nodes: FileNode[], depth: number = 0): DocumentFragment {
@@ -126,18 +128,32 @@ export class WorkspaceExplorer {
           label.classList.add('selected');
           this.onFileSelected(node.path);
         });
-      } else if (node.children) {
-        const childBranch = this.renderTree(node.children, depth + 1);
+      } else {
         const childrenContainer = document.createElement("div");
         childrenContainer.className = "tree-children";
-        childrenContainer.appendChild(childBranch);
+        let loading = false;
 
-        label.addEventListener("click", () => {
-          li.classList.toggle("collapsed");
-          if (li.classList.contains("collapsed")) {
-            chevronContainer.classList.add('collapsed');
-          } else {
-            chevronContainer.classList.remove('collapsed');
+        label.addEventListener("click", async () => {
+          const expanding = li.classList.contains("collapsed");
+          li.classList.toggle("collapsed", !expanding);
+          chevronContainer.classList.toggle("collapsed", !expanding);
+
+          if (!expanding || node.children || loading) return;
+
+          loading = true;
+          label.classList.add("loading");
+          try {
+            node.children = await this.readDirectory(node.path);
+            childrenContainer.replaceChildren(this.renderTree(node.children, depth + 1));
+          } catch {
+            const error = document.createElement("div");
+            error.className = "explorer-error";
+            error.style.paddingLeft = `${(depth + 1) * 12 + 8}px`;
+            error.textContent = "Unable to read folder.";
+            childrenContainer.replaceChildren(error);
+          } finally {
+            loading = false;
+            label.classList.remove("loading");
           }
         });
         li.appendChild(childrenContainer);

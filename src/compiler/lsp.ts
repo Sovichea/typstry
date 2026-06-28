@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { EditorView } from "@codemirror/view";
+import type { Text } from "@codemirror/state";
+import { TauriLspTransport } from "./lspTransport";
+import { asRecord, isRecord, type JsonRpcId, type JsonRpcMessage } from "./jsonRpc";
 
 type TinymistPreviewResult = {
   staticServerAddr?: string;
@@ -51,13 +52,22 @@ export type LspEditorSelection = {
 
 type LspPositionEncoding = "utf-8" | "utf-16" | "utf-32";
 
+function isLspDiagnostic(value: unknown): value is LspDiagnostic {
+  if (!isRecord(value) || typeof value.message !== "string") return false;
+  const range = asRecord(value.range);
+  const start = asRecord(range?.start);
+  const end = asRecord(range?.end);
+  return typeof start?.line === "number" && typeof end?.line === "number";
+}
+
 export class TinymistLspClient {
   private requestId = 0;
   private editorView?: EditorView;
   private latestPreviewUrl = "";
   private latestPreviewDataPlaneUrl = "";
   private positionEncoding: LspPositionEncoding = "utf-16";
-  private pendingRequests = new Map<number, { resolve: (res: any) => void; reject: (err: any) => void; timeout?: number }>();
+  private readonly transport = new TauriLspTransport();
+  private pendingRequests = new Map<number, { resolve: (result: unknown) => void; reject: (error: unknown) => void; timeout?: number }>();
 
   constructor(
     private onSvgPreviewStream: (svgContent: string) => void,
@@ -74,25 +84,18 @@ export class TinymistLspClient {
   public async connect(): Promise<void> {
     try {
       this.setStatus("starting", "Starting Tinymist");
-      await invoke("start_tinymist_lsp");
+      await this.transport.start();
       this.setStatus("running", "Tinymist process running");
 
-      await listen<string>("lsp-status", (event) => {
-        if (event.payload === "stopped") {
+      await this.transport.listenStatus(status => {
+        if (status === "stopped") {
           this.setStatus("stopped", "Tinymist stopped");
-        } else if (event.payload === "running") {
+        } else if (status === "running") {
           this.setStatus("running", "Tinymist process running");
         }
       });
 
-      await listen<string>("lsp-rx", (event) => {
-        try {
-          const payload = JSON.parse(event.payload);
-          this.handleMessage(payload);
-        } catch (e) {
-          console.error("Failed to parse LSP payload", e);
-        }
-      });
+      await this.transport.listenMessages(message => this.handleMessage(message));
 
       this.setStatus("initializing", "Initializing LSP");
       await this.initializeLsp();
@@ -106,14 +109,14 @@ export class TinymistLspClient {
 
   public async restart(): Promise<void> {
     this.setStatus("starting", "Restarting Tinymist");
-    await invoke("start_tinymist_lsp");
+    await this.transport.start();
     this.setStatus("running", "Tinymist process running");
     this.setStatus("initializing", "Initializing LSP");
     await this.initializeLsp();
     this.setStatus("ready", "LSP ready");
   }
 
-  private handleMessage(payload: any) {
+  private handleMessage(payload: JsonRpcMessage) {
     if (payload.id !== undefined && typeof payload.method === "string") {
       this.handleServerRequest(payload);
       return;
@@ -134,23 +137,27 @@ export class TinymistLspClient {
       return;
     }
 
+    const params = asRecord(payload.params);
     if (payload.method === "tinymist/preview/svgStream") {
-      this.onSvgPreviewStream(payload.params.svg);
+      if (typeof params?.svg === "string") this.onSvgPreviewStream(params.svg);
     }
 
     // Sometimes tinymist sends logs or errors!
     if (payload.method === "window/showMessage") {
-      this.emitLog(payload.params?.type, payload.params?.message, "showMessage");
+      this.emitLog(typeof params?.type === "number" ? params.type : undefined, params?.message, "showMessage");
     }
 
     if (payload.method === "window/logMessage") {
-      this.emitLog(payload.params?.type, payload.params?.message, "logMessage");
+      this.emitLog(typeof params?.type === "number" ? params.type : undefined, params?.message, "logMessage");
     }
 
     if (payload.method === "textDocument/publishDiagnostics") {
-      const params = payload.params;
       if (typeof params?.uri === "string" && Array.isArray(params.diagnostics)) {
-        this.onDiagnostics(params.uri, params.diagnostics, params.version);
+        this.onDiagnostics(
+          params.uri,
+          params.diagnostics.filter(isLspDiagnostic),
+          typeof params.version === "number" ? params.version : undefined
+        );
       }
     }
 
@@ -178,7 +185,7 @@ export class TinymistLspClient {
     return lineInfo.from + character;
   }
 
-  public lspPositionFromEditorPosition(doc: any, offset: number): LspSourcePosition {
+  public lspPositionFromEditorPosition(doc: Text, offset: number): LspSourcePosition {
     const lineInfo = doc.lineAt(offset);
     const characterOffset = offset - lineInfo.from;
     return {
@@ -259,36 +266,7 @@ export class TinymistLspClient {
   }
 
   private async initializeLsp() {
-    return new Promise<void>(async (resolve, reject) => {
-      const id = this.requestId++;
-      let unlisten: (() => void) | undefined;
-      const timeout = window.setTimeout(() => {
-        unlisten?.();
-        reject(new Error("Tinymist initialize timed out"));
-      }, 15000);
-
-      unlisten = await listen<string>("lsp-rx", (event) => {
-        try {
-          const payload = JSON.parse(event.payload);
-          if (payload.id === id) {
-            window.clearTimeout(timeout);
-            unlisten?.();
-            if (payload.error) {
-              reject(new Error(payload.error.message ?? "Tinymist initialize failed"));
-              return;
-            }
-            this.positionEncoding = this.normalizePositionEncoding(payload.result?.capabilities?.positionEncoding);
-            this.sendNotification("initialized", {});
-            resolve();
-          }
-        } catch (e) {
-          window.clearTimeout(timeout);
-          unlisten?.();
-          reject(e);
-        }
-      });
-
-      void this.sendRequest("initialize", {
+    const result = await this.request<unknown>("initialize", {
         processId: null,
         capabilities: {
           textDocument: {
@@ -340,8 +318,10 @@ export class TinymistLspClient {
           }
         },
         workspaceFolders: null
-      }, id);
-    });
+      }, 15000);
+    const capabilities = asRecord(asRecord(result)?.capabilities);
+    this.positionEncoding = this.normalizePositionEncoding(capabilities?.positionEncoding);
+    await this.sendNotification("initialized", {});
   }
 
   private normalizePositionEncoding(value: unknown): LspPositionEncoding {
@@ -354,55 +334,33 @@ export class TinymistLspClient {
     });
   }
 
-  public startPreview(path: string): Promise<string> {
+  public async startPreview(path: string): Promise<string> {
     // Force tinymist to render this specific file instead of auto-detecting an entry point.
     // NOTE: These commands specifically require the raw OS path, not a URI!
-    this.sendRequest("workspace/executeCommand", {
+    void this.sendRequest("workspace/executeCommand", {
       command: "tinymist.pinMain",
       arguments: [path]
     }, this.requestId++);
 
-    this.sendRequest("workspace/executeCommand", {
+    void this.sendRequest("workspace/executeCommand", {
       command: "tinymist.focusMain",
       arguments: [path]
     }, this.requestId++);
 
-    // Tinymist 0.15 expects a Vec<String> as the first argument and returns server metadata.
-    return new Promise<string>(async (resolve) => {
-      this.setStatus("preview-starting", "Starting preview");
-      const id = this.requestId++;
-      let unlisten: (() => void) | undefined;
-      const timeout = setTimeout(() => {
-        console.warn("LSP Preview request timed out!");
-        unlisten?.();
-        this.setStatus("error", "Preview startup timed out");
-        resolve("");
-      }, 5000);
-
-      unlisten = await listen<string>("lsp-rx", (event) => {
-        try {
-          const payload = JSON.parse(event.payload);
-          if (payload.id === id) {
-            clearTimeout(timeout);
-            unlisten?.();
-            if (payload.error) {
-              console.error("Tinymist preview startup failed:", payload.error);
-              this.setStatus("error", "Preview startup failed");
-              resolve("");
-              return;
-            }
-            const previewUrl = this.normalizePreviewUrl(payload.result);
-            this.setStatus(previewUrl ? "preview-ready" : "error", previewUrl ? "Preview ready" : "Preview URL unavailable");
-            resolve(previewUrl);
-          }
-        } catch (e) {}
-      });
-
-      this.sendRequest("workspace/executeCommand", {
+    this.setStatus("preview-starting", "Starting preview");
+    try {
+      const result = await this.request<string | TinymistPreviewResult | null>("workspace/executeCommand", {
         command: "tinymist.doStartPreview",
         arguments: [[path]]
-      }, id);
-    });
+      }, 5000);
+      const previewUrl = this.normalizePreviewUrl(result);
+      this.setStatus(previewUrl ? "preview-ready" : "error", previewUrl ? "Preview ready" : "Preview URL unavailable");
+      return previewUrl;
+    } catch (error) {
+      console.error("Tinymist preview startup failed:", error);
+      this.setStatus("error", "Preview startup failed");
+      return "";
+    }
   }
 
   public notifyTextChange(uri: string, text: string, version: number): Promise<void> {
@@ -419,35 +377,16 @@ export class TinymistLspClient {
     });
   }
 
-  public getPreviewHtml(): Promise<string> {
-    return new Promise<string>(async (resolve) => {
-      const id = this.requestId++;
-      let unlisten: (() => void) | undefined;
-      const timeout = setTimeout(() => {
-        unlisten?.();
-        resolve("");
-      }, 3000);
-
-      unlisten = await listen<string>("lsp-rx", (event) => {
-        try {
-          const payload = JSON.parse(event.payload);
-          if (payload.id !== id) return;
-
-          clearTimeout(timeout);
-          unlisten?.();
-          resolve(typeof payload.result === "string" ? payload.result : "");
-        } catch {
-          clearTimeout(timeout);
-          unlisten?.();
-          resolve("");
-        }
-      });
-
-      this.sendRequest("workspace/executeCommand", {
+  public async getPreviewHtml(): Promise<string> {
+    try {
+      const result = await this.request<unknown>("workspace/executeCommand", {
         command: "tinymist.getResources",
         arguments: ["/preview/index.html"]
-      }, id);
-    });
+      }, 3000);
+      return typeof result === "string" ? result : "";
+    } catch {
+      return "";
+    }
   }
 
   public getLatestPreviewUrl(): string {
@@ -458,19 +397,19 @@ export class TinymistLspClient {
     return this.latestPreviewDataPlaneUrl;
   }
 
-  private sendRequest(method: string, params: any, customId?: number): Promise<void> {
-    return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", id: customId ?? this.requestId++, method, params }) });
+  private sendRequest(method: string, params: unknown, customId?: number): Promise<void> {
+    return this.transport.send({ jsonrpc: "2.0", id: customId ?? this.requestId++, method, params });
   }
 
-  public request(method: string, params: any): Promise<any> {
-    return new Promise((resolve, reject) => {
+  public request<T = unknown>(method: string, params: unknown, timeoutMs = 5000): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       const id = this.requestId++;
       const timeout = window.setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error(`LSP request timeout for ${method}`));
-      }, 5000);
+      }, timeoutMs);
       
-      this.pendingRequests.set(id, { resolve, reject, timeout });
+      this.pendingRequests.set(id, { resolve: result => resolve(result as T), reject, timeout });
       this.sendRequest(method, params, id).catch(err => {
         this.pendingRequests.delete(id);
         window.clearTimeout(timeout);
@@ -479,12 +418,12 @@ export class TinymistLspClient {
     });
   }
 
-  private sendNotification(method: string, params: any): Promise<void> {
-    return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", method, params }) });
+  private sendNotification(method: string, params: unknown): Promise<void> {
+    return this.transport.send({ jsonrpc: "2.0", method, params });
   }
 
-  private sendResponse(id: number | string, result: any): Promise<void> {
-    return invoke("send_lsp_message", { message: JSON.stringify({ jsonrpc: "2.0", id, result }) });
+  private sendResponse(id: JsonRpcId, result: unknown): Promise<void> {
+    return this.transport.send({ jsonrpc: "2.0", id, result });
   }
 
   private normalizePreviewUrl(result: string | TinymistPreviewResult | null | undefined): string {
@@ -527,28 +466,30 @@ export class TinymistLspClient {
     this.onStatus({ kind, message });
   }
 
-  private handleServerRequest(payload: any) {
+  private handleServerRequest(payload: JsonRpcMessage) {
+    if (payload.id === undefined || !payload.method) return;
     switch (payload.method) {
       case "client/registerCapability":
       case "client/unregisterCapability":
       case "window/showMessageRequest":
-        this.sendResponse(payload.id, null);
+        void this.sendResponse(payload.id, null);
         return;
       case "workspace/configuration": {
         this.emitLog(3, "Configuration requested: " + JSON.stringify(payload.params), "workspace/configuration");
-        const count = Array.isArray(payload.params?.items) ? payload.params.items.length : 0;
+        const params = asRecord(payload.params);
+        const items = Array.isArray(params?.items) ? params.items : [];
 
-        // tinymist usually asks for multiple items, we should map them based on the section
-        const results = (payload.params?.items || []).map((item: any) => {
-            if (item.section === "tinymist.exportPdf") return "never";
-            if (item.section === "tinymist.exportSvg") return "never";
-            if (item.section === "tinymist.exportPng") return "never";
-            if (item.section === "tinymist.formatterMode") return "typstyle";
-            if (item.section === "tinymist") return { exportPdf: "never", exportSvg: "never", exportPng: "never", formatterMode: "typstyle" };
+        const results = items.map(item => {
+            const section = asRecord(item)?.section;
+            if (section === "tinymist.exportPdf") return "never";
+            if (section === "tinymist.exportSvg") return "never";
+            if (section === "tinymist.exportPng") return "never";
+            if (section === "tinymist.formatterMode") return "typstyle";
+            if (section === "tinymist") return { exportPdf: "never", exportSvg: "never", exportPng: "never", formatterMode: "typstyle" };
             return null;
         });
 
-        this.sendResponse(payload.id, results.length > 0 ? results : Array.from({ length: count }, () => null));
+        void this.sendResponse(payload.id, results);
         return;
       }
       case "window/showDocument": {
@@ -556,20 +497,25 @@ export class TinymistLspClient {
         return;
       }
       default:
-        if (payload.method.startsWith("$/")) {
-          return;
-        }
-        this.sendResponse(payload.id, null);
+        if (payload.method.startsWith("$/")) return;
+        void this.sendResponse(payload.id, null);
     }
   }
 
-  private async handleShowDocumentRequest(payload: any) {
-    this.sendResponse(payload.id, { success: true });
-    const position = payload.params?.selection?.start;
-    if (!position || typeof position.line !== "number") return;
+  private async handleShowDocumentRequest(payload: JsonRpcMessage) {
+    if (payload.id === undefined) return;
+    await this.sendResponse(payload.id, { success: true });
+    const params = asRecord(payload.params);
+    const selection = asRecord(params?.selection);
+    const start = asRecord(selection?.start);
+    if (typeof start?.line !== "number") return;
+    const position: LspSourcePosition = {
+      line: start.line,
+      character: typeof start.character === "number" ? start.character : undefined
+    };
 
     try {
-      const uri = typeof payload.params?.uri === "string" ? payload.params.uri : undefined;
+      const uri = typeof params?.uri === "string" ? params.uri : undefined;
       const mappedSelection = await this.onInverseSync(uri, position);
       if (!this.editorView) return;
 

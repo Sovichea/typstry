@@ -6,6 +6,38 @@ use tauri::{Emitter, Manager};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+fn managed_executable_path(data_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    #[cfg(windows)]
+    let file_name = format!("{}.exe", name);
+    #[cfg(not(windows))]
+    let file_name = name.to_string();
+
+    data_dir.join(file_name)
+}
+
+fn executable_available(executable: &std::path::Path) -> bool {
+    let mut command = std::process::Command::new(executable);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    command
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn resolve_executable(data_dir: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+    let managed = managed_executable_path(data_dir, name);
+    if managed.is_file() {
+        return Some(managed);
+    }
+
+    let path_command = std::path::PathBuf::from(name);
+    executable_available(&path_command).then_some(path_command)
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SettingsFilePayload {
@@ -262,17 +294,16 @@ async fn check_typst_document(
     let input_path = parent.join(format!(".{}.typstry-check.typ", file_stem));
     let output_path = parent.join(format!(".{}.typstry-check.svg", file_stem));
 
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to get data dir: {}", e))?;
+    let typst_cmd = resolve_executable(&data_dir, "typst")
+        .ok_or_else(|| "Typst was not found in the app data directory or PATH.".to_string())?;
+
     std::fs::write(&input_path, source_code).map_err(|e| format!("Check write failed: {}", e))?;
 
-    let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
-    let local_typst = data_dir.join("typst.exe");
-    let typst_cmd = if local_typst.exists() {
-        local_typst.to_string_lossy().to_string()
-    } else {
-        "typst".to_string()
-    };
-
-    let mut command = std::process::Command::new(typst_cmd);
+    let mut command = std::process::Command::new(&typst_cmd);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
 
@@ -358,19 +389,18 @@ async fn compile_typst_document(
     let input_path = parent.join(format!(".{}.export.typ", file_stem));
     let output_path = path.with_extension("pdf");
 
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to get data dir: {}", e))?;
+    let typst_cmd = resolve_executable(&data_dir, "typst")
+        .ok_or_else(|| "Typst was not found in the app data directory or PATH.".to_string())?;
+
     let mut file = std::fs::File::create(&input_path).map_err(|e| format!("IO Failure: {}", e))?;
     std::io::Write::write_all(&mut file, source_code.as_bytes())
         .map_err(|e| format!("Buffer Flush Failure: {}", e))?;
 
-    let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
-    let local_typst = data_dir.join("typst.exe");
-    let typst_cmd = if local_typst.exists() {
-        local_typst.to_string_lossy().to_string()
-    } else {
-        "typst".to_string()
-    };
-
-    let mut command = std::process::Command::new(typst_cmd);
+    let mut command = std::process::Command::new(&typst_cmd);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
 
@@ -459,15 +489,21 @@ async fn ensure_toolchain(app_handle: tauri::AppHandle) -> Result<String, String
         .map_err(|e| format!("Failed to get data dir: {}", e))?;
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
 
-    let typst_exe = data_dir.join("typst.exe");
-    let tinymist_exe = data_dir.join("tinymist.exe");
-
-    if typst_exe.exists() && tinymist_exe.exists() {
+    if resolve_executable(&data_dir, "typst").is_some()
+        && resolve_executable(&data_dir, "tinymist").is_some()
+    {
         return Ok("Toolchain is ready.".to_string());
     }
 
-    let script = format!(
-        r#"
+    #[cfg(not(windows))]
+    return Err(
+        "Typst and Tinymist must be installed and available in PATH on this platform.".to_string(),
+    );
+
+    #[cfg(windows)]
+    {
+        let script = format!(
+            r#"
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -487,32 +523,34 @@ if (!(Test-Path "$DataDir\typst.exe")) {{
     Remove-Item "$DataDir\typst_extracted" -Recurse -Force
 }}
 "#,
-        data_dir.to_string_lossy()
-    );
+            data_dir.to_string_lossy()
+        );
 
-    let script_path = data_dir.join("download_toolchain.ps1");
-    std::fs::write(&script_path, script).map_err(|e| format!("Failed to write script: {}", e))?;
+        let script_path = data_dir.join("download_toolchain.ps1");
+        std::fs::write(&script_path, script)
+            .map_err(|e| format!("Failed to write script: {}", e))?;
 
-    let mut command = std::process::Command::new("powershell");
-    #[cfg(windows)]
-    command.creation_flags(CREATE_NO_WINDOW);
+        let mut command = std::process::Command::new("powershell");
+        #[cfg(windows)]
+        command.creation_flags(CREATE_NO_WINDOW);
 
-    let output = command
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-File")
-        .arg(&script_path)
-        .output()
-        .map_err(|e| format!("Failed to execute powershell: {}", e))?;
+        let output = command
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&script_path)
+            .output()
+            .map_err(|e| format!("Failed to execute powershell: {}", e))?;
 
-    let _ = std::fs::remove_file(&script_path);
+        let _ = std::fs::remove_file(&script_path);
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Toolchain download failed: {}", stderr));
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Toolchain download failed: {}", stderr));
+        }
+
+        Ok("Toolchain downloaded successfully.".to_string())
     }
-
-    Ok("Toolchain downloaded successfully.".to_string())
 }
 
 #[tauri::command]
@@ -529,12 +567,12 @@ async fn start_tinymist_lsp(
         let _ = child.kill().await;
     }
 
-    let data_dir = app_handle.path().app_local_data_dir().unwrap_or_default();
-    let tinymist_exe = data_dir.join("tinymist.exe");
-
-    if !tinymist_exe.exists() {
-        return Err("Tinymist not found. Please restart to download.".to_string());
-    }
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to get data dir: {}", e))?;
+    let tinymist_exe = resolve_executable(&data_dir, "tinymist")
+        .ok_or_else(|| "Tinymist was not found in the app data directory or PATH.".to_string())?;
 
     let mut command = tokio::process::Command::new(&tinymist_exe);
     command

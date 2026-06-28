@@ -3,6 +3,8 @@ import type { EditorView } from "@codemirror/view";
 import type { TinymistLspClient } from "../compiler/lsp";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
+type MarkupContent = { value?: string };
+type HoverResponse = { contents?: string | MarkupContent | Array<string | MarkupContent> } | null;
 
 export function createHoverTooltip(getClient: () => TinymistLspClient | undefined, getUri: () => string) {
   return hoverTooltip(async (view: EditorView, pos: number): Promise<Tooltip | null> => {
@@ -16,7 +18,7 @@ export function createHoverTooltip(getClient: () => TinymistLspClient | undefine
     const lspPos = client.lspPositionFromEditorPosition(doc, pos);
 
     try {
-      const hoverData: any = await client.request("textDocument/hover", {
+      const hoverData = await client.request<HoverResponse>("textDocument/hover", {
         textDocument: { uri },
         position: lspPos
       });
@@ -26,10 +28,10 @@ export function createHoverTooltip(getClient: () => TinymistLspClient | undefine
       let markdown = "";
       if (typeof hoverData.contents === "string") {
         markdown = hoverData.contents;
-      } else if (hoverData.contents.value) {
+      } else if (!Array.isArray(hoverData.contents) && hoverData.contents.value) {
         markdown = hoverData.contents.value;
       } else if (Array.isArray(hoverData.contents)) {
-        markdown = hoverData.contents.map((c: any) => typeof c === "string" ? c : c.value).join("\n\n");
+        markdown = hoverData.contents.map(content => typeof content === "string" ? content : content.value ?? "").join("\n\n");
       }
 
       if (!markdown) return null;
