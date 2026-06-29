@@ -293,9 +293,9 @@ The current development release is `v0.1.0`.
   - [ ] GitHub Actions workflow for automated builds
   - [ ] Verify and fix Linux builds
   - [ ] Verify and fix macOS builds
-- [ ] Interactive Document Outline (Table of Contents) sidebar for quick navigation
-  - [ ] Parse document headers via LSP
-  - [ ] Outline UI sidebar
+- [x] Interactive Document Outline (Table of Contents) sidebar for quick navigation
+  - [x] Parse document headers via LSP
+  - [x] Outline UI sidebar
 - [ ] Integrated Typst Package Manager UI
   - [ ] Package search and discovery interface
   - [ ] Package installation and update handling
