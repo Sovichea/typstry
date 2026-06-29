@@ -12,16 +12,14 @@ A lightweight, local-first Typst editor with seamless Code and WYSIWYM toggles, 
   <img src="./assets/screenshot-welcome.png" alt="Typstry Editor View" width="800"/>
   <br/><br/>
   <img src="./assets/screenshot-editor.png" alt="Typstry Welcome Screen" width="800"/>
-  <br/><br/>
-  <img src="./assets/screenshot-editor-2.png" alt="Typstry Welcome Screen" width="800"/>
 </p>
 
 ## Key Features
 * **Unicode-First Philosophy**: Traditional code editors treat complex non-Latin scripts as an afterthought. Typstry is engineered from the ground up to perfectly render and align Unicode text, ensuring seamless co-existence of code and complex scripts (like Khmer, Arabic, and Thai) without breaking cursor alignment or word-wrap.
 * **Rich IDE-Grade Autocompletion**: Smart, context-aware suggestions with LSP `sortText` prioritization (which correctly places specific parameters like `numbering` or `supplement` at the top of the list). Intelligently blocks autocomplete from triggering on brackets, punctuation, or spaces to ensure a distraction-free typing flow.
 * **True Local-First Experience**: No cloud dependencies. Everything compiles instantly on your local machine.
-* **Live PDF Preview**: Powered by Tinymist with bidirectional sync, with a Typst-compiled SVG fallback when no compatible Tinymist release exists.
-* **Managed Toolchain**: The settings panel lists stable Typst GitHub releases, installs the selected version in app-local data, and automatically selects the newest stable Tinymist from the same major/minor release line.
+* **Live Document Preview**: Powered by Tinymist with bidirectional source synchronization and compiler-rendered SVG fallback.
+* **Managed Toolchain**: The settings panel installs stable Tinymist releases. Tinymist's embedded Typst compiler handles preview, diagnostics, and export; no separate Typst installation is required.
 * **Focus-Driven UI**: A custom, frameless window design, persistent multi-tab workspace state (preserving open tabs, split ratios, and cursor positions), and integrated native-feel search and replace.
 * **Native Settings System**: A compact settings panel with live editor reconfiguration and a versioned `settings.json` stored in the platform application-config directory.
 * **Context-Aware Editor & Bracket Colorizer**: Implements intelligent syntax recognition, skipping bracket coloring inside comments, strings, and equations. Integrates theme-aware monospace coloring for raw code/equations, nested function coloring without requiring `#` prefixes, and precise parsing of escaped symbols (like `\$` for literal dollars and ignoring URL comments).
@@ -85,39 +83,150 @@ MiSans Latin is bundled as the application UI font. Fira Mono Regular/Bold is bu
 
 ## Getting Started
 
-### Prerequisites
+Typstry supports native development on Windows, Linux, and macOS. Install the prerequisites for the host operating system, then follow the shared project setup.
 
-To run and build Typstry locally, you will need the following installed:
-- [Rust](https://www.rust-lang.org/tools/install) (for the Tauri backend)
-- [Bun](https://bun.sh/) (as the lightning-fast JS package manager and runtime)
-- [Node.js](https://nodejs.org/) (for Vite/TS tooling compatibility)
+Node.js and the standalone `typst` CLI are not required. Bun runs the frontend toolchain, while Typstry downloads and manages Tinymist on first launch.
 
-### Installation
+### Windows
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Sovichea/typstry.git
-   cd typstry
+Effective minimum: Windows 10 version 1809 or later, as required by Bun.
+
+1. Install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Select **Desktop development with C++** and a Windows 10 or 11 SDK.
+2. Ensure the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) is installed. It is normally already present on supported Windows versions.
+3. Install Rust with the MSVC toolchain:
+
+   ```powershell
+   winget install --id Rustlang.Rustup
+   rustup default stable-msvc
    ```
 
-2. **Install dependencies**
-   ```bash
-   bun install
+4. Install Bun:
+
+   ```powershell
+   powershell -c "irm bun.sh/install.ps1|iex"
    ```
 
-3. **Run in Development Mode**
-   This will spin up the Vite frontend and compile the Rust backend.
+5. Restart the terminal so the new `PATH` entries are visible.
+
+If MSI packaging fails with `light.exe` or VBSCRIPT errors, enable **VBSCRIPT** under Windows Optional Features. This is needed only for MSI generation.
+
+### macOS
+
+Effective minimum: macOS 13 or later, as required by current Bun releases. Both Apple Silicon and Intel hosts are supported.
+
+1. Install the Xcode Command Line Tools. Full Xcode is only necessary for Apple signing, notarization, or iOS development.
+
    ```bash
-   bun run tauri dev
+   xcode-select --install
    ```
 
-### Building for Production
+2. Install Rust and Bun:
 
-To compile a highly-optimized, standalone native executable for your operating system:
+   ```bash
+   curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+   curl -fsSL https://bun.com/install | bash
+   ```
+
+3. Restart the terminal or load the shell profile updated by the installers.
+
+### Linux
+
+Install the WebKitGTK 4.1 and native build dependencies for your distribution.
+
+Debian/Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev unzip
+```
+
+Fedora:
+
+```bash
+sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
+  libappindicator-gtk3-devel librsvg2-devel libxdo-devel unzip
+sudo dnf group install "c-development"
+```
+
+Arch Linux:
+
+```bash
+sudo pacman -Syu
+sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl \
+  appmenu-gtk-module libappindicator-gtk3 librsvg xdotool unzip
+```
+
+Then install Rust and Bun:
+
+```bash
+curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+curl -fsSL https://bun.com/install | bash
+```
+
+Restart the terminal or load the updated shell profile before continuing. For other distributions, use the equivalent packages from the [official Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+### Project setup
+
+The following commands are the same in PowerShell, bash, and zsh:
+
+```bash
+git clone https://github.com/Sovichea/typstry.git
+cd typstry
+bun install --frozen-lockfile
+```
+
+Verify the environment:
+
+```bash
+git --version
+rustc --version
+cargo --version
+bun --version
+```
+
+Start the complete desktop development environment:
+
+```bash
+bun run tauri dev
+```
+
+The first launch requires internet access to retrieve the selected stable Tinymist binary from GitHub. Later launches use the managed copy in the platform application-data directory.
+
+`bun run dev` starts only Vite in a browser. It is useful for isolated styling work, but native filesystem access, dialogs, settings persistence, Tinymist, and Tauri IPC will not work there.
+
+### Validation
+
+Run the frontend and Rust checks before submitting changes:
+
+```bash
+bun test
+bun run build
+cd src-tauri
+cargo fmt --all -- --check
+cargo check --lib
+cargo test --lib
+```
+
+### Native release build
+
+Build on each target operating system; a normal local Tauri build does not produce installers for the other operating systems.
+
 ```bash
 bun run tauri build
 ```
-The compiled binaries will be placed in `src-tauri/target/release/`.
+
+The native executable is written under `src-tauri/target/release/`. Installers and application bundles are written under `src-tauri/target/release/bundle/`, with platform-specific subdirectories such as `nsis`/`msi`, `deb`/`rpm`/`appimage`, or `dmg`/`macos`.
+
+Windows signing and macOS signing/notarization are not required for local development, but they are required for trusted public distribution. Linux package availability depends on the packaging tools supported by the build distribution.
+
+### Common setup problems
+
+- `LNK1104: cannot open file 'msvcrt.lib'`: install the Visual Studio **Desktop development with C++** workload and Windows SDK, then restart the terminal.
+- `webkit2gtk-4.1` or `javascriptcoregtk-4.1` missing: install the Linux packages listed above for the current distribution.
+- `bun` or `cargo` is not found after installation: restart the terminal and verify that `~/.bun/bin` and `~/.cargo/bin` are on `PATH`.
+- Tinymist cannot be downloaded: verify GitHub access and retry from **Settings → Toolchain**. A system `typst` executable does not replace the managed Tinymist requirement.
+- Native features fail under `bun run dev`: use `bun run tauri dev` so the frontend runs inside the Tauri webview.
 
 ## TODO / Roadmap
 
