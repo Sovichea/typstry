@@ -15,7 +15,7 @@ A lightweight, local-first Typst code editor with advanced Unicode font fallback
 </p>
 
 ## Key Features
-* **Unicode-First Philosophy**: Traditional code editors treat complex non-Latin scripts as an afterthought. Typstry is engineered from the ground up to perfectly render and align Unicode text, ensuring seamless co-existence of code and complex scripts (like Khmer, Arabic, and Thai) without breaking cursor alignment or word-wrap.
+* **Unicode-First Philosophy**: Traditional code editors treat complex non-Latin scripts as an afterthought. Typstry is engineered from the ground up to perfectly render and align Unicode text, ensuring seamless co-existence of code and complex scripts (like Khmer, Arabic, and Laos) without breaking cursor alignment or word-wrap.
 * **Rich IDE-Grade Autocompletion**: Smart, context-aware suggestions with LSP `sortText` prioritization (which correctly places specific parameters like `numbering` or `supplement` at the top of the list). Intelligently blocks autocomplete from triggering on brackets, punctuation, or spaces to ensure a distraction-free typing flow.
 * **True Local-First Experience**: No cloud dependencies. Everything compiles instantly on your local machine.
 * **Live Document Preview**: Powered by Tinymist with bidirectional source synchronization and compiler-rendered SVG fallback.
