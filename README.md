@@ -221,7 +221,7 @@ The native executable is written under `src-tauri/target/release/`. Installers a
 
 Windows signing and macOS signing/notarization are not required for local development, but they are required for trusted public distribution. Linux package availability depends on the packaging tools supported by the build distribution.
 
-The current development release is `v0.1.0`.
+The current development release is `v0.1.1`.
 
 ### Common setup problems
 
