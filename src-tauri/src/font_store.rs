@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -145,6 +145,45 @@ const DIRECT_DOWNLOADS: &[DirectDownloadSpec] = &[
 pub struct SystemFontCatalog {
     all: Vec<String>,
     monospace: Vec<String>,
+    scripts: BTreeMap<String, Vec<String>>,
+}
+
+const SCRIPT_SAMPLES: &[(&str, &[char])] = &[
+    ("khmer", &['ក', 'ខ', 'ម']),
+    ("arabic", &['ا', 'ب', 'م']),
+    ("thai", &['ก', 'ข', 'ม']),
+    ("lao", &['ກ', 'ຂ', 'ມ']),
+    ("myanmar", &['က', 'ခ', 'မ']),
+    ("devanagari", &['क', 'ख', 'म']),
+    ("bengali", &['ক', 'খ', 'ম']),
+    ("gurmukhi", &['ਕ', 'ਖ', 'ਮ']),
+    ("gujarati", &['ક', 'ખ', 'મ']),
+    ("tamil", &['க', 'ங', 'ம']),
+    ("telugu", &['క', 'ఖ', 'మ']),
+    ("kannada", &['ಕ', 'ಖ', 'ಮ']),
+    ("malayalam", &['ക', 'ഖ', 'മ']),
+    ("sinhala", &['ක', 'ඛ', 'ම']),
+    ("tibetan", &['ཀ', 'ཁ', 'མ']),
+    ("hebrew", &['א', 'ב', 'מ']),
+    ("armenian", &['Ա', 'Բ', 'Մ']),
+    ("georgian", &['ა', 'ბ', 'მ']),
+    ("ethiopic", &['ሀ', 'ለ', 'መ']),
+    ("han", &['中', '文', '字']),
+    ("hiragana", &['あ', 'か', 'ま']),
+    ("hangul", &['가', '나', '한']),
+];
+
+#[cfg(test)]
+fn face_supports_samples(data: &[u8], face_index: u32, samples: &[char]) -> bool {
+    ttf_parser::Face::parse(data, face_index)
+        .map(|face| parsed_face_supports_samples(&face, samples))
+        .unwrap_or(false)
+}
+
+fn parsed_face_supports_samples(face: &ttf_parser::Face<'_>, samples: &[char]) -> bool {
+    samples
+        .iter()
+        .all(|character| face.glyph_index(*character).is_some())
 }
 
 #[derive(Serialize)]
@@ -264,17 +303,46 @@ pub fn list_system_fonts() -> SystemFontCatalog {
     database.load_system_fonts();
     let mut all = BTreeSet::new();
     let mut monospace = BTreeSet::new();
+    let mut scripts: BTreeMap<String, BTreeSet<String>> = SCRIPT_SAMPLES
+        .iter()
+        .map(|(script, _)| ((*script).to_string(), BTreeSet::new()))
+        .collect();
     for face in database.faces() {
+        let supported_scripts = database
+            .with_face_data(face.id, |data, face_index| {
+                ttf_parser::Face::parse(data, face_index)
+                    .map(|parsed_face| {
+                        SCRIPT_SAMPLES
+                            .iter()
+                            .filter(|(_, samples)| {
+                                parsed_face_supports_samples(&parsed_face, samples)
+                            })
+                            .map(|(script, _)| *script)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
         for (family, _) in &face.families {
             all.insert(family.clone());
             if face.monospaced {
                 monospace.insert(family.clone());
+            }
+            for script in &supported_scripts {
+                scripts
+                    .entry((*script).to_string())
+                    .or_default()
+                    .insert(family.clone());
             }
         }
     }
     SystemFontCatalog {
         all: all.into_iter().collect(),
         monospace: monospace.into_iter().collect(),
+        scripts: scripts
+            .into_iter()
+            .map(|(script, families)| (script, families.into_iter().collect()))
+            .collect(),
     }
 }
 
@@ -435,6 +503,16 @@ mod tests {
     #[test]
     fn bundled_fonts_are_installable_desktop_fonts() {
         assert!(BASE_FONTS.iter().all(|font| valid_font(font.bytes)));
+    }
+
+    #[test]
+    fn detects_script_support_from_font_cmaps() {
+        let fira = BASE_FONTS
+            .iter()
+            .find(|font| font.file_name.contains("FiraMono-Regular"))
+            .expect("bundled Fira Mono");
+        assert!(face_supports_samples(fira.bytes, 0, &['A', 'm']));
+        assert!(!face_supports_samples(fira.bytes, 0, &['ក', 'ខ', 'ម']));
     }
 
     #[test]

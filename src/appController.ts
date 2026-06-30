@@ -1768,7 +1768,7 @@ export class TypstryWorkspaceController {
     });
 
     // Menu Bar Dropdown logic
-    const dropdownContainers = document.querySelectorAll(".dropdown-container");
+    const dropdownContainers = document.querySelectorAll("#app-menus .dropdown-container");
     dropdownContainers.forEach(container => {
       container.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;

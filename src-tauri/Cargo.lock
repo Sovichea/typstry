@@ -4417,6 +4417,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "trash",
+ "ttf-parser",
  "windows-sys 0.61.2",
  "winreg",
  "zip",

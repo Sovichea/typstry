@@ -1,5 +1,16 @@
 import { autocompletion, CompletionContext, snippetCompletion, Completion } from "@codemirror/autocomplete";
+import type { Text } from "@codemirror/state";
 import type { TinymistLspClient } from "../compiler/lsp";
+
+type LspPosition = { line: number; character?: number };
+type LspRange = { start: LspPosition; end: LspPosition };
+type LspTextEdit = {
+  newText?: string;
+  range?: LspRange;
+  insert?: LspRange;
+  replace?: LspRange;
+};
+type LspEditRange = LspRange | { insert: LspRange; replace: LspRange };
 
 type LspCompletionItem = {
   label: string;
@@ -8,12 +19,124 @@ type LspCompletionItem = {
   documentation?: string | { value?: string };
   kind?: number;
   insertText?: string;
-  textEdit?: { newText?: string };
+  textEdit?: LspTextEdit;
   insertTextFormat?: number;
   sortText?: string;
 };
 
-type LspCompletionResponse = LspCompletionItem[] | { items?: LspCompletionItem[] } | null;
+type LspCompletionResponse = LspCompletionItem[] | {
+  items?: LspCompletionItem[];
+  itemDefaults?: {
+    editRange?: LspEditRange;
+    insertTextFormat?: number;
+  };
+} | null;
+
+function textEditFromDefault(range: LspEditRange | undefined, newText: string): LspTextEdit | undefined {
+  if (!range) return undefined;
+  if ("start" in range) return { newText, range };
+  return { newText, insert: range.insert, replace: range.replace };
+}
+
+export function lspCompletionEditOffsets(
+  doc: Text,
+  textEdit: LspTextEdit | undefined,
+  characterOffset: (text: string, character: number) => number
+): { from: number; to: number } | null {
+  const range = textEdit?.range ?? textEdit?.replace ?? textEdit?.insert;
+  if (!range) return null;
+  const offset = (position: LspPosition): number => {
+    const line = doc.line(Math.max(1, Math.min(position.line + 1, doc.lines)));
+    return line.from + characterOffset(line.text, position.character ?? 0);
+  };
+  const from = offset(range.start);
+  const to = offset(range.end);
+  return from <= to ? { from, to } : null;
+}
+
+function isEscaped(text: string, index: number): boolean {
+  let slashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor--) slashes++;
+  return slashes % 2 === 1;
+}
+
+export function fontCompletionValueStart(doc: Text, cursorPosition: number): number | null {
+  const line = doc.lineAt(cursorPosition);
+  const cursor = cursorPosition - line.from;
+  const quotes: number[] = [];
+  for (let index = 0; index < cursor; index++) {
+    if (line.text[index] === '"' && !isEscaped(line.text, index)) quotes.push(index);
+  }
+  if (quotes.length % 2 === 0) return null;
+  const openingQuote = quotes[quotes.length - 1];
+  return /\bfont\s*:\s*$/.test(line.text.slice(0, openingQuote))
+    ? line.from + openingQuote + 1
+    : null;
+}
+
+export function quotedCompletionEditOffsets(
+  doc: Text,
+  cursorPosition: number,
+  insertion: string
+): { from: number; to: number } | null {
+  const line = doc.lineAt(cursorPosition);
+  const cursor = cursorPosition - line.from;
+  const quotes: number[] = [];
+  for (let index = 0; index < cursor; index++) {
+    if (line.text[index] === '"' && !isEscaped(line.text, index)) quotes.push(index);
+  }
+  let closing = -1;
+  let opening = -1;
+  if (quotes.length % 2 === 1) {
+    opening = quotes[quotes.length - 1];
+    for (let index = cursor; index < line.text.length; index++) {
+      if (line.text[index] === '"' && !isEscaped(line.text, index)) {
+        closing = index;
+        break;
+      }
+    }
+  } else if (quotes.length >= 2 && quotes[quotes.length - 1] === cursor - 1) {
+    opening = quotes[quotes.length - 2];
+    closing = quotes[quotes.length - 1];
+  }
+  if (opening < 0) return null;
+  const replacesOpeningQuote = insertion.startsWith('"');
+  const replacesClosingQuote = insertion.endsWith('"');
+  return {
+    from: line.from + opening + (replacesOpeningQuote ? 0 : 1),
+    to: closing >= 0
+      ? line.from + closing + (replacesClosingQuote ? 1 : 0)
+      : cursorPosition
+  };
+}
+
+export function fontCompletionEditOffsets(
+  doc: Text,
+  cursorPosition: number,
+  insertion: string
+): { from: number; to: number } | null {
+  const edit = quotedCompletionEditOffsets(doc, cursorPosition, insertion);
+  if (!edit) return null;
+  const openingQuote = doc.sliceString(edit.from, edit.from + 1) === '"'
+    ? edit.from
+    : edit.from - 1;
+  if (openingQuote < 0 || doc.sliceString(openingQuote, openingQuote + 1) !== '"') return null;
+  const line = doc.lineAt(openingQuote);
+  const beforeQuote = doc.sliceString(line.from, openingQuote);
+  return /\bfont\s*:\s*$/.test(beforeQuote) ? edit : null;
+}
+
+export function completionEditOffsets(
+  doc: Text,
+  cursorPosition: number,
+  insertion: string,
+  textEdit: LspTextEdit | undefined,
+  characterOffset: (text: string, character: number) => number
+): { from: number; to: number } | null {
+  return fontCompletionEditOffsets(doc, cursorPosition, insertion)
+    ?? lspCompletionEditOffsets(doc, textEdit, characterOffset)
+    ?? quotedCompletionEditOffsets(doc, cursorPosition, insertion);
+}
 
 export const typstSnippets = [
   // Document structure
@@ -84,6 +207,7 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
   return autocompletion({
     override: [
       async (context: CompletionContext) => {
+        const fontValueFrom = fontCompletionValueStart(context.state.doc, context.pos);
         if (!context.explicit) {
           const lineStr = context.state.doc.lineAt(context.pos).text;
           const col = context.pos - context.state.doc.lineAt(context.pos).from;
@@ -91,7 +215,7 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
           
           // Only trigger autocomplete implicitly on word characters or specific trigger characters (#, ., @, -)
           const lastChar = textBefore.slice(-1);
-          if (!/[\w#\.@-]/.test(lastChar)) {
+          if (!/[\w#\.@-]/.test(lastChar) && !(lastChar === " " && fontValueFrom !== null)) {
             return null;
           }
           
@@ -130,6 +254,7 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
           if (!response) return typstCompletions(context);
           
           const items = Array.isArray(response) ? response : response.items;
+          const itemDefaults = Array.isArray(response) ? undefined : response.itemDefaults;
           if (!items || items.length === 0) return typstCompletions(context);
           
           const word = context.matchBefore(/#?[\w-]*/);
@@ -147,7 +272,10 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
                 detail = undefined;
             }
             
-            let apply = item.insertText ?? item.textEdit?.newText ?? label;
+            const defaultApply = item.insertText ?? label;
+            const textEdit = item.textEdit ?? textEditFromDefault(itemDefaults?.editRange, defaultApply);
+            const insertTextFormat = item.insertTextFormat ?? itemDefaults?.insertTextFormat;
+            let apply = textEdit?.newText ?? defaultApply;
             
             if (isHashPrefix && !label.startsWith('#') && (type === 'function' || type === 'keyword' || type === 'module' || type === 'variable')) {
                 label = '#' + label;
@@ -158,23 +286,53 @@ export function createTypstAutocomplete(getClient: () => TinymistLspClient | und
                 }
             }
             
-            if (item.insertTextFormat === 2) {
-              return snippetCompletion(apply, { label, detail, info, type });
+            if (insertTextFormat === 2) {
+              const completion = snippetCompletion(apply, { label, detail, info, type });
+              const snippetApply = completion.apply;
+              if (typeof snippetApply !== "function") return completion;
+              return {
+                ...completion,
+                apply(view, selected, from, to) {
+                  const edit = completionEditOffsets(
+                    view.state.doc,
+                    to,
+                    apply,
+                    textEdit,
+                    (text, character) => client.stringOffsetFromLspCharacter(text, character)
+                  );
+                  snippetApply(view, selected, edit?.from ?? from, edit?.to ?? to);
+                }
+              };
             }
-            
+
             return {
               label,
               detail,
               info,
               type,
-              apply,
-              sortText: item.sortText
+              sortText: item.sortText,
+              apply(view, _selected, from, to) {
+                const edit = completionEditOffsets(
+                  view.state.doc,
+                  to,
+                  apply,
+                  textEdit,
+                  (text, character) => client.stringOffsetFromLspCharacter(text, character)
+                );
+                const replacement = edit ?? { from, to };
+                view.dispatch({
+                  changes: { from: replacement.from, to: replacement.to, insert: apply },
+                  selection: { anchor: replacement.from + apply.length },
+                  userEvent: "input.complete"
+                });
+              }
             };
           });
           
           return {
-            from: word ? word.from : context.pos,
-            options
+            from: fontValueFrom ?? word?.from ?? context.pos,
+            options,
+            ...(fontValueFrom !== null ? { validFor: /^[^"\r\n]*$/ } : {})
           };
           
         } catch (e) {

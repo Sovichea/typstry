@@ -146,6 +146,36 @@
                 </button>
               </div>
               <div class="toolbar-group">
+                <div class="dropdown-container toolbar-dropdown-container toolbar-typography-container">
+                  <button type="button" class="toolbar-button toolbar-dropdown-btn" title="Document typography" aria-label="Document typography" aria-haspopup="true">
+                    <span class="toolbar-button-text">Aa</span>
+                  </button>
+                  <div class="dropdown-menu toolbar-dropdown-menu toolbar-typography-panel">
+                    <div class="toolbar-typography-title">Document typography</div>
+                    <label for="toolbar-latin-font">Latin font</label>
+                    <select id="toolbar-latin-font"></select>
+                    <label for="toolbar-latin-size">Base size</label>
+                    <div class="toolbar-typography-unit-field">
+                      <input id="toolbar-latin-size" type="number" min="6" max="96" step="0.5" value="11">
+                      <span>pt</span>
+                    </div>
+                    <div class="toolbar-typography-divider"></div>
+                    <label for="toolbar-complex-script">Complex script</label>
+                    <select id="toolbar-complex-script"></select>
+                    <div id="toolbar-complex-script-hint" class="toolbar-typography-hint"></div>
+                    <label for="toolbar-complex-font">Complex-script font</label>
+                    <select id="toolbar-complex-font"></select>
+                    <label for="toolbar-complex-adjustment">Relative size adjustment</label>
+                    <div class="toolbar-typography-unit-field">
+                      <span>1em</span>
+                      <input id="toolbar-complex-adjustment" type="number" min="-12" max="12" step="0.25" value="0" aria-label="Complex-script size adjustment in points">
+                      <span>pt</span>
+                    </div>
+                    <button id="toolbar-typography-apply" type="button">Apply to document</button>
+                  </div>
+                </div>
+              </div>
+              <div class="toolbar-group">
                 <button type="button" class="toolbar-button" data-tool="heading-1" title="Heading 1" aria-label="Heading 1"><span class="toolbar-button-text">H1</span></button>
                 <button type="button" class="toolbar-button" data-tool="heading-2" title="Heading 2" aria-label="Heading 2"><span class="toolbar-button-text">H2</span></button>
                 <button type="button" class="toolbar-button" data-tool="heading-3" title="Heading 3" aria-label="Heading 3"><span class="toolbar-button-text">H3</span></button>

@@ -2,6 +2,15 @@ import { EditorSelection } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  detectDocumentScript,
+  documentScripts,
+  parseTypographyBlock,
+  preferredInstalledFamily,
+  typographyEdit,
+  type DocumentTypography
+} from "./documentTypography";
 
 type EditorMode = "CODE" | "WYSIWYM";
 
@@ -48,10 +57,30 @@ const wrappers: Record<string, [string, string, string]> = {
 
 export class EditorToolbarController {
   private readonly toolbar = document.getElementById("editor-visual-toolbar")!;
+  private systemFontFamilies: string[] = ["MiSans Latin", "Fira Mono"];
+  private scriptFontFamilies: Record<string, string[]> = {};
+  private typographyDefaults: DocumentTypography = {
+    latinFont: "MiSans Latin",
+    latinSizePt: 11,
+    complexFont: "MiSans Latin",
+    complexScript: "khmer",
+    complexSizeAdjustmentPt: 0
+  };
 
   constructor(private readonly dependencies: EditorToolbarDependencies) {}
 
   public initialize(): void {
+    void this.initializeTypographyControls();
+    document.getElementById("toolbar-typography-apply")?.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.applyDocumentTypography();
+    });
+    document.getElementById("toolbar-complex-script")?.addEventListener("change", event => {
+      const scriptId = (event.currentTarget as HTMLSelectElement).value;
+      this.populateComplexFontOptions(scriptId);
+      this.updateScriptHint(scriptId, null);
+    });
     this.toolbar.addEventListener("pointerdown", event => {
       const target = event.target as HTMLElement;
       if (target.closest("[data-tool]") || target.closest(".toolbar-dropdown-btn")) event.preventDefault();
@@ -62,10 +91,16 @@ export class EditorToolbarController {
       if (dropdownButton) {
         const container = dropdownButton.closest(".toolbar-dropdown-container");
         if (container) {
+          if (container.classList.contains("toolbar-typography-container")) this.syncTypographyControls();
           this.closeDropdowns(container);
           container.classList.toggle("active");
           event.stopPropagation();
         }
+        return;
+      }
+      const typographyPanel = target.closest(".toolbar-typography-panel");
+      if (typographyPanel) {
+        event.stopPropagation();
         return;
       }
       const button = target.closest<HTMLElement>("[data-tool]");
@@ -75,6 +110,157 @@ export class EditorToolbarController {
     document.addEventListener("click", event => {
       if (!this.toolbar.contains(event.target as Node)) this.closeDropdowns();
     });
+  }
+
+  private async initializeTypographyControls(): Promise<void> {
+    this.populateScriptOptions();
+    try {
+      const catalog = await invoke<{ all: string[]; scripts: Record<string, string[]> }>("list_system_fonts");
+      this.systemFontFamilies = [...new Set(catalog.all)].sort((left, right) => left.localeCompare(right));
+      this.scriptFontFamilies = catalog.scripts ?? {};
+    } catch (error) {
+      console.warn("Unable to load document font families.", error);
+    }
+    this.populateDocumentFontOptions();
+    this.syncTypographyControls();
+  }
+
+  private populateScriptOptions(): void {
+    const select = document.getElementById("toolbar-complex-script") as HTMLSelectElement | null;
+    if (!select) return;
+    select.replaceChildren(...documentScripts.map(script => {
+      const option = document.createElement("option");
+      option.value = script.id;
+      option.textContent = script.label;
+      return option;
+    }));
+  }
+
+  private populateDocumentFontOptions(): void {
+    const latin = document.getElementById("toolbar-latin-font") as HTMLSelectElement | null;
+    if (latin) latin.replaceChildren(...this.fontOptions(this.systemFontFamilies));
+    const script = (document.getElementById("toolbar-complex-script") as HTMLSelectElement | null)?.value ?? documentScripts[0].id;
+    this.populateComplexFontOptions(script);
+  }
+
+  private fontOptions(families: readonly string[]): HTMLOptionElement[] {
+    return families.map(family => {
+      const option = document.createElement("option");
+      option.value = family;
+      option.textContent = family;
+      return option;
+    });
+  }
+
+  private populateComplexFontOptions(scriptId: string, preferredFont?: string): string[] {
+    const select = document.getElementById("toolbar-complex-font") as HTMLSelectElement | null;
+    const supported = [...new Set(this.scriptFontFamilies[scriptId] ?? [])]
+      .sort((left, right) => left.localeCompare(right));
+    if (!select) return supported;
+    const previous = preferredFont ?? select.value;
+    select.replaceChildren(...this.fontOptions(supported));
+    const next = supported.find(family => family === previous)
+      ?? preferredInstalledFamily(documentScripts.find(script => script.id === scriptId) ?? documentScripts[0], supported)
+      ?? supported[0]
+      ?? "";
+    if (next) {
+      select.value = next;
+      select.disabled = false;
+    } else {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No compatible installed font";
+      select.replaceChildren(option);
+      select.disabled = true;
+    }
+    const apply = document.getElementById("toolbar-typography-apply") as HTMLButtonElement | null;
+    if (apply) apply.disabled = supported.length === 0;
+    return supported;
+  }
+
+  private syncTypographyControls(): void {
+    const text = this.dependencies.getEditor().state.doc.toString();
+    const existing = parseTypographyBlock(text);
+    const detected = detectDocumentScript(text);
+    const script = existing
+      ? documentScripts.find(candidate => candidate.id === existing.complexScript) ?? detected ?? documentScripts[0]
+      : detected ?? documentScripts[0];
+    const latinFont = existing?.latinFont
+      ?? this.systemFontFamilies.find(family => family === "Calibri")
+      ?? this.systemFontFamilies.find(family => family === "MiSans Latin")
+      ?? this.systemFontFamilies[0];
+    const supportedFonts = this.populateComplexFontOptions(script.id, existing?.complexFont);
+    const complexFont = supportedFonts.find(family => family === existing?.complexFont)
+      ?? preferredInstalledFamily(script, supportedFonts)
+      ?? supportedFonts[0]
+      ?? "";
+    this.typographyDefaults = {
+      latinFont,
+      latinSizePt: existing?.latinSizePt ?? 11,
+      complexFont,
+      complexScript: script.id,
+      complexSizeAdjustmentPt: existing?.complexSizeAdjustmentPt ?? 0
+    };
+    this.setTypographyControl("toolbar-latin-font", latinFont);
+    this.setTypographyControl("toolbar-latin-size", String(this.typographyDefaults.latinSizePt));
+    this.setTypographyControl("toolbar-complex-script", script.id);
+    this.setTypographyControl("toolbar-complex-font", complexFont);
+    this.setTypographyControl("toolbar-complex-adjustment", String(this.typographyDefaults.complexSizeAdjustmentPt));
+    this.updateScriptHint(script.id, detected?.id === script.id ? detected.label : null);
+  }
+
+  private updateScriptHint(scriptId: string, detectedLabel: string | null): void {
+    const hint = document.getElementById("toolbar-complex-script-hint");
+    if (!hint) return;
+    const count = this.scriptFontFamilies[scriptId]?.length ?? 0;
+    const prefix = detectedLabel ? `Detected ${detectedLabel}. ` : "";
+    hint.textContent = count > 0
+      ? `${prefix}${count} compatible installed font${count === 1 ? "" : "s"}.`
+      : `${prefix}No installed font provides the required glyph coverage.`;
+  }
+
+  private setTypographyControl(id: string, value: string): void {
+    const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (!control) return;
+    if (control instanceof HTMLSelectElement && ![...control.options].some(option => option.value === value)) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      control.appendChild(option);
+    }
+    control.value = value;
+  }
+
+  private applyDocumentTypography(): void {
+    const value = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
+    const complexFont = value("toolbar-complex-font");
+    if (!complexFont) {
+      this.updateScriptHint(value("toolbar-complex-script") || this.typographyDefaults.complexScript, null);
+      return;
+    }
+    const config: DocumentTypography = {
+      latinFont: value("toolbar-latin-font") || this.typographyDefaults.latinFont,
+      latinSizePt: this.boundedTypographyNumber(value("toolbar-latin-size"), 6, 96, this.typographyDefaults.latinSizePt),
+      complexFont,
+      complexScript: value("toolbar-complex-script") || this.typographyDefaults.complexScript,
+      complexSizeAdjustmentPt: this.boundedTypographyNumber(value("toolbar-complex-adjustment"), -12, 12, 0)
+    };
+    const editor = this.dependencies.getEditor();
+    const edit = typographyEdit(editor.state.doc.toString(), config);
+    editor.dispatch({
+      changes: edit,
+      selection: { anchor: edit.from },
+      scrollIntoView: true,
+      userEvent: "input"
+    });
+    this.typographyDefaults = config;
+    this.closeDropdowns();
+    editor.focus();
+  }
+
+  private boundedTypographyNumber(value: string, min: number, max: number, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
   }
 
   private closeDropdowns(except?: Element): void {
