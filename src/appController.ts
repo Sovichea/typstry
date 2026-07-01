@@ -2211,6 +2211,20 @@ export class TypstryWorkspaceController {
     document.getElementById("titlebar-maximize")?.addEventListener("click", () => appWindow.toggleMaximize());
     document.getElementById("titlebar-close")?.addEventListener("click", () => appWindow.close());
 
+    void appWindow.onCloseRequested(async (event) => {
+      const hasUnsaved = this.openTabs.some(tab => tab.isDirty);
+      if (hasUnsaved) {
+        event.preventDefault();
+        const confirmed = await confirm(
+          "You have unsaved changes. Are you sure you want to close Typstry?",
+          { title: "Unsaved Changes", kind: "warning" }
+        );
+        if (confirmed) {
+          void appWindow.destroy();
+        }
+      }
+    });
+
     this.wysiwymContainer.addEventListener("input", () => {
       if (this.activeMode === "WYSIWYM") {
         const generatedMarkup = this.mapWysiwymToMarkup();
