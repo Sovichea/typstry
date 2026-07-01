@@ -116,6 +116,7 @@ export class SettingsController {
     onChange("settings-active-line", (settings, control) => { settings.editor.highlightActiveLine = (control as HTMLInputElement).checked; });
     onChange("settings-auto-close", (settings, control) => { settings.editor.autoCloseBrackets = (control as HTMLInputElement).checked; });
     onChange("settings-indent-guides", (settings, control) => { settings.editor.indentationGuides = (control as HTMLInputElement).checked; });
+    onChange("settings-spellcheck", (settings, control) => { settings.editor.spellcheck = (control as HTMLInputElement).checked; });
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
@@ -196,6 +197,7 @@ export class SettingsController {
     setChecked("settings-active-line", editor.highlightActiveLine);
     setChecked("settings-auto-close", editor.autoCloseBrackets);
     setChecked("settings-indent-guides", editor.indentationGuides);
+    setChecked("settings-spellcheck", editor.spellcheck);
     setChecked("settings-cursor-sync", preview.cursorSync);
 
     const path = document.getElementById("settings-file-path");

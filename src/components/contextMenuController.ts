@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-shell";
 import type { EditorView } from "@codemirror/view";
 import { selectAll, toggleLineComment } from "@codemirror/commands";
 import type { WorkspaceExplorer } from "./explorer";
+import type { SpellingIssue } from "../editor/spellcheck";
 
 export type ContextMenuDependencies = {
   getWorkspaceRoot: () => string | null;
@@ -21,6 +22,9 @@ export type ContextMenuDependencies = {
   closeTabInteractive: (path: string) => void | Promise<void>;
   closeOtherTabs: (path: string) => void | Promise<void>;
   restartWorkspace: () => void | Promise<void>;
+  getSpellingIssue: (x: number, y: number) => SpellingIssue | null;
+  getSpellingSuggestions: (issue: SpellingIssue) => Promise<string[]>;
+  replaceSpelling: (issue: SpellingIssue, replacement: string) => void;
 };
 
 const previewItems = `
@@ -36,6 +40,8 @@ export class ContextMenuController {
   private selectedText = "";
   private contextText = "";
   private readonly menu = document.getElementById("context-menu")!;
+  private spellingIssue: SpellingIssue | null = null;
+  private spellingSuggestions: string[] = [];
 
   constructor(private readonly dependencies: ContextMenuDependencies) {}
 
@@ -45,7 +51,7 @@ export class ContextMenuController {
       const action = (event.target as HTMLElement).closest<HTMLElement>(".dropdown-item")?.id;
       if (action) void this.execute(action);
     });
-    document.addEventListener("contextmenu", event => this.showForTarget(event));
+    document.addEventListener("contextmenu", event => void this.showForTarget(event));
     document.getElementById("preview-menu-btn")?.addEventListener("click", event => {
       event.stopPropagation();
       const button = event.currentTarget as HTMLElement;
@@ -87,6 +93,13 @@ export class ContextMenuController {
       case "ctx-tab-close": if (this.targetPath) await this.dependencies.closeTabInteractive(this.targetPath); return;
       case "ctx-tab-close-others": if (this.targetPath) await this.dependencies.closeOtherTabs(this.targetPath); return;
       case "ctx-restart-workspace": await this.dependencies.restartWorkspace(); return;
+      default:
+        if (action.startsWith("ctx-spelling-") && this.spellingIssue) {
+          const index = Number(action.slice("ctx-spelling-".length));
+          const replacement = this.spellingSuggestions[index];
+          if (replacement) this.dependencies.replaceSpelling(this.spellingIssue, replacement);
+        }
+        return;
     }
   }
 
@@ -271,7 +284,7 @@ export class ContextMenuController {
     if (workspace) await this.dependencies.getExplorer().loadWorkspace(workspace);
   }
 
-  private showForTarget(event: MouseEvent): void {
+  private async showForTarget(event: MouseEvent): Promise<void> {
     const target = event.target as HTMLElement;
     this.textControl = this.textControlFor(target);
     const selection = window.getSelection();
@@ -302,7 +315,13 @@ export class ContextMenuController {
       this.targetPath = this.dependencies.getWorkspaceRoot() || "";
       this.targetIsDirectory = !!this.targetPath;
       items = this.explorerBackgroundItems();
-    } else if (target.closest(".cm-editor") || target.closest("#code-render-pane")) items = this.editorItems();
+    } else if (target.closest(".cm-editor") || target.closest("#code-render-pane")) {
+      this.spellingIssue = this.dependencies.getSpellingIssue(event.clientX, event.clientY);
+      this.spellingSuggestions = this.spellingIssue
+        ? await this.dependencies.getSpellingSuggestions(this.spellingIssue)
+        : [];
+      items = this.editorItems();
+    }
     else if (target.closest("#preview-container-wrapper")) items = previewItems;
     else if (target.closest(".editor-tab")) {
       this.targetPath = target.closest<HTMLElement>(".editor-tab")?.dataset.path || "";
@@ -357,7 +376,16 @@ export class ContextMenuController {
   }
 
   private editorItems(): string {
-    return `<div class="dropdown-item" id="ctx-copy-text">Copy <span class="hotkey">Ctrl+C</span></div><div class="dropdown-item" id="ctx-paste-text">Paste <span class="hotkey">Ctrl+V</span></div><div class="dropdown-item" id="ctx-cut-text">Cut <span class="hotkey">Ctrl+X</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-editor-toggle-comment">Toggle Line Comment</div><div class="dropdown-item" id="ctx-editor-format">Format Document</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-undo">Undo</div><div class="dropdown-item" id="ctx-redo">Redo</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-editor-select-all">Select All</div>`;
+    const spelling = this.spellingIssue
+      ? `${this.spellingSuggestions.map((suggestion, index) => `<div class="dropdown-item spelling-suggestion" id="ctx-spelling-${index}">${this.escapeHtml(suggestion)}</div>`).join("")}<div class="dropdown-separator"></div>`
+      : "";
+    return `${spelling}<div class="dropdown-item" id="ctx-copy-text">Copy <span class="hotkey">Ctrl+C</span></div><div class="dropdown-item" id="ctx-paste-text">Paste <span class="hotkey">Ctrl+V</span></div><div class="dropdown-item" id="ctx-cut-text">Cut <span class="hotkey">Ctrl+X</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-editor-toggle-comment">Toggle Line Comment</div><div class="dropdown-item" id="ctx-editor-format">Format Document</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-undo">Undo</div><div class="dropdown-item" id="ctx-redo">Redo</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-editor-select-all">Select All</div>`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, character => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character] ?? character);
   }
 
   private nativeTextItems(editable: boolean): string {

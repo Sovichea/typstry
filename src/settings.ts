@@ -27,6 +27,7 @@ export type AppSettings = {
     highlightActiveLine: boolean;
     autoCloseBrackets: boolean;
     indentationGuides: boolean;
+    spellcheck: boolean;
   };
   preview: {
     cursorSync: boolean;
@@ -53,7 +54,8 @@ export const defaultAppSettings: AppSettings = {
     lineNumbers: true,
     highlightActiveLine: true,
     autoCloseBrackets: true,
-    indentationGuides: true
+    indentationGuides: true,
+    spellcheck: true
   },
   preview: {
     cursorSync: true,
@@ -109,7 +111,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       lineNumbers: booleanValue(editor.lineNumbers, defaultAppSettings.editor.lineNumbers),
       highlightActiveLine: booleanValue(editor.highlightActiveLine, defaultAppSettings.editor.highlightActiveLine),
       autoCloseBrackets: booleanValue(editor.autoCloseBrackets, defaultAppSettings.editor.autoCloseBrackets),
-      indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides)
+      indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
+      spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck)
     },
     preview: {
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),

@@ -1,0 +1,3 @@
+[submodule "third_party/khmer_segmenter"]
+	path = third_party/khmer_segmenter
+	url = https://github.com/Sovichea/khmer_segmenter.git

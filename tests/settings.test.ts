@@ -9,6 +9,7 @@ describe("application settings", () => {
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
+    expect(settings.editor.spellcheck).toBe(true);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
     expect(settings.toolchain.tinymistVersion).toBeNull();
   });

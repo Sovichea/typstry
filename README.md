@@ -24,6 +24,7 @@ A lightweight, local-first Typst code editor with advanced Unicode font fallback
 * **Template-Aware Chapter Editing**: Imported chapters can reuse their main document's local template in standalone live preview. Cross-chapter references render as clear placeholders until the complete document is previewed, while the source remains standard Typst.
 * **Managed Toolchain**: The settings panel installs stable Tinymist releases. Tinymist's embedded Typst compiler handles preview, diagnostics, and export; no separate Typst installation is required.
 * **Document Typography Controls**: Choose Latin and complex-script fonts independently from the toolbar, adjust complex-script sizing relative to the Latin size, and apply either selection to the current document or its local template.
+* **Khmer Language Support**: Optional real-time dictionary spellcheck underlines unknown Khmer words and offers corrections while typing or from the editor context menu. Preview and PDF export add non-destructive Khmer word-break opportunities, including discretionary hyphenation in justified paragraphs.
 * **Interactive Document Outline**: Browse collapsible heading levels beside the file explorer and navigate both source and preview from a single click.
 * **Writable Example Workspace**: Open installed examples from the welcome screen, including Unicode-focused documents, a Khmer technical document, and a three-chapter thesis demonstrating external labels.
 * **Focus-Driven UI**: A custom, frameless window design, persistent multi-tab workspace state (preserving open tabs, split ratios, and cursor positions), and integrated native-feel search and replace.
@@ -54,6 +55,7 @@ Open Settings from **File → Settings**, the status bar, or `Ctrl + ,`. Changes
   "editor": {
     "codeFont": "Fira Mono",
     "unicodeFont": "auto",
+    "spellcheck": true,
     "wordWrap": true,
     "tabSize": 2,
     "lineNumbers": true,
@@ -81,6 +83,8 @@ Each preview root has a uniquely identified Tinymist task whose iframe is cached
 Only MiSans Latin and Fira Mono are bundled. Typstry installs them in the current user's font directory on first launch, avoiding administrator access on Windows, Linux, and macOS. Settings enumerates the operating system's fonts: the code-font selector contains monospace families, while Unicode fallback accepts any installed family. Automatic detection recommends the matching MiSans family when one exists and a script-specific Noto Sans family otherwise. It never downloads without confirmation and does not repeat a recommendation the user declines. Recommendations are optional; users can select any installed fallback or disable fallback entirely. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
 
 The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin rule, the complex-script rule, or both. **Apply to document** writes a managed `typstry:typography` block into the active file. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typstry-template.typ` when no editable local template can be identified.
+
+Language spellcheck can be disabled in Editor settings. Khmer analysis is provided by the modular Rust segmentation layer backed by the `khmer_segmenter` submodule. The renderer leaves source files unchanged: generated preview and export input receives zero-width word-break opportunities for normal paragraphs and soft-hyphen opportunities for justified paragraphs. Soft hyphens are visible only when Typst actually breaks a word.
 
 ## Tech Stack & Architecture
 * **Core Framework**: [Tauri v2](https://v2.tauri.app/)
@@ -178,10 +182,12 @@ Restart the terminal or load the updated shell profile before continuing. For ot
 The following commands are the same in PowerShell, bash, and zsh:
 
 ```bash
-git clone https://github.com/Sovichea/typstry.git
+git clone --recurse-submodules https://github.com/Sovichea/typstry.git
 cd typstry
 bun install --frozen-lockfile
 ```
+
+For an existing clone, initialize or update the pinned segmenter with `git submodule update --init --recursive`.
 
 `bun.lock` is committed and is the reproducible dependency source for local development and CI. After changing `package.json`, run `bun install` and commit both files; routine setup and CI should keep using `bun install --frozen-lockfile` so an outdated lockfile fails immediately.
 
@@ -211,10 +217,9 @@ Run the frontend and Rust checks before submitting changes:
 ```bash
 bun test
 bun run build
-cd src-tauri
-cargo fmt --all -- --check
-cargo check --lib
-cargo test --lib
+cargo fmt --manifest-path src-tauri/Cargo.toml --package typstry -- --check
+cargo check --manifest-path src-tauri/Cargo.toml --lib
+cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
 ### Native release build
@@ -293,9 +298,10 @@ The current development release is `v0.1.2`.
 - [x] Settings panel / configuration file (`settings.json`)
   - [x] UI for appearance, editor, and preview preferences
   - [x] Native persistent settings storage and legacy preference migration
-- [ ] Integrate Khmer word segmentation engine for accurate text highlighting and selection in the preview pane
-  - [ ] Implement [Khmer Segmenter](https://github.com/Sovichea/khmer_segmenter)
-  - [ ] Hook engine into preview highlight logic
+- [x] Integrate a modular Khmer language engine
+  - [x] Pin [Khmer Segmenter](https://github.com/Sovichea/khmer_segmenter) as a Git submodule and Rust dependency
+  - [x] Add real-time spellcheck, current-word suggestions, and context-menu corrections
+  - [x] Add ZWS/soft-hyphen preprocessing for preview and PDF export without modifying source files
 - [ ] Embed an AI Copilot / Agent for context-aware Typst auto-completion and document drafting
   - [ ] API integration for language model
   - [ ] Inline UI for code suggestions

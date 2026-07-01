@@ -1880,3 +1880,39 @@ button.welcome-item:disabled {
 
 .editor-tab.temporary .editor-tab-title { font-style: italic; }
 
+.cm-spelling-unknown {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #e05252;
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 3px;
+}
+
+.spellcheck-suggestions {
+  position: fixed;
+  z-index: 1400;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-panel-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+}
+
+.spellcheck-suggestions.hidden { display: none; }
+
+.spellcheck-suggestions button {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ui-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.spellcheck-suggestions button:hover { background: var(--ui-hover); }
+

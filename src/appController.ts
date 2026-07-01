@@ -38,6 +38,7 @@ import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
+import { SpellcheckController } from "./editor/spellcheck";
 import {
   ensureTypographyTemplateApplication,
   externalReferenceLabels,
@@ -118,6 +119,7 @@ export class TypstryWorkspaceController {
 
   private editorInstance!: EditorView;
   private readonly editorFontManager = new EditorFontManager(() => this.editorInstance);
+  private readonly spellcheckController = new SpellcheckController(() => this.editorInstance);
   private explorer!: WorkspaceExplorer;
   private lspClient!: TinymistLspClient;
 
@@ -186,7 +188,13 @@ export class TypstryWorkspaceController {
     closeTab: path => this.closeEditorTab(path, true),
     closeTabInteractive: path => this.closeEditorTab(path, false),
     closeOtherTabs: path => this.closeOtherTabs(path),
-    restartWorkspace: () => this.restartWorkspace()
+    restartWorkspace: () => this.restartWorkspace(),
+    getSpellingIssue: (x, y) => {
+      const position = this.editorInstance.posAtCoords({ x, y });
+      return position === null ? null : this.spellcheckController.issueAt(position);
+    },
+    getSpellingSuggestions: issue => this.spellcheckController.suggestions(issue),
+    replaceSpelling: (issue, replacement) => this.spellcheckController.replace(issue, replacement)
   });
   private readonly documentOutlineController = new DocumentOutlineController(
     document.getElementById("document-outline-tree")!,
@@ -276,6 +284,7 @@ export class TypstryWorkspaceController {
     document.documentElement.style.setProperty("--editor-line-height", String(appearance.editorLineHeight));
     this.forwardSyncDebounceMs = preview.syncDebounceMs;
     this.editorFontManager.configure(editor.codeFont, editor.unicodeFont);
+    this.spellcheckController.setEnabled(editor.spellcheck);
 
     void applyUIThemeVariables(appearance.theme);
 
@@ -433,12 +442,14 @@ export class TypstryWorkspaceController {
             () => this.flushPendingLspSync(),
             (uri, line, character) => void this.navigateToLspLocation(uri, line, character)
           ),
+          this.spellcheckController.extension(),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               const currentText = update.state.doc.toString();
               this.previewSyncController.clearForward();
               this.editorFontManager.updateDocument(currentText);
               this.handleContentMutation(currentText);
+              this.spellcheckController.schedule();
             }
             if (update.selectionSet) {
               this.documentOutlineController.setCursorPosition(update.state.selection.main.head, this.activeFilePath);
@@ -769,11 +780,13 @@ export class TypstryWorkspaceController {
       fileContents: tab.content
     });
     previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
+    previewTarget = await this.prepareSegmentedPreview(previewTarget, path, tab.content);
     this.applyPreviewTargetToTab(tab, previewTarget);
     this.clearPendingLspSync();
     this.previewSyncController.clearForward();
     this.renderEditorTabs();
     this.editorFontManager.updateDocument(tab.content);
+    this.spellcheckController.schedule();
     void this.documentOutlineController.update(
       path, 
       tab.content, 
@@ -1163,6 +1176,41 @@ export class TypstryWorkspaceController {
     }
   }
 
+  private async prepareSegmentedPreview(
+    target: PreviewTarget,
+    activePath: string,
+    activeContents: string
+  ): Promise<PreviewTarget> {
+    if (!this.workspaceRootPath || !target.rootPath) return target;
+    try {
+      const rootPath = await this.rootRelativeTypstPath(target.rootPath);
+      if (!rootPath) return target;
+      const prelude = await invoke<string>("segmentation_prelude", {
+        workspaceRootPath: this.workspaceRootPath,
+        activeFilePath: activePath,
+        activeContents
+      });
+      const identity = previewSessionIdentity(activePath, previewRefreshStyle(target));
+      const previewPath = await join(
+        this.workspaceRootPath,
+        `.${fileNameFromPath(activePath)}.${identity.taskId}.segmentation.typstry-preview.typ`
+      );
+      const source = `${prelude}${prelude ? "\n" : ""}#include "${rootPath}"\n`;
+      const existing = await invoke<string>("read_workspace_file", { path: previewPath }).catch(() => null);
+      if (existing !== source) {
+        await invoke("save_workspace_file", { path: previewPath, contents: source });
+      }
+      return { ...target, rootPath: previewPath };
+    } catch (error) {
+      this.appendLspLog({
+        kind: "warning",
+        source: "segmentation",
+        message: `Language-aware preview could not be prepared: ${String(error)}`
+      });
+      return target;
+    }
+  }
+
   private async openDocumentIfNeeded(uri: string, text: string, version: number): Promise<void> {
     if (this.openedDocumentUris.has(uri)) return;
     await this.lspClient.openTextDocument(uri, text, version);
@@ -1316,14 +1364,14 @@ export class TypstryWorkspaceController {
 
     this.setLspStatus({ kind: "syncing", message: "Syncing preview" });
     this.previewSyncController.reset();
-    if (this.previewImported && this.previewLiveUpdates) {
-      const target: PreviewTarget = {
-        rootPath: path,
-        mainPath: this.previewMainPath,
-        imported: true,
-        liveUpdates: true
-      };
-      await this.prepareTemplateAwarePreview(target, path, text);
+    if (this.workspaceRootPath && this.previewLiveUpdates) {
+      let target = await invoke<PreviewTarget>("resolve_preview_main", {
+        filePath: path,
+        workspaceRootPath: this.workspaceRootPath,
+        fileContents: text
+      });
+      target = await this.prepareTemplateAwarePreview(target, path, text);
+      await this.prepareSegmentedPreview(target, path, text);
     }
     const version = ++this.currentVersion;
     this.latestDocumentVersion = version;
@@ -1855,6 +1903,7 @@ export class TypstryWorkspaceController {
       fileContents: contents
     });
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
+    target = await this.prepareSegmentedPreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(target.mainPath);
     const identity = target.rootPath
       ? previewSessionIdentity(target.rootPath, previewRefreshStyle(target))
@@ -2101,8 +2150,15 @@ export class TypstryWorkspaceController {
         this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
         try {
+          const prelude = this.workspaceRootPath
+            ? await invoke<string>("segmentation_prelude", {
+                workspaceRootPath: this.workspaceRootPath,
+                activeFilePath: this.activeFilePath,
+                activeContents: content
+              })
+            : "";
           const pdfPath = await invoke<string>("compile_typst_document", {
-            sourceCode: content,
+            sourceCode: `${prelude}${prelude ? "\n" : ""}${content}`,
             filePath: this.activeFilePath
           });
           this.setLspStatus({ kind: "preview-ready", message: `Exported to ${pdfPath}` });

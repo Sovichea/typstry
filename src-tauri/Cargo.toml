@@ -24,6 +24,7 @@ zip = { version = "4.6", default-features = false, features = ["deflate"] }
 fontdb = "0.23"
 dunce = "1.0"
 ttf-parser = "0.25"
+khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

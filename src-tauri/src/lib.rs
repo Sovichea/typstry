@@ -5,8 +5,12 @@ use tauri::{Emitter, Manager};
 
 mod examples;
 mod font_store;
+mod segmentation;
 mod toolchain;
 use examples::prepare_examples_workspace;
+use segmentation::{
+    analyze_text, segmentation_prelude, spelling_suggestions, SegmentationRegistry,
+};
 use toolchain::active_tinymist;
 
 #[tauri::command]
@@ -1140,6 +1144,8 @@ async fn send_lsp_message(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let segmentation_registry =
+        SegmentationRegistry::new().expect("Failed to initialize language segmentation providers");
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -1150,6 +1156,7 @@ pub fn run() {
             tx: Mutex::new(None),
             process: Mutex::new(None),
         })
+        .manage(segmentation_registry)
         .setup(|app| {
             if let Err(error) = examples::install_examples_workspace(app.handle()) {
                 eprintln!("Failed to install bundled examples: {error}");
@@ -1186,6 +1193,9 @@ pub fn run() {
             get_toolchain_status,
             list_system_fonts,
             install_unicode_font,
+            analyze_text,
+            spelling_suggestions,
+            segmentation_prelude,
             prepare_examples_workspace,
             list_tinymist_releases,
             install_tinymist_toolchain,

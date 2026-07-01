@@ -1861,6 +1861,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "khmer_segmenter"
+version = "0.1.0"
+dependencies = [
+ "memmap2",
+]
+
+[[package]]
 name = "kqueue"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4404,6 +4411,7 @@ version = "0.1.2"
 dependencies = [
  "dunce",
  "fontdb",
+ "khmer_segmenter",
  "reqwest 0.12.28",
  "semver",
  "serde",
