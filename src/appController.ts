@@ -828,7 +828,6 @@ export class TypstryWorkspaceController {
       fileContents: tab.content
     });
     previewTarget = await this.prepareTemplateAwarePreview(previewTarget, path, tab.content);
-    // previewTarget = await this.prepareSegmentedPreview(previewTarget, path, tab.content);
     this.applyPreviewTargetToTab(tab, previewTarget);
     this.clearPendingLspSync();
     this.previewSyncController.clearForward();
@@ -1224,43 +1223,6 @@ export class TypstryWorkspaceController {
     }
   }
 
-  /*
-  private async prepareSegmentedPreview(
-    target: PreviewTarget,
-    activePath: string,
-    activeContents: string
-  ): Promise<PreviewTarget> {
-    if (!this.workspaceRootPath || !target.rootPath) return target;
-    try {
-      const rootPath = await this.rootRelativeTypstPath(target.rootPath);
-      if (!rootPath) return target;
-      const prelude = await invoke<string>("segmentation_prelude", {
-        workspaceRootPath: this.workspaceRootPath,
-        activeFilePath: activePath,
-        activeContents
-      });
-      const identity = previewSessionIdentity(activePath, previewRefreshStyle(target));
-      const previewPath = await join(
-        this.workspaceRootPath,
-        `.${fileNameFromPath(activePath)}.${identity.taskId}.segmentation.typstry-preview.typ`
-      );
-      const source = `${prelude}${prelude ? "\n" : ""}#include "${rootPath}"\n`;
-      const existing = await invoke<string>("read_workspace_file", { path: previewPath }).catch(() => null);
-      if (existing !== source) {
-        await invoke("save_workspace_file", { path: previewPath, contents: source });
-      }
-      return { ...target, rootPath: previewPath };
-    } catch (error) {
-      this.appendLspLog({
-        kind: "warning",
-        source: "segmentation",
-        message: `Language-aware preview could not be prepared: ${String(error)}`
-      });
-      return target;
-    }
-  }
-  */
-
   private async openDocumentIfNeeded(uri: string, text: string, version: number): Promise<void> {
     if (this.openedDocumentUris.has(uri)) return;
     await this.lspClient.openTextDocument(uri, text, version);
@@ -1421,7 +1383,6 @@ export class TypstryWorkspaceController {
         fileContents: text
       });
       target = await this.prepareTemplateAwarePreview(target, path, text);
-      // await this.prepareSegmentedPreview(target, path, text);
     }
     const version = ++this.currentVersion;
     this.latestDocumentVersion = version;
@@ -1953,7 +1914,6 @@ export class TypstryWorkspaceController {
       fileContents: contents
     });
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
-    // target = await this.prepareSegmentedPreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(target.mainPath);
     const identity = target.rootPath
       ? previewSessionIdentity(target.rootPath, previewRefreshStyle(target))
@@ -2207,15 +2167,8 @@ export class TypstryWorkspaceController {
         this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
         try {
-          const prelude = this.workspaceRootPath
-            ? await invoke<string>("segmentation_prelude", {
-                workspaceRootPath: this.workspaceRootPath,
-                activeFilePath: this.activeFilePath,
-                activeContents: content
-              })
-            : "";
           const pdfPath = await invoke<string>("compile_typst_document", {
-            sourceCode: `${prelude}${prelude ? "\n" : ""}${content}`,
+            sourceCode: content,
             filePath: this.activeFilePath
           });
           this.setLspStatus({ kind: "preview-ready", message: `Exported to ${pdfPath}` });

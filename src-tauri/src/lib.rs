@@ -10,7 +10,7 @@ mod toolchain;
 use examples::prepare_examples_workspace;
 use segmentation::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
-    language_suggestions, segmentation_prelude, SegmentationRegistry,
+    language_suggestions, SegmentationRegistry,
 };
 use toolchain::active_tinymist;
 
@@ -1207,7 +1207,6 @@ pub fn run() {
             get_provider_capabilities,
             open_devtools,
             complete_language_word,
-            segmentation_prelude,
             prepare_examples_workspace,
             list_tinymist_releases,
             install_tinymist_toolchain,

@@ -430,112 +430,12 @@ impl LanguageSegmenter for KhmerProvider {
 #[derive(Clone)]
 pub struct SegmentationRegistry {
     providers: Vec<Arc<dyn LanguageSegmenter>>,
-    cache: Arc<
-        std::sync::Mutex<
-            std::collections::HashMap<
-                std::path::PathBuf,
-                (std::time::SystemTime, Vec<Vec<RenderReplacement>>),
-            >,
-        >,
-    >,
-}
-
-fn collect_replacements(
-    root: &std::path::Path,
-    active_path: &std::path::Path,
-    active_contents: &str,
-    providers: &[Arc<dyn LanguageSegmenter>],
-    cache: &std::sync::Mutex<
-        std::collections::HashMap<
-            std::path::PathBuf,
-            (std::time::SystemTime, Vec<Vec<RenderReplacement>>),
-        >,
-    >,
-    all_replacements: &mut Vec<Vec<RenderReplacement>>,
-) {
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            let name = entry.file_name();
-            if name != ".git" && name != "target" && name != "node_modules" {
-                collect_replacements(
-                    &path,
-                    active_path,
-                    active_contents,
-                    providers,
-                    cache,
-                    all_replacements,
-                );
-            }
-        } else if path.extension().and_then(|extension| extension.to_str()) == Some("typ")
-            && !path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or_default()
-                .contains("typstry-preview")
-        {
-            let is_active = path.to_string_lossy().to_lowercase()
-                == active_path.to_string_lossy().to_lowercase();
-            if is_active {
-                let replacements: Vec<Vec<RenderReplacement>> = providers
-                    .iter()
-                    .map(|provider| provider.render_replacements(active_contents))
-                    .collect();
-                for (i, reps) in replacements.into_iter().enumerate() {
-                    all_replacements[i].extend(reps);
-                }
-            } else {
-                let modified = std::fs::metadata(&path)
-                    .and_then(|m| m.modified())
-                    .unwrap_or_else(|_| std::time::SystemTime::now());
-
-                let cached_reps = {
-                    let lock = cache.lock().unwrap();
-                    if let Some((time, cached)) = lock.get(&path) {
-                        if *time == modified {
-                            Some(cached.clone())
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                };
-
-                let replacements = if let Some(reps) = cached_reps {
-                    reps
-                } else if let Ok(source) = std::fs::read_to_string(&path) {
-                    let reps: Vec<Vec<RenderReplacement>> = providers
-                        .iter()
-                        .map(|provider| provider.render_replacements(&source))
-                        .collect();
-                    let mut lock = cache.lock().unwrap();
-                    lock.insert(path.clone(), (modified, reps.clone()));
-                    reps
-                } else {
-                    continue;
-                };
-
-                for (i, reps) in replacements.into_iter().enumerate() {
-                    all_replacements[i].extend(reps);
-                }
-            }
-        }
-    }
-}
-
-fn typst_string(value: &str) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_owned())
 }
 
 impl SegmentationRegistry {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
             providers: vec![Arc::new(KhmerProvider::new()?)],
-            cache: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         })
     }
 
@@ -725,64 +625,6 @@ fn complete_with_provider(
     Ok(None)
 }
 
-#[tauri::command]
-pub async fn segmentation_prelude(
-    registry: tauri::State<'_, SegmentationRegistry>,
-    workspace_root_path: String,
-    active_file_path: String,
-    active_contents: String,
-) -> Result<String, String> {
-    let providers = registry.providers.clone();
-    let cache = registry.cache.clone();
-
-    tokio::task::spawn_blocking(move || -> String {
-        let mut all_replacements = vec![Vec::new(); providers.len()];
-        collect_replacements(
-            &PathBuf::from(workspace_root_path),
-            &PathBuf::from(active_file_path),
-            &active_contents,
-            &providers,
-            &cache,
-            &mut all_replacements,
-        );
-
-        let mut prelude = String::new();
-        for (index, provider) in providers.iter().enumerate() {
-            let mut replacements = std::mem::take(&mut all_replacements[index]);
-            replacements.sort_by(|left, right| left.source.cmp(&right.source));
-            replacements.dedup_by(|left, right| left.source == right.source);
-
-            if replacements.is_empty() {
-                continue;
-            }
-
-            let dict_entries = replacements
-                .into_iter()
-                .map(|replacement| {
-                    format!(
-                        "{}: ({}, {}),",
-                        typst_string(&replacement.source),
-                        typst_string(&replacement.hyphenated),
-                        typst_string(&replacement.segmented),
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n  ");
-
-            prelude.push_str(&format!(
-                "#let __typstry_segs_{} = (\n  {}\n)\n",
-                index, dict_entries
-            ));
-            prelude.push_str(&format!(
-                "#show regex({}): it => {{\n  if it.text in __typstry_segs_{} {{\n    let rep = __typstry_segs_{}.at(it.text)\n    text(rep.at(1))\n  }} else {{\n    it\n  }}\n}}\n",
-                typst_string(provider.pattern()), index, index
-            ));
-        }
-        prelude
-    })
-    .await
-    .map_err(|e| e.to_string())
-}
 
 #[cfg(test)]
 mod tests {
@@ -1042,7 +884,6 @@ mod tests {
                 Arc::new(KhmerProvider::new().unwrap()),
                 Arc::new(MockProvider),
             ],
-            cache: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         };
 
         let response = registry.analyze_ranges(
