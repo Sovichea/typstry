@@ -10,7 +10,7 @@ import { undo, redo } from "@codemirror/commands";
 import { foldEffect, foldedRanges, indentUnit, unfoldEffect } from "@codemirror/language";
 import { closeBrackets } from "@codemirror/autocomplete";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
-import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment } from "./editor/extensions";
+import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, showZwsCompartment, showZeroWidthSpaces } from "./editor/extensions";
 import { createTypstAutocomplete } from "./editor/autocomplete";
 import { collectDefaultTypstFunctionFolds } from "./editor/folding";
 import type { EditorFoldRange } from "./editor/folding";
@@ -40,6 +40,8 @@ import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchain
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
 import { SpellcheckController } from "./editor/spellcheck";
+import type { AnalyzeResponse } from "./editor/spellcheck";
+import { parseScopeEvents, resolveScopeState } from "./editor/autoSegmenter";
 import {
   ensureTypographyTemplateApplication,
   externalReferenceLabels,
@@ -251,6 +253,7 @@ export class TypstryWorkspaceController {
     this.bindGlobalEvents();
     this.layoutController.initialize();
     this.initWordWrap();
+    this.initZwsToggle();
     this.settingsController.initializePanel();
     this.toolchainController.initialize();
     this.contextMenuController.initialize();
@@ -334,6 +337,7 @@ export class TypstryWorkspaceController {
           closeBracketsCompartment.reconfigure(editor.autoCloseBrackets ? closeBrackets() : []),
           indentationGuidesCompartment.reconfigure(editor.indentationGuides ? indentationMarkers() : []),
           tabSizeCompartment.reconfigure([EditorState.tabSize.of(editor.tabSize), indentUnit.of(indentation)]),
+          showZwsCompartment.reconfigure(editor.showZws ? showZeroWidthSpaces : []),
           completionCompartment.reconfigure(createTypstAutocomplete(
               () => this.lspClient,
               () => this.activeFilePath ? filePathToUri(this.activeFilePath) : "",
@@ -347,6 +351,8 @@ export class TypstryWorkspaceController {
 
     const wrapLabel = document.getElementById("word-wrap-label");
     if (wrapLabel) wrapLabel.textContent = editor.wordWrap ? "Wrap: On" : "Wrap: Off";
+    const zwsLabel = document.getElementById("zws-label");
+    if (zwsLabel) zwsLabel.textContent = editor.showZws ? "Invisibles: On" : "Invisibles: Off";
     if (!preview.cursorSync) this.previewSyncController.clearForward();
   }
 
@@ -358,6 +364,19 @@ export class TypstryWorkspaceController {
       wrapToggleBtn.addEventListener("click", () => {
         this.settingsController.update(settings => {
           settings.editor.wordWrap = !settings.editor.wordWrap;
+        });
+      });
+    }
+  }
+
+  private initZwsToggle() {
+    const zwsToggleBtn = document.getElementById("zws-toggle");
+    const zwsLabel = document.getElementById("zws-label");
+    if (zwsToggleBtn && zwsLabel) {
+      zwsLabel.textContent = this.settingsController.value.editor.showZws ? "Invisibles: On" : "Invisibles: Off";
+      zwsToggleBtn.addEventListener("click", () => {
+        this.settingsController.update(settings => {
+          settings.editor.showZws = !settings.editor.showZws;
         });
       });
     }
@@ -877,6 +896,7 @@ export class TypstryWorkspaceController {
     if (this.activeMode === "WYSIWYM") {
       this.mapMarkupToWysiwym(tab.content);
     }
+    void this.segmentDependenciesInBackground(tab.content);
     this.updateWorkspaceViewportVisibility();
     this.editorInstance.focus();
     this.saveWorkspaceState();
@@ -1036,6 +1056,9 @@ export class TypstryWorkspaceController {
         this.renderEditorTabs();
       }
       this.setLspStatus({ kind: "preview-ready", message: "File saved" });
+      if (this.activeFilePath) {
+        void this.segmentDependenciesInBackground(content);
+      }
     } catch (error) {
       const message = `Save failed: ${String(error)}`;
       console.error(message);
@@ -2377,6 +2400,129 @@ export class TypstryWorkspaceController {
 
   private mapWysiwymToMarkup(): string {
     return this.wysiwymAdapter.serialize();
+  }
+
+  private async segmentDependenciesInBackground(content: string) {
+    if (!this.activeFilePath) return;
+
+    const regex = /#(?:import|include)\s*["']([^"']+)["']/g;
+    const dependencyPaths: string[] = [];
+    for (const match of content.matchAll(regex)) {
+      const depPath = match[1];
+      if (depPath.startsWith("@preview/") || depPath.startsWith("@local/")) {
+        continue;
+      }
+      dependencyPaths.push(depPath);
+    }
+
+    if (dependencyPaths.length === 0) return;
+
+    try {
+      const dir = await dirname(this.activeFilePath);
+      for (const dep of dependencyPaths) {
+        let fullPath = dep;
+        if (!dep.startsWith("/") && !dep.includes(":") && dir) {
+          fullPath = await join(dir, dep);
+        }
+
+        const isOpen = this.openTabs.some(t => filePathKey(t.path) === filePathKey(fullPath));
+        if (isOpen) continue;
+
+        void this.backgroundSegmentFile(fullPath);
+      }
+    } catch (e) {
+      console.warn("[AutoSegmenter] Failed resolving dependency paths:", e);
+    }
+  }
+
+  private async backgroundSegmentFile(filePath: string) {
+    try {
+      const content = await invoke<string>("read_workspace_file", { path: filePath });
+      if (!content) return;
+
+      if (!/[\u1780-\u17ff]/.test(content)) {
+        return;
+      }
+
+      const cleaned = content.replace(/[\u200b\u00ad]/g, "");
+      const events = parseScopeEvents(cleaned);
+
+      const response = await invoke<AnalyzeResponse>("analyze_language_ranges", {
+        request: {
+          chunks: [{ text: cleaned, startUtf16: 0 }]
+        }
+      });
+
+      if (!response || !response.tokens || response.tokens.length === 0) return;
+
+      const changes: { from: number; to: number; insert: string }[] = [];
+
+      for (const token of response.tokens) {
+        if (!/[\u1780-\u17ff]/.test(token.normalizedText)) continue;
+
+        const scope = resolveScopeState(events, token.sourceFromUtf16);
+        if (scope.disabled) continue;
+
+        const currentText = cleaned.substring(token.sourceFromUtf16, token.sourceToUtf16);
+        let targetText = token.normalizedText;
+        if (scope.hyphenate && token.hyphenated) {
+          targetText = token.hyphenated;
+        }
+
+        if (currentText !== targetText) {
+          changes.push({
+            from: token.sourceFromUtf16,
+            to: token.sourceToUtf16,
+            insert: targetText
+          });
+        }
+      }
+
+      for (let i = 0; i < response.tokens.length - 1; i++) {
+        const tokenA = response.tokens[i];
+        const tokenB = response.tokens[i + 1];
+
+        if (!/[\u1780-\u17ff]/.test(tokenA.normalizedText) || !/[\u1780-\u17ff]/.test(tokenB.normalizedText)) {
+          continue;
+        }
+
+        const endA = tokenA.sourceToUtf16;
+        const startB = tokenB.sourceFromUtf16;
+
+        const scope = resolveScopeState(events, endA);
+        if (scope.disabled) continue;
+
+        if (startB === endA) {
+          changes.push({
+            from: endA,
+            to: endA,
+            insert: "\u200b"
+          });
+        }
+      }
+
+      if (changes.length > 0) {
+        changes.sort((a, b) => b.from - a.from);
+        
+        let segmentedText = cleaned;
+        for (const change of changes) {
+          segmentedText = segmentedText.substring(0, change.from) + change.insert + segmentedText.substring(change.to);
+        }
+
+        if (segmentedText !== content) {
+          await this.writeWorkspaceText(filePath, segmentedText);
+          console.log(`[AutoSegmenter] Background segmented file: ${filePath}`);
+        }
+      } else {
+        // If there were no changes, but the file had ZWS/SHY in a now-disabled block, we might need to write the cleaned content back
+        if (cleaned !== content) {
+          await this.writeWorkspaceText(filePath, cleaned);
+          console.log(`[AutoSegmenter] Background cleaned disabled regions for file: ${filePath}`);
+        }
+      }
+    } catch (error) {
+      console.warn(`[AutoSegmenter] Failed background segmentation for ${filePath}:`, error);
+    }
   }
 
 }

@@ -1,0 +1,96 @@
+#set page(width: 19cm, height: 18cm, margin: (x: 1.2cm, top: 1cm, bottom: 1cm))
+
+#set document(
+  title: "Khmer Segmentation & Hyphenation Comparison",
+  author: "Typstry Examples",
+)
+
+// typstry:typography:start
+#set text(font: "MiSans Latin", size: 10pt)
+#show regex("\p{Khmer}+"): set text(font: "MiSans Khmer")
+// typstry:typography:end
+
+#align(center)[
+  #text(size: 14pt, weight: "bold", fill: rgb("#1d3557"))[
+    Khmer Line Wrapping & Segmentation Comparison
+  ]
+]
+
+#v(0.2em)
+
+This example illustrates the visual and layout differences between three modes of Khmer line wrapping.
+You can toggle the visual ZWS/SHY indicators on/off using the *Pilcrow button (¶)* in the toolbar or the *Invisibles* button in the status bar.
+
+#v(0.8em)
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  gutter: 14pt,
+  align: top,
+  [
+    #block(
+      fill: rgb("#f1faee"),
+      inset: 9pt,
+      radius: 4pt,
+      stroke: rgb("#a8dadc"),
+      width: 100%,
+      [
+        #align(center)[#strong[1. No ZWS]]
+        #v(0.4em)
+        #set text(size: 9pt)
+        #set par(justify: true)
+        // @disable-zws
+        ភាសាខ្មែរគឺជាភាសាផ្លូវការរបស់ប្រទេសកម្ពុជា។ ប្រជាជនខ្មែរប្រើប្រាស់ភាសានេះក្នុងជីវិតប្រចាំថ្ងៃ ទាំងក្នុងវិស័យអប់រំ សេដ្ឋកិច្ច និងវប្បធម៌។ ការអភិវឌ្ឍប្រព័ន្ធបច្ចេកវិទ្យាព័ត៌មានវិទ្យាដែលគាំទ្រភាសាខ្មែរ ជាអាទិភាពដ៏សំខាន់ក្នុងការអភិវឌ្ឍប្រទេស។ និស្សិតសិក្សានៅសាកលវិទ្យាល័យភូមិន្ទភ្នំពេញតែងខិតខំប្រឹងប្រែង។
+      ],
+    )
+  ],
+  [
+    #block(
+      fill: rgb("#e8f5e9"),
+      inset: 9pt,
+      radius: 4pt,
+      stroke: rgb("#81c784"),
+      width: 100%,
+      [
+        #align(center)[#strong[2. Word Breaks (ZWS)]]
+        #v(0.4em)
+        #set text(size: 9pt)
+        #set par(justify: true)
+
+        ភាសា​ខ្មែរ​គឺ​ជា​ភាសា​ផ្លូវ​ការ​របស់​ប្រទេស​កម្ពុជា​។ ប្រជា​ជន​ខ្មែរ​ប្រើ​ប្រាស់​ភាសា​នេះ​ក្នុង​ជីវិត​ប្រចាំ​ថ្ងៃ​ ទាំង​ក្នុង​វិស័យ​អប់រំ​ សេដ្ឋ​កិច្ច​ និង​វប្ប​ធម៌​។ ការ​អភិ​វឌ្ឍ​ប្រព័ន្ធ​បច្ចេក​វិទ្យា​ព័ត៌​មាន​វិទ្យា​ដែល​គាំ​ទ្រ​ភាសា​ខ្មែរ​ ជា​អា​ទិ​ភាព​ដ៏​សំខាន់​ក្នុង​ការ​អភិ​វឌ្ឍ​ប្រទេស​។ និស្សិត​សិក្សា​នៅ​សាកល​វិទ្យា​ល័យ​ភូមិន្ទ​ភ្នំ​ពេញ​តែង​ខិត​ខំ​ប្រឹង​ប្រែង​។
+      ],
+    )
+  ],
+  [
+    #block(
+      fill: rgb("#e3f2fd"),
+      inset: 9pt,
+      radius: 4pt,
+      stroke: rgb("#64b5f6"),
+      width: 100%,
+      [
+        #align(center)[#strong[3. Syllables (ZWS+SHY)]]
+        #v(0.4em)
+        #set text(size: 9pt)
+        #set par(justify: true)
+        #set text(hyphenate: true)
+
+        ភា­សា​ខ្មែរ​គឺ​ជា​ភា­សា​ផ្លូវ­ការ​របស់​ប្រ­ទេស​កម្­ពុ­ជា​។ ប្រ­ជា​ជន​ខ្មែរ​ប្រើ​ប្រាស់​ភា­សា​នេះ​ក្នុង​ជី­វិត​ប្រ­ចាំ​ថ្ងៃ​ ទាំង​ក្នុង​វិ­ស័យ​អប់­រំ​ សេដ្ឋ​កិ­ច្ច​ និង​វប្ប​ធម៌​។ ការ​អ­ភិ​វឌ្ឍ​ប្រ­ព័ន្ធ​បច្ចេក­វិ­ទ្យា​ព័ត៌­មាន­វិ­ទ្យា​ដែល​គាំ​ទ្រ​ភា­សា​ខ្មែរ​ ជា​អា­ទិ​ភាព​ដ៏​សំ­ខាន់​ក្នុង​ការ​អ­ភិ­វឌ្ឍ​ប្រ­ទេស​។ និស­្សិត​សិក­្សា​នៅ​សា­កល​វិ­ទ្យា­ល័យ​ភូ­មិ­ន្ទ​ភ្នំ​ពេញ​តែង​ខិត​ខំ​ប្រឹង​ប្រែង​។
+      ],
+    )
+  ],
+)
+
+#v(0.8em)
+#block(
+  fill: rgb("#f5f5f5"),
+  inset: 8pt,
+  radius: 4pt,
+  width: 100%,
+  [
+    #set text(size: 8.5pt)
+    - *Column 1 (No ZWS)*: Without word-boundary markers, entire phrases cannot wrap. Long compound words like `សាកលវិទ្យាល័យភូមិន្ទ` or `ការអភិវឌ្ឍប្រព័ន្ធ` run off the edge and overflow the column boundary.
+    - *Column 2 (ZWS)*: Injected Zero Width Spaces allow wrapping at word boundaries. Paragraphs are more balanced, but internally long words (e.g. `ការអភិវឌ្ឍ`, `សាកលវិទ្យាល័យ`) still cannot be split and may leave uneven gaps.
+    - *Column 3 (ZWS+SHY)*: With `#set text(hyphenate: true)`, Soft Hyphens (`\u{00ad}`) allow syllable-level splits inside long words. Layout overflows are eliminated and text is fully justified with hyphens (`-`) visible at break points.
+  ],
+)

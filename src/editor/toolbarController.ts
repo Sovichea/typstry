@@ -367,6 +367,7 @@ export class EditorToolbarController {
         break;
       case "export-pdf": document.getElementById("action-export-pdf")?.click(); break;
       case "toggle-wrap": document.getElementById("word-wrap-toggle")?.click(); break;
+      case "toggle-special-chars": document.getElementById("zws-toggle")?.click(); break;
       // TODO: Re-enable when the WYSIWYM layout is ready for use.
       // case "toggle-mode": this.dependencies.toggleMode(); break;
     }

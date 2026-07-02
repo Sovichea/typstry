@@ -1,12 +1,11 @@
 use super::provider::{
     AnalyzeRequest, AnalyzeResponse, CompletionRequest, CompletionResponse, EditorToken,
-    LanguageSegmenter, ProviderCapabilities, RenderReplacement, SegmentToken, SuggestionRequest,
+    LanguageSegmenter, ProviderCapabilities, SegmentToken, SuggestionRequest,
     SuggestionResponse, TextAnalysis,
 };
 use khmer_segmenter::kdict::{KDict, KHypDict};
 use khmer_segmenter::{KhmerSegmenter, SegmenterConfig};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 const KHMER_DICTIONARY: &[u8] =
@@ -216,12 +215,16 @@ impl LanguageSegmenter for KhmerProvider {
                 let lookup_key = modern_khmer_key(token);
                 let known =
                     !token.chars().any(is_spelling_char) || self.known.contains(&lookup_key);
+                let hyphenated = self.hyphenation
+                    .lookup(token)
+                    .map(|value| value.replace('\u{200b}', "\u{00ad}"));
                 SegmentToken {
                     text: token.to_owned(),
                     from: byte_to_utf16[segment.source_range.start],
                     to: byte_to_utf16[segment.source_range.end],
                     known,
                     known_prefix: known || self.has_prefix(token),
+                    hyphenated,
                 }
             })
             .collect();
@@ -381,50 +384,6 @@ impl LanguageSegmenter for KhmerProvider {
             .map(|(_, _, candidate)| candidate.clone())
             .collect()
     }
-
-    fn render_replacements(&self, text: &str) -> Vec<RenderReplacement> {
-        let mut runs = Vec::new();
-        let mut start = None;
-        for (index, character) in text.char_indices() {
-            let is_khmer = ('\u{1780}'..='\u{17ff}').contains(&character);
-            match (start, is_khmer) {
-                (None, true) => start = Some(index),
-                (Some(from), false) => {
-                    runs.push(&text[from..index]);
-                    start = None;
-                }
-                _ => {}
-            }
-        }
-        if let Some(from) = start {
-            runs.push(&text[from..]);
-        }
-
-        runs.into_iter()
-            .filter_map(|source| {
-                let segmentation = self.segmenter.segment_detailed(source).ok()?;
-                if segmentation.normalized() != source {
-                    return None;
-                }
-                let segmented = segmentation.join("\u{200b}");
-                let hyphenated = segmentation
-                    .tokens()
-                    .map(|token| {
-                        self.hyphenation
-                            .lookup(token)
-                            .map(|value| value.replace('\u{200b}', "\u{00ad}"))
-                            .unwrap_or_else(|| token.to_owned())
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\u{200b}");
-                (segmented != source || hyphenated != source).then(|| RenderReplacement {
-                    source: source.to_owned(),
-                    segmented,
-                    hyphenated,
-                })
-            })
-            .collect()
-    }
 }
 
 #[derive(Clone)]
@@ -487,6 +446,7 @@ impl SegmentationRegistry {
                         normalized_text: token.text.clone(),
                         known: token.known,
                         known_prefix: token.known_prefix,
+                        hyphenated: token.hyphenated.clone(),
                     }
                 })
                 .collect();
@@ -513,6 +473,7 @@ impl SegmentationRegistry {
                             normalized_text: token.text.clone(),
                             known: token.known,
                             known_prefix: token.known_prefix,
+                            hyphenated: token.hyphenated.clone(),
                         });
                     }
                 }
@@ -792,15 +753,6 @@ mod tests {
     }
 
     #[test]
-    fn emits_discretionary_hyphenation_for_typst() {
-        let provider = KhmerProvider::new().expect("Khmer provider");
-        let replacements = provider.render_replacements("កក្រើករំជួល");
-        assert!(replacements
-            .iter()
-            .any(|replacement| replacement.hyphenated.contains('\u{00ad}')));
-    }
-
-    #[test]
     fn suggests_completions_for_an_unknown_dictionary_prefix() {
         let provider = KhmerProvider::new().expect("Khmer provider");
         let (prefix, full_word) = provider
@@ -844,6 +796,7 @@ mod tests {
                             to: current_utf16,
                             known: word == "hello" || word == "world",
                             known_prefix: false,
+                            hyphenated: None,
                         });
                         start = None;
                     }
@@ -859,6 +812,7 @@ mod tests {
                     to: current_utf16,
                     known: word == "hello" || word == "world",
                     known_prefix: false,
+                    hyphenated: None,
                 });
             }
             Ok(TextAnalysis {
@@ -870,9 +824,20 @@ mod tests {
         fn suggestions(&self, _word: &str, _limit: usize) -> Vec<String> {
             vec!["hello".to_string(), "world".to_string()]
         }
-        fn render_replacements(&self, _text: &str) -> Vec<RenderReplacement> {
-            Vec::new()
-        }
+    }
+
+    #[test]
+    fn test_khmer_hyphenation_lookup() {
+        let provider = KhmerProvider::new().unwrap();
+        let analysis = provider.analyze("សាលារៀន").unwrap();
+        assert!(!analysis.tokens.is_empty());
+        
+        let words_with_hyphens: Vec<_> = analysis.tokens.iter()
+            .filter(|t| t.hyphenated.is_some())
+            .collect();
+        
+        // Let's assert that at least one token has hyphenated representation
+        assert!(!words_with_hyphens.is_empty(), "No hyphenated tokens found! Words analyzed: {:?}", analysis.tokens);
     }
 
     #[test]

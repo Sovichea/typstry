@@ -19,6 +19,7 @@ import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
 import { typstFunctionFoldService } from "./folding";
+import { createAutoSegmenter } from "./autoSegmenter";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -29,6 +30,7 @@ export const closeBracketsCompartment = new Compartment();
 export const indentationGuidesCompartment = new Compartment();
 export const tabSizeCompartment = new Compartment();
 export const completionCompartment = new Compartment();
+export const showZwsCompartment = new Compartment();
 
 function foldedTypstPlaceholderSuffix(state: EditorState, range: { from: number; to: number }): string {
   const foldedText = state.doc.sliceString(range.from, range.to).trimEnd();
@@ -132,18 +134,27 @@ class ZWSWidget extends WidgetType {
     span.className = "cm-zws-widget";
     return span;
   }
-
-  eq(_other: ZWSWidget) {
-    return true;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
+  eq(_other: ZWSWidget) { return true; }
+  ignoreEvent() { return false; }
 }
 
 const zwsDecoration = Decoration.widget({
   widget: new ZWSWidget(),
+  side: -1
+});
+
+class SHYWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-shy-widget";
+    return span;
+  }
+  eq(_other: SHYWidget) { return true; }
+  ignoreEvent() { return false; }
+}
+
+const shyDecoration = Decoration.widget({
+  widget: new SHYWidget(),
   side: -1
 });
 
@@ -164,12 +175,27 @@ export const showZeroWidthSpaces = ViewPlugin.fromClass(class {
     const builder = new RangeSetBuilder<Decoration>();
     for (const { from, to } of view.visibleRanges) {
       const text = view.state.doc.sliceString(from, to);
+      const matches: { index: number; deco: Decoration }[] = [];
+
       let index = 0;
       while (true) {
         const next = text.indexOf("\u200b", index);
         if (next === -1) break;
-        builder.add(from + next, from + next + 1, zwsDecoration);
+        matches.push({ index: next, deco: zwsDecoration });
         index = next + 1;
+      }
+
+      index = 0;
+      while (true) {
+        const next = text.indexOf("\u00ad", index);
+        if (next === -1) break;
+        matches.push({ index: next, deco: shyDecoration });
+        index = next + 1;
+      }
+
+      matches.sort((a, b) => a.index - b.index);
+      for (const m of matches) {
+        builder.add(from + m.index, from + m.index + 1, m.deco);
       }
     }
     return builder.finish();
@@ -187,7 +213,8 @@ export function getEditorExtensions(
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
-    showZeroWidthSpaces,
+    showZwsCompartment.of(showZeroWidthSpaces),
+    createAutoSegmenter(),
     preventEscapedBracketAutoClose,
     EditorView.domEventHandlers({
       mousedown: (event, view) => {

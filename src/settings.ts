@@ -29,6 +29,7 @@ export type AppSettings = {
     indentationGuides: boolean;
     spellcheck: boolean;
     wordCompletion: boolean;
+    showZws: boolean;
     userDictionary: string[];
   };
   preview: {
@@ -59,6 +60,7 @@ export const defaultAppSettings: AppSettings = {
     indentationGuides: true,
     spellcheck: true,
     wordCompletion: true,
+    showZws: true,
     userDictionary: []
   },
   preview: {
@@ -118,6 +120,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
       spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck),
       wordCompletion: booleanValue(editor.wordCompletion, defaultAppSettings.editor.wordCompletion),
+      showZws: booleanValue(editor.showZws, defaultAppSettings.editor.showZws),
       userDictionary: Array.isArray(editor.userDictionary)
         ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()
         : []
