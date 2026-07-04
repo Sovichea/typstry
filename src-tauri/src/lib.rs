@@ -7,12 +7,20 @@ mod examples;
 mod font_store;
 mod segmentation;
 mod toolchain;
+mod render_prepare;
 use examples::prepare_examples_workspace;
 use segmentation::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
     language_suggestions, SegmentationRegistry,
 };
 use toolchain::active_tinymist;
+use render_prepare::{
+    prepare_render_project,
+    prepare_render_file,
+    map_generated_to_source,
+    map_source_to_generated,
+};
+
 
 #[tauri::command]
 fn list_system_fonts() -> font_store::SystemFontCatalog {
@@ -1211,7 +1219,11 @@ pub fn run() {
             list_tinymist_releases,
             install_tinymist_toolchain,
             start_tinymist_lsp,
-            send_lsp_message
+            send_lsp_message,
+            prepare_render_project,
+            prepare_render_file,
+            map_generated_to_source,
+            map_source_to_generated
         ])
         .run(tauri::generate_context!())
         .expect("Error initializing Tauri execution engine");

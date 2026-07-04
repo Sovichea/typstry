@@ -40,8 +40,7 @@ import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchain
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
 import { SpellcheckController } from "./editor/spellcheck";
-import type { AnalyzeResponse } from "./editor/spellcheck";
-import { parseScopeEvents, resolveScopeState } from "./editor/autoSegmenter";
+
 import {
   ensureTypographyTemplateApplication,
   externalReferenceLabels,
@@ -99,16 +98,20 @@ export class TypstryWorkspaceController {
   private currentVersion = 1;
   private isLoadingFile = false;
   private lspReady = false;
-  private readonly lspSyncDebounceMs = 350;
+  private readonly lspSyncDebounceMs = 50;
   private forwardSyncDebounceMs = 120;
   private pendingLspSyncTimer: number | null = null;
   private pendingLspSyncPath: string | null = null;
   private pendingLspSyncText: string | null = null;
+  private lspSyncRequestGenerations = new Map<string, number>();
   private fallbackPreviewTimer: number | null = null;
   private fallbackPreviewGeneration = 0;
   private latestDocumentVersion = 1;
   private openTabs: EditorTab[] = [];
   private readonly openedDocumentUris = new Set<string>();
+  private lastKhmerRenderPrepState: boolean | undefined = undefined;
+  private preparedContentsCache = new Map<string, { content: string; preparedText: string; generatedPath: string }>();
+  private lspSyncGenerations = new Map<string, number>();
   private workspaceChangeQueue: Promise<void> = Promise.resolve();
   private readonly externalConflictPaths = new Set<string>();
   private readonly settingsController = new SettingsController(settings => this.applySettingsToRuntime(settings));
@@ -149,7 +152,69 @@ export class TypstryWorkspaceController {
     getPreviewRootPath: () => this.previewRootPath,
     getPreviewTaskId: () => this.previewTaskId,
     isReady: () => this.lspReady,
-    isEnabled: () => this.settingsController.value.preview.cursorSync
+    isEnabled: () => this.settingsController.value.preview.cursorSync,
+    mapForwardPosition: async (path: string, cursor: number) => {
+      if (!this.settingsController.value.preview.khmerRenderPreparation || !this.workspaceRootPath) {
+        return null;
+      }
+      const cacheRoot = this.getCacheRootPath();
+      if (!cacheRoot) return null;
+      
+      const cachePath = this.mapToCachePath(path);
+      if (!cachePath) return null;
+      
+      const cacheContent = this.preparedContentsCache.get(filePathKey(path))?.preparedText;
+      if (!cacheContent) return null;
+      
+      const originalContent = this.editorInstance.state.doc.toString();
+      const subStrOriginal = originalContent.substring(0, cursor);
+      const originalByteOffset = new TextEncoder().encode(subStrOriginal).length;
+      
+      const relPath = path.startsWith(this.workspaceRootPath)
+        ? path.substring(this.workspaceRootPath.length).replace(/^[/\\]+/, "")
+        : path;
+        
+      try {
+        const cacheByteOffset = await invoke<number | null>("map_source_to_generated", {
+          cacheRoot,
+          relativePath: relPath,
+          sourceOffset: originalByteOffset
+        });
+        
+        if (cacheByteOffset === null || cacheByteOffset === undefined) return null;
+        
+        const cacheBytes = new TextEncoder().encode(cacheContent);
+        const subBytes = cacheBytes.slice(0, cacheByteOffset);
+        const subStrCache = new TextDecoder().decode(subBytes);
+        const cacheCharOffset = subStrCache.length;
+        
+        const lines = cacheContent.split(/\r?\n/);
+        let lineIndex = 0;
+        let runningOffset = 0;
+        for (let i = 0; i < lines.length; i++) {
+          const lineLength = lines[i].length + 1;
+          if (runningOffset + lineLength > cacheCharOffset) {
+            lineIndex = i;
+            break;
+          }
+          runningOffset += lineLength;
+          lineIndex = i;
+        }
+        
+        const colIndex = cacheCharOffset - runningOffset;
+        const lineText = lines[lineIndex] || "";
+        const character = this.lspClient.lspCharacterFromStringOffset(lineText, Math.max(0, colIndex));
+        
+        return {
+          filepath: cachePath,
+          line: lineIndex,
+          character
+        };
+      } catch (e) {
+        console.error("Failed to map forward sync position:", e);
+        return null;
+      }
+    }
   });
   private readonly logConsoleController = new LogConsoleController(entry => this.navigateToLogEntry(entry));
   private readonly layoutController = new LayoutController(
@@ -326,6 +391,22 @@ export class TypstryWorkspaceController {
 
     void applyUIThemeVariables(appearance.theme);
 
+    const khmerPrepChanged = this.lastKhmerRenderPrepState !== undefined && this.lastKhmerRenderPrepState !== preview.khmerRenderPreparation;
+    this.lastKhmerRenderPrepState = preview.khmerRenderPreparation;
+
+    const khmerPrepStatus = document.getElementById("khmer-prep-status");
+    if (khmerPrepStatus) {
+      if (preview.khmerRenderPreparation) {
+        khmerPrepStatus.classList.remove("hidden");
+      } else {
+        khmerPrepStatus.classList.add("hidden");
+      }
+    }
+
+    if (khmerPrepChanged) {
+      void this.prepareRenderProjectIfNeeded().then(() => this.refreshActivePreviewRoot());
+    }
+
     if (this.editorInstance) {
       const indentation = " ".repeat(editor.tabSize);
       this.editorInstance.dispatch({
@@ -340,7 +421,7 @@ export class TypstryWorkspaceController {
           showZwsCompartment.reconfigure(editor.showZws ? showZeroWidthSpaces : []),
           completionCompartment.reconfigure(createTypstAutocomplete(
               () => this.lspClient,
-              () => this.activeFilePath ? filePathToUri(this.activeFilePath) : "",
+              () => this.getActiveLspUri(),
               () => this.flushPendingLspSync(),
               editor.wordCompletion,
               () => this.spellcheckController.getProviders()
@@ -499,7 +580,7 @@ export class TypstryWorkspaceController {
         extensions: [
           getEditorExtensions(
             () => this.lspClient,
-            () => this.activeFilePath ? filePathToUri(this.activeFilePath) : "",
+            () => this.getActiveLspUri(),
             () => this.flushPendingLspSync(),
             (uri, line, character) => void this.navigateToLspLocation(uri, line, character),
             () => this.spellcheckController.getProviders()
@@ -841,6 +922,7 @@ export class TypstryWorkspaceController {
     }
 
     this.activeFilePath = path;
+    await this.prepareRenderProjectIfNeeded();
     let previewTarget = await invoke<PreviewTarget>("resolve_preview_main", {
       filePath: path,
       workspaceRootPath: this.workspaceRootPath,
@@ -869,8 +951,11 @@ export class TypstryWorkspaceController {
 
 
     if (this.lspReady && this.lspClient) {
-      const uri = filePathToUri(path);
-      await this.openDocumentIfNeeded(uri, tab.content, this.currentVersion);
+      const lspRes = await this.getLspUriAndContent(path, tab.content);
+      if (lspRes) {
+        const { uri: lspUri, content: lspContent } = lspRes;
+        await this.openDocumentIfNeeded(lspUri, lspContent, this.currentVersion);
+      }
       const pinChanged = await this.updatePinnedMain(previewTarget.mainPath);
       if (pinChanged) {
         await this.recheckActiveDocumentAfterPin(tab.content);
@@ -896,7 +981,7 @@ export class TypstryWorkspaceController {
     if (this.activeMode === "WYSIWYM") {
       this.mapMarkupToWysiwym(tab.content);
     }
-    void this.segmentDependenciesInBackground(tab.content);
+
     this.updateWorkspaceViewportVisibility();
     this.editorInstance.focus();
     this.saveWorkspaceState();
@@ -947,10 +1032,22 @@ export class TypstryWorkspaceController {
     this.setLspStatus({ kind: "syncing", message: "Compiling preview with Typst" });
     this.previewFrame.setLoading("Compiling preview with Typst...");
     try {
+      let targetPath = path;
+      let targetContent = text;
+      let targetPreviewRoot = this.previewRootPath;
+
+      if (this.settingsController.value.preview.khmerRenderPreparation) {
+        const lspRes = await this.getLspUriAndContent(path, text);
+        if (!lspRes) return;
+        targetPath = filePathFromUri(lspRes.uri);
+        targetContent = lspRes.content;
+        targetPreviewRoot = this.previewRootPath ? this.mapToCachePath(this.previewRootPath) : null;
+      }
+
       const pages = await invoke<string[]>("compile_typst_preview", {
-        sourceCode: text,
-        filePath: path,
-        previewRootPath: this.previewRootPath
+        sourceCode: targetContent,
+        filePath: targetPath,
+        previewRootPath: targetPreviewRoot
       });
       if (generation !== this.fallbackPreviewGeneration || path !== this.activeFilePath) return;
       this.previewFrame.mountSvgPages(pages);
@@ -1044,7 +1141,11 @@ export class TypstryWorkspaceController {
 
       if (this.lspReady && this.lspClient) {
         await this.flushPendingLspSync();
-        await this.lspClient.notifyTextSave(filePathToUri(this.activeFilePath), content);
+        const lspRes = await this.getLspUriAndContent(this.activeFilePath, content);
+        if (lspRes) {
+          const { uri: lspUri, content: lspContent } = lspRes;
+          await this.lspClient.notifyTextSave(lspUri, lspContent);
+        }
       }
 
       const activeTab = this.getActiveTab();
@@ -1056,9 +1157,7 @@ export class TypstryWorkspaceController {
         this.renderEditorTabs();
       }
       this.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (this.activeFilePath) {
-        void this.segmentDependenciesInBackground(content);
-      }
+
     } catch (error) {
       const message = `Save failed: ${String(error)}`;
       console.error(message);
@@ -1094,10 +1193,13 @@ export class TypstryWorkspaceController {
       this.renderEditorTabs();
     }
     if (this.lspReady && this.lspClient) {
-      const uri = filePathToUri(path);
-      await this.openDocumentIfNeeded(uri, content, tab?.version ?? 1);
-      await this.lspClient.notifyTextChange(uri, content, tab?.version ?? 2);
-      await this.lspClient.notifyTextSave(uri, content);
+      const lspRes = await this.getLspUriAndContent(path, content);
+      if (lspRes) {
+        const { uri: lspUri, content: lspContent } = lspRes;
+        await this.openDocumentIfNeeded(lspUri, lspContent, tab?.version ?? 1);
+        await this.lspClient.notifyTextChange(lspUri, lspContent, tab?.version ?? 2);
+        await this.lspClient.notifyTextSave(lspUri, lspContent);
+      }
     }
   }
 
@@ -1178,13 +1280,21 @@ export class TypstryWorkspaceController {
   }
 
   private applyPreviewTargetToTab(tab: EditorTab, target: PreviewTarget): void {
-    const style = previewRefreshStyle(target);
-    const identity = target.rootPath ? previewSessionIdentity(target.rootPath, style) : null;
-    tab.previewRootPath = target.rootPath;
-    tab.previewMainPath = target.mainPath;
+    let mappedTarget = target;
+    if (this.settingsController.value.preview.khmerRenderPreparation) {
+      mappedTarget = {
+        ...target,
+        rootPath: this.mapToCachePath(target.rootPath),
+        mainPath: this.mapToCachePath(target.mainPath)
+      };
+    }
+    const style = previewRefreshStyle(mappedTarget);
+    const identity = mappedTarget.rootPath ? previewSessionIdentity(mappedTarget.rootPath, style) : null;
+    tab.previewRootPath = mappedTarget.rootPath;
+    tab.previewMainPath = mappedTarget.mainPath;
     tab.previewTaskId = identity?.taskId ?? null;
     tab.previewSessionKey = identity?.key ?? null;
-    tab.previewImported = target.imported;
+    tab.previewImported = mappedTarget.imported;
     tab.previewLiveUpdates = target.liveUpdates;
     this.previewRootPath = tab.previewRootPath;
     this.previewMainPath = tab.previewMainPath;
@@ -1235,6 +1345,9 @@ export class TypstryWorkspaceController {
       if (existingSource !== previewSource) {
         await invoke("save_workspace_file", { path: previewPath, contents: previewSource });
       }
+      if (this.settingsController.value.preview.khmerRenderPreparation) {
+        await this.getLspUriAndContent(previewPath, previewSource);
+      }
       return { ...target, rootPath: previewPath };
     } catch (error) {
       this.appendLspLog({
@@ -1254,10 +1367,14 @@ export class TypstryWorkspaceController {
 
   private async updatePinnedMain(path: string | null, force = false): Promise<boolean> {
     if (!this.lspReady || !this.lspClient) return false;
-    if (!force && filePathKey(this.pinnedLspMainPath ?? "") === filePathKey(path ?? "")) return false;
+    let targetPath = path;
+    if (this.settingsController.value.preview.khmerRenderPreparation && path) {
+      targetPath = this.mapToCachePath(path);
+    }
+    if (!force && filePathKey(this.pinnedLspMainPath ?? "") === filePathKey(targetPath ?? "")) return false;
     try {
-      await this.lspClient.pinMain(path);
-      this.pinnedLspMainPath = path;
+      await this.lspClient.pinMain(targetPath);
+      this.pinnedLspMainPath = targetPath;
       return true;
     } catch (error) {
       this.appendLspLog({
@@ -1280,7 +1397,11 @@ export class TypstryWorkspaceController {
       activeTab.version = version;
       activeTab.latestVersion = version;
     }
-    await this.lspClient.notifyTextChange(filePathToUri(this.activeFilePath), text, version);
+    const lspRes = await this.getLspUriAndContent(this.activeFilePath, text);
+    if (!lspRes) return;
+    const { uri: lspUri, content: lspContent } = lspRes;
+    await this.openDocumentIfNeeded(lspUri, lspContent, version);
+    await this.lspClient.notifyTextChange(lspUri, lspContent, version);
   }
 
   private async activatePreviewSession(activeContents: string): Promise<boolean> {
@@ -1394,6 +1515,10 @@ export class TypstryWorkspaceController {
 
     const path = this.pendingLspSyncPath;
     const text = this.pendingLspSyncText;
+    const requestKey = filePathKey(path);
+    const expectedGeneration = (this.lspSyncRequestGenerations.get(requestKey) ?? 0) + 1;
+    this.lspSyncRequestGenerations.set(requestKey, expectedGeneration);
+
     this.pendingLspSyncPath = null;
     this.pendingLspSyncText = null;
 
@@ -1407,6 +1532,11 @@ export class TypstryWorkspaceController {
       });
       target = await this.prepareTemplateAwarePreview(target, path, text);
     }
+    
+    if (this.lspSyncRequestGenerations.get(requestKey) !== expectedGeneration) {
+      return;
+    }
+
     const version = ++this.currentVersion;
     this.latestDocumentVersion = version;
     const activeTab = this.getActiveTab();
@@ -1414,7 +1544,11 @@ export class TypstryWorkspaceController {
       activeTab.version = version;
       activeTab.latestVersion = version;
     }
-    await this.lspClient.notifyTextChange(filePathToUri(path), text, version);
+    const lspRes = await this.getLspUriAndContent(path, text);
+    if (!lspRes) return;
+    const { uri: lspUri, content: lspContent } = lspRes;
+    await this.openDocumentIfNeeded(lspUri, lspContent, version);
+    await this.lspClient.notifyTextChange(lspUri, lspContent, version);
     window.setTimeout(() => {
       if (this.lspReady && !this.pendingLspSyncTimer && this.pendingLspSyncText === null) {
         this.setLspStatus({ kind: "preview-ready", message: "Preview update sent" });
@@ -1424,9 +1558,19 @@ export class TypstryWorkspaceController {
 
   private async runFallbackDiagnostics(path: string, text: string, version: number) {
     try {
+      let targetPath = path;
+      let targetContent = text;
+
+      if (this.settingsController.value.preview.khmerRenderPreparation) {
+        const lspRes = await this.getLspUriAndContent(path, text);
+        if (!lspRes) return;
+        targetPath = filePathFromUri(lspRes.uri);
+        targetContent = lspRes.content;
+      }
+
       const diagnostics = await invoke<FallbackDiagnostic[]>("check_typst_document", {
-        sourceCode: text,
-        filePath: path
+        sourceCode: targetContent,
+        filePath: targetPath
       });
 
       if (version !== this.latestDocumentVersion || path !== this.activeFilePath) {
@@ -1437,9 +1581,38 @@ export class TypstryWorkspaceController {
         (diagnostic) => !diagnostic.message.includes("cannot export multiple images without a page number template")
       );
 
-      const editorDiagnostics = filteredDiagnostics
-        .map((diagnostic) => this.editorDiagnosticFromFallback(diagnostic))
-        .filter((diagnostic): diagnostic is EditorDiagnostic => diagnostic !== null);
+      const editorDiagnostics: EditorDiagnostic[] = [];
+      const cacheRelPath = path.startsWith(this.workspaceRootPath!)
+        ? path.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
+        : path;
+      const cacheContent = this.preparedContentsCache.get(filePathKey(path))?.preparedText || "";
+
+      for (const diagnostic of filteredDiagnostics) {
+        let from: number | null = null;
+        if (this.settingsController.value.preview.khmerRenderPreparation) {
+          from = await this.mapCacheLineColumnToOriginalEditorOffset(
+            cacheRelPath,
+            diagnostic.line ?? 1,
+            diagnostic.column ?? 1,
+            cacheContent
+          );
+        } else {
+          const doc = this.editorInstance.state.doc;
+          if (doc.length) {
+            const line = Math.max(1, Math.min(diagnostic.line ?? 1, doc.lines));
+            const lineInfo = doc.line(line);
+            from = Math.max(lineInfo.from, Math.min(lineInfo.from + (diagnostic.column ?? 1) - 1, lineInfo.to));
+          }
+        }
+        if (from !== null) {
+          editorDiagnostics.push({
+            from,
+            to: from,
+            severity: diagnostic.severity,
+            message: diagnostic.message
+          });
+        }
+      }
 
       this.editorInstance.dispatch({
         effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
@@ -1463,17 +1636,7 @@ export class TypstryWorkspaceController {
     }
   }
 
-  private editorDiagnosticFromFallback(diagnostic: FallbackDiagnostic): EditorDiagnostic | null {
-    if (!diagnostic.line) return null;
 
-    const from = this.editorPositionFromSourceLocation(diagnostic.line, diagnostic.column ?? 1);
-    return {
-      from,
-      to: Math.min(from + 1, this.editorInstance.state.doc.length),
-      severity: diagnostic.severity,
-      message: diagnostic.message
-    };
-  }
 
   private clearPendingLspSync() {
     if (this.pendingLspSyncTimer) {
@@ -1486,7 +1649,10 @@ export class TypstryWorkspaceController {
 
 
   private async handleInverseSync(uri: string | undefined, position: LspSourcePosition): Promise<number> {
-    const targetPath = uri ? filePathFromUri(uri) : null;
+    let targetPath = uri ? filePathFromUri(uri) : null;
+    if (this.settingsController.value.preview.khmerRenderPreparation && targetPath) {
+      targetPath = this.mapToOriginalPath(targetPath);
+    }
     const existingTargetTab = targetPath
       ? this.openTabs.find((tab) => filePathKey(tab.path) === filePathKey(targetPath))
       : null;
@@ -1500,8 +1666,19 @@ export class TypstryWorkspaceController {
     }
 
     this.previewSyncController.clearForward();
-    const defaultCursorPos = this.editorPositionFromLspPosition(position) ?? 0;
-    return this.previewSyncController.mapInversePosition(position, defaultCursorPos);
+    
+    let defaultCursorPos = 0;
+    if (this.settingsController.value.preview.khmerRenderPreparation && targetPath && uri) {
+      const relPath = targetPath.startsWith(this.workspaceRootPath!)
+        ? targetPath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
+        : targetPath;
+      const cacheContent = this.preparedContentsCache.get(filePathKey(targetPath))?.preparedText || "";
+      defaultCursorPos = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, position, cacheContent) ?? 0;
+      return defaultCursorPos;
+    } else {
+      defaultCursorPos = this.editorPositionFromLspPosition(position) ?? 0;
+      return this.previewSyncController.mapInversePosition(position, defaultCursorPos);
+    }
   }
 
   private utf8ByteLength(text: string): number {
@@ -1518,25 +1695,24 @@ export class TypstryWorkspaceController {
     }
   }
 
-  private handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
+  private async handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
     if (typeof version === "number" && version < this.latestDocumentVersion) return;
 
-    if (!this.activeFilePath || filePathKey(filePathFromUri(uri)) !== filePathKey(this.activeFilePath)) {
+    const originalPath = this.mapToOriginalPath(filePathFromUri(uri));
+    if (!this.activeFilePath || filePathKey(originalPath) !== filePathKey(this.activeFilePath)) {
       return;
     }
 
-    const isPackageFile = uri.toLowerCase().includes("typst/packages") || 
-                          uri.toLowerCase().includes("typst\\packages") ||
-                          uri.toLowerCase().includes("packages/preview") ||
-                          uri.toLowerCase().includes("packages\\preview");
+    const isPackageFile = originalPath.toLowerCase().includes("typst/packages") || 
+                          originalPath.toLowerCase().includes("typst\\packages") ||
+                          originalPath.toLowerCase().includes("packages/preview") ||
+                          originalPath.toLowerCase().includes("packages\\preview");
     if (isPackageFile) {
       this.editorInstance.dispatch({
         effects: setEditorDiagnosticsEffect.of([])
       });
       return;
     }
-
-
 
     const externalLabels = this.previewImported && this.previewLiveUpdates
       ? new Set(externalReferenceLabels(this.editorInstance.state.doc.toString()))
@@ -1549,9 +1725,31 @@ export class TypstryWorkspaceController {
       );
     });
 
-    const editorDiagnostics = filteredDiagnostics
-      .map((diagnostic) => this.editorDiagnosticFromLsp(diagnostic))
-      .filter((diagnostic): diagnostic is EditorDiagnostic => diagnostic !== null);
+    const editorDiagnostics: EditorDiagnostic[] = [];
+    const relPath = originalPath.startsWith(this.workspaceRootPath!)
+      ? originalPath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
+      : originalPath;
+    const cacheContent = this.preparedContentsCache.get(filePathKey(originalPath))?.preparedText || "";
+
+    for (const diagnostic of filteredDiagnostics) {
+      let from: number | null = null;
+      let to: number | null = null;
+      if (this.settingsController.value.preview.khmerRenderPreparation) {
+        from = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, diagnostic.range.start, cacheContent);
+        to = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, diagnostic.range.end, cacheContent);
+      } else {
+        from = this.editorPositionFromLspPosition(diagnostic.range.start);
+        to = this.editorPositionFromLspPosition(diagnostic.range.end);
+      }
+      if (from !== null && to !== null) {
+        editorDiagnostics.push({
+          from,
+          to: Math.max(from, to),
+          severity: this.diagnosticSeverityFromLsp(diagnostic.severity),
+          message: diagnostic.message
+        });
+      }
+    }
 
     this.editorInstance.dispatch({
       effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
@@ -1560,18 +1758,7 @@ export class TypstryWorkspaceController {
     this.logConsoleController.setDiagnostics(filteredDiagnostics.map((diagnostic) => this.logEntryFromDiagnostic(uri, diagnostic)));
   }
 
-  private editorDiagnosticFromLsp(diagnostic: LspDiagnostic): EditorDiagnostic | null {
-    const from = this.editorPositionFromLspPosition(diagnostic.range.start);
-    const to = this.editorPositionFromLspPosition(diagnostic.range.end);
-    if (from === null || to === null) return null;
 
-    return {
-      from,
-      to: Math.max(from, to),
-      severity: this.diagnosticSeverityFromLsp(diagnostic.severity),
-      message: diagnostic.message
-    };
-  }
 
   private diagnosticSourceText(diagnostic: LspDiagnostic): string {
     const from = this.editorPositionFromLspPosition(diagnostic.range.start);
@@ -1651,13 +1838,22 @@ export class TypstryWorkspaceController {
   }
 
   private async navigateToLspLocation(uri: string, line: number, character: number) {
-    const filePath = filePathFromUri(uri);
+    let filePath = filePathFromUri(uri);
+    if (this.settingsController.value.preview.khmerRenderPreparation) {
+      filePath = this.mapToOriginalPath(filePath);
+    }
     if (filePath !== this.activeFilePath) {
       await this.loadFile(filePath);
     }
     
     let cursor = 0;
-    if (this.lspClient) {
+    if (this.settingsController.value.preview.khmerRenderPreparation && this.lspClient) {
+      const relPath = filePath.startsWith(this.workspaceRootPath!)
+        ? filePath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
+        : filePath;
+      const cacheContent = this.preparedContentsCache.get(filePathKey(filePath))?.preparedText || "";
+      cursor = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, { line, character }, cacheContent) ?? 0;
+    } else if (this.lspClient) {
       cursor = this.lspClient.editorPositionFromLspPosition({ line, character });
     } else {
       const doc = this.editorInstance.state.doc;
@@ -1807,6 +2003,19 @@ export class TypstryWorkspaceController {
     const workspaceRoot = this.workspaceRootPath;
     if (!workspaceRoot || filePathKey(change.rootPath) !== filePathKey(workspaceRoot)) return;
 
+    // Ignore changes that are only inside the cache (.typstry) directory to prevent infinite loops and race conditions
+    const hasExternalChanges = change.paths.some(path => {
+      const relPath = path.startsWith(workspaceRoot)
+        ? path.substring(workspaceRoot.length)
+        : path;
+      const cleanRel = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
+      return !cleanRel.startsWith(".typstry");
+    });
+    
+    if (!hasExternalChanges) return;
+
+    await this.prepareRenderProjectIfNeeded();
+
     await Promise.all([
       this.explorer.loadWorkspace(workspaceRoot),
       this.reloadOpenFilesFromDisk()
@@ -1818,12 +2027,18 @@ export class TypstryWorkspaceController {
     if (this.lspReady && this.lspClient) {
       const defaultType: 1 | 2 | 3 = change.kind === "create" ? 1 : change.kind === "remove" ? 3 : 2;
       const lastPathIndex = change.paths.length - 1;
-      const changes = change.paths.map((path, index) => ({
-        uri: filePathToUri(path),
-        type: change.kind === "rename" && change.paths.length > 1
-          ? (index === lastPathIndex ? 1 : 3) as 1 | 3
-          : defaultType
-      }));
+      const changes = change.paths.map((path, index) => {
+        let targetPath = path;
+        if (this.settingsController.value.preview.khmerRenderPreparation) {
+          targetPath = this.mapToCachePath(path)!;
+        }
+        return {
+          uri: filePathToUri(targetPath),
+          type: change.kind === "rename" && change.paths.length > 1
+            ? (index === lastPathIndex ? 1 : 3) as 1 | 3
+            : defaultType
+        };
+      });
       await this.lspClient.notifyWorkspaceFilesChanged(changes);
     } else if (this.activeFilePath) {
       this.scheduleCompilerPreview(this.activeFilePath, this.editorInstance.state.doc.toString());
@@ -1920,9 +2135,14 @@ export class TypstryWorkspaceController {
     tab.version = version;
     tab.latestVersion = version;
     if (this.lspReady && this.lspClient) {
-      await this.lspClient.notifyTextChange(filePathToUri(tab.path), contents, version);
-      await this.lspClient.notifyTextSave(filePathToUri(tab.path), contents);
-      this.setLspStatus({ kind: "preview-ready", message: "Reloaded external file change" });
+      const lspRes = await this.getLspUriAndContent(tab.path, contents);
+      if (lspRes) {
+        const { uri: lspUri, content: lspContent } = lspRes;
+        await this.openDocumentIfNeeded(lspUri, lspContent, version);
+        await this.lspClient.notifyTextChange(lspUri, lspContent, version);
+        await this.lspClient.notifyTextSave(lspUri, lspContent);
+        this.setLspStatus({ kind: "preview-ready", message: "Reloaded external file change" });
+      }
     } else {
       this.scheduleCompilerPreview(tab.path, contents);
     }
@@ -1983,6 +2203,7 @@ export class TypstryWorkspaceController {
     }
     await invoke("cleanup_workspace_preview_files", { workspaceRootPath: selected });
     this.workspaceRootPath = selected;
+    await this.prepareRenderProjectIfNeeded();
     await this.explorer.loadWorkspace(selected);
     await this.workspaceWatcher.start(selected);
     this.updateWorkspaceViewportVisibility();
@@ -2189,12 +2410,33 @@ export class TypstryWorkspaceController {
       if (this.activeFilePath) {
         this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
+        
+        let targetFilePath = this.activeFilePath;
+        let targetContent = content;
+        
+        if (this.settingsController.value.preview.khmerRenderPreparation) {
+          const lspRes = await this.getLspUriAndContent(this.activeFilePath, content);
+          if (lspRes) {
+            targetFilePath = filePathFromUri(lspRes.uri);
+            targetContent = lspRes.content;
+          }
+        }
+
         try {
           const pdfPath = await invoke<string>("compile_typst_document", {
-            sourceCode: content,
-            filePath: this.activeFilePath
+            sourceCode: targetContent,
+            filePath: targetFilePath
           });
-          this.setLspStatus({ kind: "preview-ready", message: `Exported to ${pdfPath}` });
+          
+          let finalPdfPath = pdfPath;
+          if (this.settingsController.value.preview.khmerRenderPreparation) {
+            const originalPdfPath = this.activeFilePath.replace(/\.typ$/, ".pdf");
+            await invoke("copy_workspace_file", { source: pdfPath, dest: originalPdfPath });
+            await invoke("move_to_trash", { path: pdfPath });
+            finalPdfPath = originalPdfPath;
+          }
+          
+          this.setLspStatus({ kind: "preview-ready", message: `Exported to ${finalPdfPath}` });
         } catch (error) {
           this.setLspStatus({ kind: "error", message: `Export failed: ${error}` });
         }
@@ -2402,126 +2644,206 @@ export class TypstryWorkspaceController {
     return this.wysiwymAdapter.serialize();
   }
 
-  private async segmentDependenciesInBackground(content: string) {
-    if (!this.activeFilePath) return;
 
-    const regex = /#(?:import|include)\s*["']([^"']+)["']/g;
-    const dependencyPaths: string[] = [];
-    for (const match of content.matchAll(regex)) {
-      const depPath = match[1];
-      if (depPath.startsWith("@preview/") || depPath.startsWith("@local/")) {
-        continue;
-      }
-      dependencyPaths.push(depPath);
+
+  private getCacheRootPath(): string | null {
+    if (!this.workspaceRootPath) return null;
+    return `${this.workspaceRootPath}/.typstry/cache`.replace(/\\/g, "/");
+  }
+
+  private mapToCachePath(originalPath: string | null): string | null {
+    if (!originalPath || !this.workspaceRootPath) return originalPath;
+    
+    const cachePrefix = `${this.workspaceRootPath}/.typstry/cache/`.replace(/\\/g, "/").toLowerCase();
+    const cleanPath = originalPath.replace(/\\/g, "/").toLowerCase();
+    if (cleanPath.includes(cachePrefix) || cleanPath.includes("/.typstry/cache/")) {
+      return originalPath;
     }
 
-    if (dependencyPaths.length === 0) return;
+    const relPath = originalPath.startsWith(this.workspaceRootPath)
+      ? originalPath.substring(this.workspaceRootPath.length)
+      : originalPath;
+    const cleanRel = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
+    return `${this.workspaceRootPath}/.typstry/cache/render/${cleanRel}`;
+  }
+
+  private mapToOriginalPath(cachePath: string): string {
+    if (!this.workspaceRootPath || !this.settingsController.value.preview.khmerRenderPreparation) {
+      return cachePath;
+    }
+    const prefix = `${this.workspaceRootPath}/.typstry/cache/render/`.replace(/\\/g, "/").toLowerCase();
+    const cleanCache = cachePath.replace(/\\/g, "/").toLowerCase();
+    if (cleanCache.startsWith(prefix)) {
+      const relPath = cachePath.substring(prefix.length);
+      return `${this.workspaceRootPath}/${relPath}`;
+    }
+    return cachePath;
+  }
+
+  private async getLspUriAndContent(path: string, originalContent: string): Promise<{ uri: string; content: string } | null> {
+    if (!this.settingsController.value.preview.khmerRenderPreparation || !this.workspaceRootPath) {
+      return { uri: filePathToUri(path), content: originalContent };
+    }
+    const cacheRoot = this.getCacheRootPath();
+    if (!cacheRoot) {
+      return { uri: filePathToUri(path), content: originalContent };
+    }
+    
+    const key = filePathKey(path);
+    const cached = this.preparedContentsCache.get(key);
+    if (cached && cached.content === originalContent) {
+      return {
+        uri: filePathToUri(cached.generatedPath),
+        content: cached.preparedText
+      };
+    }
+
+    const gen = (this.lspSyncGenerations.get(key) ?? 0) + 1;
+    this.lspSyncGenerations.set(key, gen);
 
     try {
-      const dir = await dirname(this.activeFilePath);
-      for (const dep of dependencyPaths) {
-        let fullPath = dep;
-        if (!dep.startsWith("/") && !dep.includes(":") && dir) {
-          fullPath = await join(dir, dep);
-        }
-
-        const isOpen = this.openTabs.some(t => filePathKey(t.path) === filePathKey(fullPath));
-        if (isOpen) continue;
-
-        void this.backgroundSegmentFile(fullPath);
+      const res = await invoke<any>("prepare_render_file", {
+        options: {
+          enableKhmerZws: true,
+          projectRoot: this.workspaceRootPath,
+          entryFile: this.activeFilePath || path,
+          cacheRoot,
+          generateSourceMap: true
+        },
+        filePath: path,
+        sourceCode: originalContent
+      });
+      
+      if (this.lspSyncGenerations.get(key) !== gen) {
+        return null;
       }
-    } catch (e) {
-      console.warn("[AutoSegmenter] Failed resolving dependency paths:", e);
+      
+      this.preparedContentsCache.set(key, {
+        content: originalContent,
+        preparedText: res.preparedText,
+        generatedPath: res.generatedPath
+      });
+      return {
+        uri: filePathToUri(res.generatedPath),
+        content: res.preparedText
+      };
+    } catch (err) {
+      console.error("Failed to prepare render file:", err);
+      if (this.lspSyncGenerations.get(key) !== gen) {
+        return null;
+      }
+      return { uri: filePathToUri(path), content: originalContent };
     }
   }
 
-  private async backgroundSegmentFile(filePath: string) {
+  private getActiveLspUri(): string {
+    if (!this.activeFilePath) return "";
+    if (this.settingsController.value.preview.khmerRenderPreparation) {
+      return filePathToUri(this.mapToCachePath(this.activeFilePath)!);
+    }
+    return filePathToUri(this.activeFilePath);
+  }
+
+  private async mapCacheLspPositionToOriginalEditorOffset(
+    cacheRelPath: string,
+    position: LspSourcePosition,
+    cacheContent: string
+  ): Promise<number | null> {
+    if (!this.lspClient) return null;
+    const lines = cacheContent.split(/\r?\n/);
+    let utf16Offset = 0;
+    for (let i = 0; i < Math.min(position.line, lines.length); i++) {
+      utf16Offset += lines[i].length + 1;
+    }
+    if (position.line < lines.length) {
+      utf16Offset += Math.min(position.character ?? 0, lines[position.line].length);
+    }
+    const subStr = cacheContent.substring(0, utf16Offset);
+    const byteOffset = new TextEncoder().encode(subStr).length;
+
+    const cacheRoot = this.getCacheRootPath();
+    if (!cacheRoot) return null;
+
     try {
-      const content = await invoke<string>("read_workspace_file", { path: filePath });
-      if (!content) return;
+      const originalByteOffset = await invoke<number | null>("map_generated_to_source", {
+        cacheRoot,
+        relativePath: cacheRelPath,
+        generatedOffset: byteOffset
+      });
+      if (originalByteOffset === null || originalByteOffset === undefined) return null;
 
-      if (!/[\u1780-\u17ff]/.test(content)) {
-        return;
-      }
+      const originalContent = this.editorInstance.state.doc.toString();
+      const originalBytes = new TextEncoder().encode(originalContent);
+      const originalSubBytes = originalBytes.slice(0, originalByteOffset);
+      const originalSubStr = new TextDecoder().decode(originalSubBytes);
+      return Math.max(0, Math.min(originalSubStr.length, originalContent.length));
+    } catch (e) {
+      console.error("Error mapping offset:", e);
+      return null;
+    }
+  }
 
-      const cleaned = content.replace(/[\u200b\u00ad]/g, "");
-      const events = parseScopeEvents(cleaned);
+  private async mapCacheLineColumnToOriginalEditorOffset(
+    cacheRelPath: string,
+    line: number,
+    column: number,
+    cacheContent: string
+  ): Promise<number | null> {
+    const lines = cacheContent.split(/\r?\n/);
+    const lineIndex = line - 1;
+    let utf16Offset = 0;
+    for (let i = 0; i < Math.min(lineIndex, lines.length); i++) {
+      utf16Offset += lines[i].length + 1;
+    }
+    if (lineIndex < lines.length) {
+      utf16Offset += Math.min(column - 1, lines[lineIndex].length);
+    }
+    const subStr = cacheContent.substring(0, utf16Offset);
+    const byteOffset = new TextEncoder().encode(subStr).length;
 
-      const response = await invoke<AnalyzeResponse>("analyze_language_ranges", {
-        request: {
-          chunks: [{ text: cleaned, startUtf16: 0 }]
+    const cacheRoot = this.getCacheRootPath();
+    if (!cacheRoot) return null;
+
+    try {
+      const originalByteOffset = await invoke<number | null>("map_generated_to_source", {
+        cacheRoot,
+        relativePath: cacheRelPath,
+        generatedOffset: byteOffset
+      });
+      if (originalByteOffset === null || originalByteOffset === undefined) return null;
+
+      const originalContent = this.editorInstance.state.doc.toString();
+      const originalBytes = new TextEncoder().encode(originalContent);
+      const originalSubBytes = originalBytes.slice(0, originalByteOffset);
+      const originalSubStr = new TextDecoder().decode(originalSubBytes);
+      return Math.max(0, Math.min(originalSubStr.length, originalContent.length));
+    } catch (e) {
+      console.error("Error mapping offset:", e);
+      return null;
+    }
+  }
+
+  private async prepareRenderProjectIfNeeded(): Promise<void> {
+    if (!this.workspaceRootPath || !this.settingsController.value.preview.khmerRenderPreparation) {
+      return;
+    }
+    const cacheRoot = this.getCacheRootPath();
+    if (!cacheRoot) return;
+    
+    const entryFile = this.activeFilePath || this.workspaceRootPath;
+    
+    try {
+      await invoke("prepare_render_project", {
+        options: {
+          enableKhmerZws: true,
+          projectRoot: this.workspaceRootPath,
+          entryFile,
+          cacheRoot,
+          generateSourceMap: true
         }
       });
-
-      if (!response || !response.tokens || response.tokens.length === 0) return;
-
-      const changes: { from: number; to: number; insert: string }[] = [];
-
-      for (const token of response.tokens) {
-        if (!/[\u1780-\u17ff]/.test(token.normalizedText)) continue;
-
-        const scope = resolveScopeState(events, token.sourceFromUtf16);
-        if (scope.disabled) continue;
-
-        const currentText = cleaned.substring(token.sourceFromUtf16, token.sourceToUtf16);
-        let targetText = token.normalizedText;
-        if (scope.hyphenate && token.hyphenated) {
-          targetText = token.hyphenated;
-        }
-
-        if (currentText !== targetText) {
-          changes.push({
-            from: token.sourceFromUtf16,
-            to: token.sourceToUtf16,
-            insert: targetText
-          });
-        }
-      }
-
-      for (let i = 0; i < response.tokens.length - 1; i++) {
-        const tokenA = response.tokens[i];
-        const tokenB = response.tokens[i + 1];
-
-        if (!/[\u1780-\u17ff]/.test(tokenA.normalizedText) || !/[\u1780-\u17ff]/.test(tokenB.normalizedText)) {
-          continue;
-        }
-
-        const endA = tokenA.sourceToUtf16;
-        const startB = tokenB.sourceFromUtf16;
-
-        const scope = resolveScopeState(events, endA);
-        if (scope.disabled) continue;
-
-        if (startB === endA) {
-          changes.push({
-            from: endA,
-            to: endA,
-            insert: "\u200b"
-          });
-        }
-      }
-
-      if (changes.length > 0) {
-        changes.sort((a, b) => b.from - a.from);
-        
-        let segmentedText = cleaned;
-        for (const change of changes) {
-          segmentedText = segmentedText.substring(0, change.from) + change.insert + segmentedText.substring(change.to);
-        }
-
-        if (segmentedText !== content) {
-          await this.writeWorkspaceText(filePath, segmentedText);
-          console.log(`[AutoSegmenter] Background segmented file: ${filePath}`);
-        }
-      } else {
-        // If there were no changes, but the file had ZWS/SHY in a now-disabled block, we might need to write the cleaned content back
-        if (cleaned !== content) {
-          await this.writeWorkspaceText(filePath, cleaned);
-          console.log(`[AutoSegmenter] Background cleaned disabled regions for file: ${filePath}`);
-        }
-      }
-    } catch (error) {
-      console.warn(`[AutoSegmenter] Failed background segmentation for ${filePath}:`, error);
+    } catch (e) {
+      console.error("Failed to prepare render project:", e);
     }
   }
 

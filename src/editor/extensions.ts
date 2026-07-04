@@ -19,7 +19,6 @@ import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
 import { typstFunctionFoldService } from "./folding";
-import { createAutoSegmenter } from "./autoSegmenter";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -214,7 +213,6 @@ export function getEditorExtensions(
   return [
     ctrlClickLinkPlugin,
     showZwsCompartment.of(showZeroWidthSpaces),
-    createAutoSegmenter(),
     preventEscapedBracketAutoClose,
     EditorView.domEventHandlers({
       mousedown: (event, view) => {

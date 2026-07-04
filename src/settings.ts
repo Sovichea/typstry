@@ -36,6 +36,7 @@ export type AppSettings = {
     cursorSync: boolean;
     syncDebounceMs: number;
     highlightDurationMs: number;
+    khmerRenderPreparation: boolean;
   };
   toolchain: {
     tinymistVersion: string | null;
@@ -66,7 +67,8 @@ export const defaultAppSettings: AppSettings = {
   preview: {
     cursorSync: true,
     syncDebounceMs: 120,
-    highlightDurationMs: 2200
+    highlightDurationMs: 2200,
+    khmerRenderPreparation: true
   },
   toolchain: {
     tinymistVersion: null
@@ -128,7 +130,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     preview: {
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),
       syncDebounceMs: Math.round(boundedNumber(preview.syncDebounceMs, defaultAppSettings.preview.syncDebounceMs, 50, 2000)),
-      highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000))
+      highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000)),
+      khmerRenderPreparation: booleanValue(preview.khmerRenderPreparation, defaultAppSettings.preview.khmerRenderPreparation)
     },
     toolchain: {
       tinymistVersion: typeof toolchain.tinymistVersion === "string" && /^\d+\.\d+\.\d+$/.test(toolchain.tinymistVersion)

@@ -122,6 +122,7 @@ export class SettingsController {
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
+    onChange("settings-khmer-prep", (settings, control) => { settings.preview.khmerRenderPreparation = (control as HTMLInputElement).checked; });
 
     document.getElementById("settings-reset")?.addEventListener("click", async () => {
       if (await confirm("Reset all application settings to their defaults?", { title: "Reset Settings", kind: "warning" })) {
