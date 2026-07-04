@@ -10,6 +10,7 @@ export type EditorToken = {
   normalizedText: string;
   known: boolean;
   knownPrefix: boolean;
+  hyphenated?: string;
 };
 
 export type AnalyzeResponse = {

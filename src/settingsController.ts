@@ -118,9 +118,11 @@ export class SettingsController {
     onChange("settings-indent-guides", (settings, control) => { settings.editor.indentationGuides = (control as HTMLInputElement).checked; });
     onChange("settings-spellcheck", (settings, control) => { settings.editor.spellcheck = (control as HTMLInputElement).checked; });
     onChange("settings-word-completion", (settings, control) => { settings.editor.wordCompletion = (control as HTMLInputElement).checked; });
+    onChange("settings-show-zws", (settings, control) => { settings.editor.showZws = (control as HTMLInputElement).checked; });
     onChange("settings-cursor-sync", (settings, control) => { settings.preview.cursorSync = (control as HTMLInputElement).checked; });
     onChange("settings-sync-debounce", (settings, control) => { settings.preview.syncDebounceMs = Number(control.value); });
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
+    onChange("settings-khmer-prep", (settings, control) => { settings.preview.khmerRenderPreparation = (control as HTMLInputElement).checked; });
 
     document.getElementById("settings-reset")?.addEventListener("click", async () => {
       if (await confirm("Reset all application settings to their defaults?", { title: "Reset Settings", kind: "warning" })) {
@@ -200,7 +202,9 @@ export class SettingsController {
     setChecked("settings-indent-guides", editor.indentationGuides);
     setChecked("settings-spellcheck", editor.spellcheck);
     setChecked("settings-word-completion", editor.wordCompletion);
+    setChecked("settings-show-zws", editor.showZws);
     setChecked("settings-cursor-sync", preview.cursorSync);
+    setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
 
     const path = document.getElementById("settings-file-path");
     if (path) {

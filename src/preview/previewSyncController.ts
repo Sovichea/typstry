@@ -11,6 +11,7 @@ export type PreviewSyncDependencies = {
   getPreviewTaskId: () => string | null;
   isReady: () => boolean;
   isEnabled: () => boolean;
+  mapForwardPosition?: (path: string, cursor: number) => Promise<{ filepath: string; line: number; character: number } | null>;
 };
 
 export class PreviewSyncController {
@@ -51,6 +52,19 @@ export class PreviewSyncController {
     const path = this.dependencies.getActiveFilePath();
     const taskId = this.dependencies.getPreviewTaskId();
     if (!editor || !client || !path || !this.dependencies.getPreviewRootPath() || !taskId || !this.dependencies.isReady()) return;
+
+    if (this.dependencies.mapForwardPosition) {
+      const mapped = await this.dependencies.mapForwardPosition(path, cursor);
+      if (mapped) {
+        await client.scrollPreview(taskId, {
+          event: "panelScrollTo",
+          filepath: mapped.filepath,
+          line: mapped.line,
+          character: mapped.character
+        });
+        return;
+      }
+    }
 
     const position = Math.max(0, Math.min(cursor, editor.state.doc.length));
     const line = editor.state.doc.lineAt(position);

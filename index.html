@@ -331,6 +331,9 @@
                 <button type="button" class="toolbar-button" data-tool="toggle-wrap" title="Toggle word wrap" aria-label="Toggle word wrap">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="6" y2="6"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><line x1="3" x2="9" y1="18" y2="18"/></svg>
                 </button>
+                <button type="button" class="toolbar-button" data-tool="toggle-special-chars" title="Toggle special characters" aria-label="Toggle special characters">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v16"/><path d="M17 4v16"/><path d="M19 4H9.5a4.5 4.5 0 0 0 0 9H13"/></svg>
+                </button>
                 <!-- TODO: Re-enable the WYSIWYM toolbar control when its implementation is ready.
                 <button type="button" class="toolbar-button" data-tool="toggle-mode" title="Switch layout" aria-label="Switch layout">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="9" x2="9" y1="3" y2="21"/></svg>
@@ -393,7 +396,13 @@
       <button id="dock-preview-status-btn" class="status-button hidden" type="button" title="Dock preview back to editor">
         <span class="status-label">Dock Preview</span>
       </button>
-      <button id="word-wrap-toggle" class="status-button" type="button" title="Toggle Word Wrap" style="margin-left: auto;">
+      <div id="khmer-prep-status" class="status-item hidden" title="Experimental Khmer render preparation is active">
+        <span class="status-label">Khmer Prep (Exp)</span>
+      </div>
+      <button id="zws-toggle" class="status-button" type="button" title="Toggle invisible characters (ZWS/SHY)" style="margin-left: auto;">
+        <span class="status-label" id="zws-label">Invisibles: On</span>
+      </button>
+      <button id="word-wrap-toggle" class="status-button" type="button" title="Toggle Word Wrap">
         <span class="status-label" id="word-wrap-label">Wrap: On</span>
       </button>
       <button id="settings-status-button" class="status-button" type="button" title="Open Settings (Ctrl+,)">
@@ -472,11 +481,13 @@
             <label class="settings-toggle"><input id="settings-indent-guides" type="checkbox"><span><strong>Indentation guides</strong><small>Show visual indentation markers.</small></span></label>
             <label class="settings-toggle"><input id="settings-spellcheck" type="checkbox"><span><strong>Language spellcheck</strong><small>Mark unknown words and provide correction suggestions.</small></span></label>
             <label class="settings-toggle"><input id="settings-word-completion" type="checkbox"><span><strong>Typing word suggestions</strong><small>Show dictionary completions while typing supported languages.</small></span></label>
+            <label class="settings-toggle"><input id="settings-show-zws" type="checkbox"><span><strong>Show invisible characters</strong><small>Render Zero Width Spaces (ZWS) and Soft Hyphens (SHY) visually in the editor.</small></span></label>
           </div>
 
           <div class="settings-panel" data-settings-panel-content="preview">
             <h3>Preview</h3>
             <label class="settings-toggle"><input id="settings-cursor-sync" type="checkbox"><span><strong>Cursor-to-preview sync</strong><small>Navigate and briefly highlight preview content as the cursor moves.</small></span></label>
+            <label class="settings-toggle"><input id="settings-khmer-prep" type="checkbox"><span><strong>Khmer render preparation (experimental)</strong><small>Opt in to generated Zero Width Space layout boundaries for Khmer preview/export. Leave off when Typst justification limits are sufficient.</small></span></label>
             <div class="settings-field">
               <label for="settings-sync-debounce">Sync debounce</label>
               <input id="settings-sync-debounce" type="number" min="50" max="2000" step="10">

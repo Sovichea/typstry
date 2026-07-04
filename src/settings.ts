@@ -29,12 +29,14 @@ export type AppSettings = {
     indentationGuides: boolean;
     spellcheck: boolean;
     wordCompletion: boolean;
+    showZws: boolean;
     userDictionary: string[];
   };
   preview: {
     cursorSync: boolean;
     syncDebounceMs: number;
     highlightDurationMs: number;
+    khmerRenderPreparation: boolean;
   };
   toolchain: {
     tinymistVersion: string | null;
@@ -59,12 +61,14 @@ export const defaultAppSettings: AppSettings = {
     indentationGuides: true,
     spellcheck: true,
     wordCompletion: true,
+    showZws: true,
     userDictionary: []
   },
   preview: {
     cursorSync: true,
     syncDebounceMs: 120,
-    highlightDurationMs: 2200
+    highlightDurationMs: 2200,
+    khmerRenderPreparation: false
   },
   toolchain: {
     tinymistVersion: null
@@ -118,6 +122,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
       indentationGuides: booleanValue(editor.indentationGuides, defaultAppSettings.editor.indentationGuides),
       spellcheck: booleanValue(editor.spellcheck, defaultAppSettings.editor.spellcheck),
       wordCompletion: booleanValue(editor.wordCompletion, defaultAppSettings.editor.wordCompletion),
+      showZws: booleanValue(editor.showZws, defaultAppSettings.editor.showZws),
       userDictionary: Array.isArray(editor.userDictionary)
         ? [...new Set(editor.userDictionary.filter((word): word is string => typeof word === "string" && word.trim().length > 0).map(word => word.trim()))].sort()
         : []
@@ -125,7 +130,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     preview: {
       cursorSync: booleanValue(preview.cursorSync, defaultAppSettings.preview.cursorSync),
       syncDebounceMs: Math.round(boundedNumber(preview.syncDebounceMs, defaultAppSettings.preview.syncDebounceMs, 50, 2000)),
-      highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000))
+      highlightDurationMs: Math.round(boundedNumber(preview.highlightDurationMs, defaultAppSettings.preview.highlightDurationMs, 500, 10000)),
+      khmerRenderPreparation: booleanValue(preview.khmerRenderPreparation, defaultAppSettings.preview.khmerRenderPreparation)
     },
     toolchain: {
       tinymistVersion: typeof toolchain.tinymistVersion === "string" && /^\d+\.\d+\.\d+$/.test(toolchain.tinymistVersion)

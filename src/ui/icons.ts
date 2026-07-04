@@ -30,6 +30,7 @@ import {
   Minus,
   NotebookText,
   PanelLeft,
+  Pilcrow,
   Plus,
   Quote,
   Radical,
@@ -86,6 +87,7 @@ const iconNodes = {
   minus: Minus,
   notebookText: NotebookText,
   panelLeft: PanelLeft,
+  pilcrow: Pilcrow,
   plus: Plus,
   quote: Quote,
   radical: Radical,
@@ -167,6 +169,7 @@ export function initializeLucideIcons(): void {
     "sync-preview": "refresh",
     "export-pdf": "download",
     "toggle-wrap": "wrapText",
+    "toggle-special-chars": "pilcrow",
     "toggle-mode": "panelLeft"
   };
   for (const [tool, icon] of Object.entries(toolIcons)) {

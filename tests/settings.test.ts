@@ -11,8 +11,10 @@ describe("application settings", () => {
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
     expect(settings.editor.spellcheck).toBe(true);
     expect(settings.editor.wordCompletion).toBe(true);
+    expect(settings.editor.showZws).toBe(true);
     expect(settings.editor.userDictionary).toEqual([]);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
+    expect(settings.preview.khmerRenderPreparation).toBe(false);
     expect(settings.toolchain.tinymistVersion).toBeNull();
   });
 
