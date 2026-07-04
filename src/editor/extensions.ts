@@ -206,7 +206,7 @@ export const showZeroWidthSpaces = ViewPlugin.fromClass(class {
 export function getEditorExtensions(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
-  flushLspSync: () => void,
+  flushLspSync: () => void | Promise<void>,
   onNavigateToDefinition?: (uri: string, line: number, character: number) => void,
   getProviders?: () => ProviderCapabilities[]
 ): Extension[] {

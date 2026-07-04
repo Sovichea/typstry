@@ -19,7 +19,8 @@ This workspace contains editable examples for learning Typst and testing multili
 - `06-unicode-math`: Unicode symbols and mathematical notation.
 - `07-khmer-example`: Khmer language document with Cetz circuit diagrams.
 - `08-simple-thesis`: Three chapters demonstrating labels and cross-chapter references.
-- `09-khmer-segmentation-comparison`: Illustrating the difference between no ZWS, with ZWS, and with ZWS+SHY.
+- `09-khmer-folklore-book`: A multi-file Khmer folklore book with three included stories.
+- `10-khmer-segmentation-comparison`: Khmer justify-only baseline, Typstry segmentation, and tracking-tuned justification.
 - `templates/multilingual-article`: A reusable multi-file article structure.
 
 Open any `main.typ` file from the explorer. These files are your own writable copies, so you can change them freely.

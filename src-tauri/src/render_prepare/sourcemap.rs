@@ -1,11 +1,10 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MappingKind {
     Original,
     InsertedZws,
-    InsertedShy,
     GeneratedWrapper,
 }
 
@@ -36,7 +35,14 @@ impl SourceMap {
         }
     }
 
-    pub fn add_mapping(&mut self, generated_start: usize, generated_end: usize, source_start: usize, source_end: usize, kind: MappingKind) {
+    pub fn add_mapping(
+        &mut self,
+        generated_start: usize,
+        generated_end: usize,
+        source_start: usize,
+        source_end: usize,
+        kind: MappingKind,
+    ) {
         self.mappings.push(TextMapping {
             generated_start,
             generated_end,
@@ -64,12 +70,8 @@ impl SourceMap {
                         let offset_in_mapping = generated_offset - m.generated_start;
                         Some(m.source_start + offset_in_mapping)
                     }
-                    MappingKind::InsertedZws | MappingKind::InsertedShy => {
-                        Some(m.source_start)
-                    }
-                    MappingKind::GeneratedWrapper => {
-                        Some(m.source_start)
-                    }
+                    MappingKind::InsertedZws => Some(m.source_start),
+                    MappingKind::GeneratedWrapper => Some(m.source_start),
                 }
             }
             Err(_) => {
@@ -82,7 +84,9 @@ impl SourceMap {
                 if generated_offset <= self.mappings.first().unwrap().generated_start {
                     return Some(self.mappings.first().unwrap().source_start);
                 }
-                let insert_idx = self.mappings.partition_point(|m| m.generated_start <= generated_offset);
+                let insert_idx = self
+                    .mappings
+                    .partition_point(|m| m.generated_start <= generated_offset);
                 if insert_idx > 0 {
                     let prev = &self.mappings[insert_idx - 1];
                     Some(prev.source_end)
@@ -95,7 +99,10 @@ impl SourceMap {
 
     pub fn source_to_generated(&self, source_offset: usize) -> Option<usize> {
         for m in &self.mappings {
-            if m.kind == MappingKind::Original && source_offset >= m.source_start && source_offset < m.source_end {
+            if m.kind == MappingKind::Original
+                && source_offset >= m.source_start
+                && source_offset < m.source_end
+            {
                 let offset_in_mapping = source_offset - m.source_start;
                 return Some(m.generated_start + offset_in_mapping);
             }
@@ -121,7 +128,7 @@ mod tests {
     #[test]
     fn test_sourcemap_lookups() {
         let mut map = SourceMap::new("src.typ".into(), "dest.typ".into());
-        
+
         // Mappings representing "ក\u{200b}ខ"
         // Original "ក" at source 0..3 (length 3), gen 0..3
         map.add_mapping(0, 3, 0, 3, MappingKind::Original);
@@ -129,7 +136,7 @@ mod tests {
         map.add_mapping(3, 6, 3, 3, MappingKind::InsertedZws);
         // Original "ខ" at source 3..6 (length 3), gen 6..9
         map.add_mapping(6, 9, 3, 6, MappingKind::Original);
-        
+
         // generated_to_source lookups:
         // Inside "ក": e.g. gen 1 -> source 1
         assert_eq!(map.generated_to_source(1), Some(1));
@@ -137,7 +144,7 @@ mod tests {
         assert_eq!(map.generated_to_source(4), Some(3));
         // Inside "ខ": e.g. gen 7 -> source 4
         assert_eq!(map.generated_to_source(7), Some(4));
-        
+
         // source_to_generated lookups:
         // Inside "ក": e.g. source 1 -> gen 1
         assert_eq!(map.source_to_generated(1), Some(1));

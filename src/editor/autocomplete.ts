@@ -231,7 +231,7 @@ export type ProviderCapabilities = {
 export function createTypstAutocomplete(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
-  flushLspSync: () => void,
+  flushLspSync: () => void | Promise<void>,
   languageWordCompletion = true,
   getProviders: () => ProviderCapabilities[] = () => []
 ) {
@@ -307,10 +307,11 @@ export function createTypstAutocomplete(
         const doc = context.state.doc;
         const position = client.lspPositionFromEditorPosition(doc, context.pos);
         
-        // Force flush any pending LSP document changes so the server has the very latest keystrokes
-        flushLspSync();
-        
         try {
+          // Force flush any pending LSP document changes so the server completes
+          // against the same text CodeMirror is showing.
+          await flushLspSync();
+
           const response = await client.request<LspCompletionResponse>("textDocument/completion", {
             textDocument: { uri },
             position,

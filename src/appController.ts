@@ -14,7 +14,7 @@ import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeV
 import { createTypstAutocomplete } from "./editor/autocomplete";
 import { collectDefaultTypstFunctionFolds } from "./editor/folding";
 import type { EditorFoldRange } from "./editor/folding";
-import { setEditorDiagnosticsEffect } from "./editor/diagnostics";
+import { looksLikeStalePrefixDiagnostic, setEditorDiagnosticsEffect } from "./editor/diagnostics";
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
 import { TinymistLspClient } from "./compiler/lsp";
@@ -103,6 +103,11 @@ export class TypstryWorkspaceController {
   private pendingLspSyncTimer: number | null = null;
   private pendingLspSyncPath: string | null = null;
   private pendingLspSyncText: string | null = null;
+  private pendingLspSyncVersion: number | null = null;
+  private lastSyncedLspUri: string | null = null;
+  private lastSyncedLspPath: string | null = null;
+  private lastSyncedLspEditorText: string | null = null;
+  private lastSyncedLspVersion: number | null = null;
   private lspSyncRequestGenerations = new Map<string, number>();
   private fallbackPreviewTimer: number | null = null;
   private fallbackPreviewGeneration = 0;
@@ -1196,8 +1201,10 @@ export class TypstryWorkspaceController {
       const lspRes = await this.getLspUriAndContent(path, content);
       if (lspRes) {
         const { uri: lspUri, content: lspContent } = lspRes;
-        await this.openDocumentIfNeeded(lspUri, lspContent, tab?.version ?? 1);
-        await this.lspClient.notifyTextChange(lspUri, lspContent, tab?.version ?? 2);
+        const version = tab?.version ?? this.currentVersion;
+        await this.openDocumentIfNeeded(lspUri, lspContent, version);
+        await this.lspClient.notifyTextChange(lspUri, lspContent, version);
+        this.recordLspSync(lspUri, path, content, version);
         await this.lspClient.notifyTextSave(lspUri, lspContent);
       }
     }
@@ -1402,6 +1409,7 @@ export class TypstryWorkspaceController {
     const { uri: lspUri, content: lspContent } = lspRes;
     await this.openDocumentIfNeeded(lspUri, lspContent, version);
     await this.lspClient.notifyTextChange(lspUri, lspContent, version);
+    this.recordLspSync(lspUri, this.activeFilePath, text, version);
   }
 
   private async activatePreviewSession(activeContents: string): Promise<boolean> {
@@ -1483,11 +1491,19 @@ export class TypstryWorkspaceController {
     }
 
     if (!this.isLoadingFile && this.activeFilePath && this.lspReady && this.lspClient) {
+      const version = ++this.currentVersion;
+      this.latestDocumentVersion = version;
+      const activeTab = this.getActiveTab();
+      if (activeTab && activeTab.path === this.activeFilePath) {
+        activeTab.version = version;
+        activeTab.latestVersion = version;
+      }
       if (this.previewImported && allowsLiveImportPreview(rawText) !== this.previewLiveUpdates) {
         void this.refreshActivePreviewRoot();
       }
       this.pendingLspSyncPath = this.activeFilePath;
       this.pendingLspSyncText = rawText;
+      this.pendingLspSyncVersion = version;
       this.setLspStatus({ kind: "sync-pending", message: "Preview update queued" });
 
       if (this.pendingLspSyncTimer) {
@@ -1515,12 +1531,14 @@ export class TypstryWorkspaceController {
 
     const path = this.pendingLspSyncPath;
     const text = this.pendingLspSyncText;
+    const pendingVersion = this.pendingLspSyncVersion;
     const requestKey = filePathKey(path);
     const expectedGeneration = (this.lspSyncRequestGenerations.get(requestKey) ?? 0) + 1;
     this.lspSyncRequestGenerations.set(requestKey, expectedGeneration);
 
     this.pendingLspSyncPath = null;
     this.pendingLspSyncText = null;
+    this.pendingLspSyncVersion = null;
 
     this.setLspStatus({ kind: "syncing", message: "Syncing preview" });
     this.previewSyncController.reset();
@@ -1537,7 +1555,7 @@ export class TypstryWorkspaceController {
       return;
     }
 
-    const version = ++this.currentVersion;
+    const version = pendingVersion ?? ++this.currentVersion;
     this.latestDocumentVersion = version;
     const activeTab = this.getActiveTab();
     if (activeTab && activeTab.path === path) {
@@ -1549,6 +1567,7 @@ export class TypstryWorkspaceController {
     const { uri: lspUri, content: lspContent } = lspRes;
     await this.openDocumentIfNeeded(lspUri, lspContent, version);
     await this.lspClient.notifyTextChange(lspUri, lspContent, version);
+    this.recordLspSync(lspUri, path, text, version);
     window.setTimeout(() => {
       if (this.lspReady && !this.pendingLspSyncTimer && this.pendingLspSyncText === null) {
         this.setLspStatus({ kind: "preview-ready", message: "Preview update sent" });
@@ -1645,6 +1664,7 @@ export class TypstryWorkspaceController {
     }
     this.pendingLspSyncPath = null;
     this.pendingLspSyncText = null;
+    this.pendingLspSyncVersion = null;
   }
 
 
@@ -1696,12 +1716,11 @@ export class TypstryWorkspaceController {
   }
 
   private async handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
-    if (typeof version === "number" && version < this.latestDocumentVersion) return;
-
     const originalPath = this.mapToOriginalPath(filePathFromUri(uri));
     if (!this.activeFilePath || filePathKey(originalPath) !== filePathKey(this.activeFilePath)) {
       return;
     }
+    if (!this.shouldAcceptLspDiagnostics(uri, originalPath, version)) return;
 
     const isPackageFile = originalPath.toLowerCase().includes("typst/packages") || 
                           originalPath.toLowerCase().includes("typst\\packages") ||
@@ -1742,6 +1761,9 @@ export class TypstryWorkspaceController {
         to = this.editorPositionFromLspPosition(diagnostic.range.end);
       }
       if (from !== null && to !== null) {
+        if (looksLikeStalePrefixDiagnostic(this.editorInstance.state.doc, from, Math.max(from, to), diagnostic.message)) {
+          continue;
+        }
         editorDiagnostics.push({
           from,
           to: Math.max(from, to),
@@ -1750,6 +1772,8 @@ export class TypstryWorkspaceController {
         });
       }
     }
+
+    if (!this.shouldAcceptLspDiagnostics(uri, originalPath, version)) return;
 
     this.editorInstance.dispatch({
       effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
@@ -1786,6 +1810,34 @@ export class TypstryWorkspaceController {
       source: entry.source ?? "tinymist",
       message: entry.message
     });
+  }
+
+  private recordLspSync(uri: string, path: string, editorText: string, version: number) {
+    this.lastSyncedLspUri = uri;
+    this.lastSyncedLspPath = path;
+    this.lastSyncedLspEditorText = editorText;
+    this.lastSyncedLspVersion = version;
+  }
+
+  private shouldAcceptLspDiagnostics(uri: string, originalPath: string, version?: number): boolean {
+    if (typeof version === "number") {
+      return version >= this.latestDocumentVersion;
+    }
+
+    if (this.pendingLspSyncPath && filePathKey(this.pendingLspSyncPath) === filePathKey(originalPath)) {
+      return false;
+    }
+
+    if (this.lastSyncedLspUri !== uri || !this.lastSyncedLspPath
+      || filePathKey(this.lastSyncedLspPath) !== filePathKey(originalPath)) {
+      return false;
+    }
+
+    if (this.lastSyncedLspVersion !== this.latestDocumentVersion) {
+      return false;
+    }
+
+    return this.editorInstance.state.doc.toString() === (this.lastSyncedLspEditorText ?? "");
   }
 
   private clearDiagnostics() {
@@ -2140,6 +2192,7 @@ export class TypstryWorkspaceController {
         const { uri: lspUri, content: lspContent } = lspRes;
         await this.openDocumentIfNeeded(lspUri, lspContent, version);
         await this.lspClient.notifyTextChange(lspUri, lspContent, version);
+        this.recordLspSync(lspUri, tab.path, contents, version);
         await this.lspClient.notifyTextSave(lspUri, lspContent);
         this.setLspStatus({ kind: "preview-ready", message: "Reloaded external file change" });
       }
