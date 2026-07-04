@@ -204,6 +204,7 @@ export class SettingsController {
     setChecked("settings-word-completion", editor.wordCompletion);
     setChecked("settings-show-zws", editor.showZws);
     setChecked("settings-cursor-sync", preview.cursorSync);
+    setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
 
     const path = document.getElementById("settings-file-path");
     if (path) {

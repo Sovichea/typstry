@@ -1,5 +1,4 @@
-#set text(lang: "km", hyphenate: true)
-#set par(justify: true)
+// @allow-preview
 
 = រឿងទន្សាយ និងខ្យង
 

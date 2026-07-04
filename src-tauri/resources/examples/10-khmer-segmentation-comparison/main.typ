@@ -18,7 +18,7 @@
 
 #v(0.3em)
 
-This example compares the same Khmer paragraph under three Typst settings. Typstry's native render preparation inserts Khmer break opportunities for justified Khmer text without relying on Typst's language-based line breaker. Use `// @disable-render-prep` when you need a scoped baseline that keeps Typst's original justified output unchanged.
+This example compares the same Khmer paragraph under three Typst settings. The recommended default is Typst justification with tuned `justification-limits`. Typstry's native Khmer render preparation is experimental and off by default; enable it in Settings only when you want to compare inserted Zero Width Space boundaries.
 
 #v(0.8em)
 
@@ -52,7 +52,7 @@ This example compares the same Khmer paragraph under three Typst settings. Typst
       stroke: rgb("#86efac"),
       width: 100%,
       [
-        #align(center)[#strong[2. justify + Typstry segmentation]]
+        #align(center)[#strong[2. experimental ZWSP prep]]
         #v(0.35em)
         #set text(size: 8.8pt)
         #set par(justify: true)
@@ -69,16 +69,17 @@ This example compares the same Khmer paragraph under three Typst settings. Typst
       stroke: rgb("#93c5fd"),
       width: 100%,
       [
-        #align(center)[#strong[3. segmentation + tracking limit]]
+        #align(center)[#strong[3. recommended tracking limit]]
         #v(0.35em)
         #set text(size: 8.8pt)
         #set par(
           justify: true,
           justification-limits: (
             spacing: (min: 85%, max: 115%),
-            tracking: (min: 0pt, max: 0.015em),
+            tracking: (min: -0.8pt, max: 0pt),
           ),
         )
+        // @disable-render-prep
 
         ភាសាខ្មែរគឺជាភាសាផ្លូវការរបស់ប្រទេសកម្ពុជា។ ប្រជាជនខ្មែរប្រើប្រាស់ភាសានេះក្នុងជីវិតប្រចាំថ្ងៃ ទាំងក្នុងវិស័យអប់រំ សេដ្ឋកិច្ច និងវប្បធម៌។ ការអភិវឌ្ឍប្រព័ន្ធបច្ចេកវិទ្យាព័ត៌មានវិទ្យាដែលគាំទ្រភាសាខ្មែរ ជាអាទិភាពដ៏សំខាន់ក្នុងការអភិវឌ្ឍប្រទេស។ និស្សិតសិក្សានៅសាកលវិទ្យាល័យភូមិន្ទភ្នំពេញតែងខិតខំប្រឹងប្រែង។
       ],
@@ -96,7 +97,7 @@ This example compares the same Khmer paragraph under three Typst settings. Typst
   [
     #set text(size: 8.5pt)
     - *Column 1*: `// @disable-render-prep` keeps Typstry from inserting Khmer layout controls, so this shows Typst's original justified output.
-    - *Column 2*: Justification enables Typstry's Khmer layout segmentation, so invisible Zero Width Spaces are inserted at safe word and compound boundaries.
-    - *Column 3*: Uses the same Typstry Zero Width Space boundaries, then limits word-space expansion and allows small tracking expansion through `justification-limits`.
+    - *Column 2*: Shows experimental Typstry Zero Width Space insertion only when `Khmer render preparation (experimental)` is enabled in Settings.
+    - *Column 3*: Recommended default: no render preparation, with bounded spacing and slight negative tracking through `justification-limits`.
   ],
 )

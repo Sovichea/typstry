@@ -68,7 +68,7 @@ export const defaultAppSettings: AppSettings = {
     cursorSync: true,
     syncDebounceMs: 120,
     highlightDurationMs: 2200,
-    khmerRenderPreparation: true
+    khmerRenderPreparation: false
   },
   toolchain: {
     tinymistVersion: null

@@ -14,6 +14,7 @@ describe("application settings", () => {
     expect(settings.editor.showZws).toBe(true);
     expect(settings.editor.userDictionary).toEqual([]);
     expect(settings.preview.syncDebounceMs).toBe(defaultAppSettings.preview.syncDebounceMs);
+    expect(settings.preview.khmerRenderPreparation).toBe(false);
     expect(settings.toolchain.tinymistVersion).toBeNull();
   });
 

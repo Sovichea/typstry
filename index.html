@@ -396,8 +396,8 @@
       <button id="dock-preview-status-btn" class="status-button hidden" type="button" title="Dock preview back to editor">
         <span class="status-label">Dock Preview</span>
       </button>
-      <div id="khmer-prep-status" class="status-item hidden" title="Khmer render preparation is active">
-        <span class="status-label">Khmer Prep</span>
+      <div id="khmer-prep-status" class="status-item hidden" title="Experimental Khmer render preparation is active">
+        <span class="status-label">Khmer Prep (Exp)</span>
       </div>
       <button id="zws-toggle" class="status-button" type="button" title="Toggle invisible characters (ZWS/SHY)" style="margin-left: auto;">
         <span class="status-label" id="zws-label">Invisibles: On</span>
@@ -487,7 +487,7 @@
           <div class="settings-panel" data-settings-panel-content="preview">
             <h3>Preview</h3>
             <label class="settings-toggle"><input id="settings-cursor-sync" type="checkbox"><span><strong>Cursor-to-preview sync</strong><small>Navigate and briefly highlight preview content as the cursor moves.</small></span></label>
-            <label class="settings-toggle"><input id="settings-khmer-prep" type="checkbox"><span><strong>Khmer render preparation</strong><small>Automatically prepare Khmer line-breaking zero-width spaces for rendering.</small></span></label>
+            <label class="settings-toggle"><input id="settings-khmer-prep" type="checkbox"><span><strong>Khmer render preparation (experimental)</strong><small>Opt in to generated Zero Width Space layout boundaries for Khmer preview/export. Leave off when Typst justification limits are sufficient.</small></span></label>
             <div class="settings-field">
               <label for="settings-sync-debounce">Sync debounce</label>
               <input id="settings-sync-debounce" type="number" min="50" max="2000" step="10">

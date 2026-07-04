@@ -1,5 +1,4 @@
-#set text(lang: "km", hyphenate: true)
-#set par(justify: true)
+// @allow-preview
 
 = រឿងឪពុកចាស់ និងកូនប្រុសបីនាក់
 

@@ -1,13 +1,11 @@
 use super::sourcemap::{MappingKind, SourceMap};
 use khmer_segmenter::kdict::KHypDict;
-use khmer_segmenter::{KhmerSegmenter, SegmenterConfig};
+use khmer_segmenter::{KhmerSegmenter, SegmentationLength, SegmenterConfig};
 
 const KHMER_DICTIONARY: &[u8] =
     include_bytes!("../../../third_party/khmer_segmenter/port/common/khmer_dictionary.kdict");
 const KHMER_HYPHENATION: &[u8] =
     include_bytes!("../../../third_party/khmer_segmenter/port/common/khmer_hyphenation.kdict");
-const MIN_LAYOUT_PART_CLUSTERS: usize = 2;
-
 pub struct KhmerTextSegmenter {
     pub segmenter: KhmerSegmenter,
     pub hyphenation: KHypDict,
@@ -15,9 +13,10 @@ pub struct KhmerTextSegmenter {
 
 impl KhmerTextSegmenter {
     pub fn new() -> Result<Self, String> {
-        let segmenter =
-            KhmerSegmenter::from_bytes(KHMER_DICTIONARY.to_vec(), SegmenterConfig::default())
-                .map_err(|error| format!("Failed to load Khmer dictionary: {}", error))?;
+        let mut config = SegmenterConfig::default();
+        config.segmentation_length = SegmentationLength::Short;
+        let segmenter = KhmerSegmenter::from_bytes(KHMER_DICTIONARY.to_vec(), config)
+            .map_err(|error| format!("Failed to load Khmer dictionary: {}", error))?;
         let hyphenation = KHypDict::from_bytes(KHMER_HYPHENATION.to_vec())
             .map_err(|error| format!("Failed to load Khmer hyphenation dictionary: {}", error))?;
         Ok(Self {
@@ -27,71 +26,37 @@ impl KhmerTextSegmenter {
     }
 }
 
-fn khmer_cluster_count(text: &str) -> usize {
-    let mut clusters = 0;
-    let mut has_current = false;
-    let mut prev_is_coeng = false;
-
-    for character in text.chars() {
-        let is_base = ('\u{1780}'..='\u{17b3}').contains(&character);
-        if is_base {
-            if has_current && !prev_is_coeng {
-                clusters += 1;
-            }
-            has_current = true;
-        }
-        prev_is_coeng = character == '\u{17d2}';
-    }
-
-    if has_current {
-        clusters + 1
-    } else {
-        text.chars().count()
-    }
-}
-
 fn layout_parts<'a>(
     source_text: &'a str,
     normalized_text: &str,
     hyphenation: &KHypDict,
 ) -> Vec<&'a str> {
-    let Some(hyphenated) = hyphenation.lookup(normalized_text) else {
-        return vec![source_text];
-    };
-    let hyphenation_parts: Vec<&str> = hyphenated
-        .split('\u{200b}')
-        .filter(|part| !part.is_empty())
-        .collect();
-    if hyphenation_parts.len() <= 1 {
-        return vec![source_text];
-    }
-    if hyphenation_parts
-        .iter()
-        .any(|part| khmer_cluster_count(part) < MIN_LAYOUT_PART_CLUSTERS)
-    {
-        return vec![source_text];
-    }
-
-    let joined: String = hyphenation_parts.concat();
-    if joined != source_text {
-        return vec![source_text];
-    }
-
-    let mut parts = Vec::with_capacity(hyphenation_parts.len());
-    let mut cursor = 0;
-    for part in hyphenation_parts {
-        let end = cursor + part.len();
-        if !source_text.is_char_boundary(cursor) || !source_text.is_char_boundary(end) {
-            return vec![source_text];
+    if let Some(hyphenated) = hyphenation.lookup(normalized_text) {
+        let hyphenation_parts: Vec<&str> = hyphenated
+            .split('\u{200b}')
+            .filter(|part| !part.is_empty())
+            .collect();
+        if hyphenation_parts.len() > 1 {
+            let joined: String = hyphenation_parts.concat();
+            if joined == source_text {
+                let mut parts = Vec::with_capacity(hyphenation_parts.len());
+                let mut cursor = 0;
+                for part in hyphenation_parts {
+                    let end = cursor + part.len();
+                    if !source_text.is_char_boundary(cursor) || !source_text.is_char_boundary(end) {
+                        return vec![source_text];
+                    }
+                    parts.push(&source_text[cursor..end]);
+                    cursor = end;
+                }
+                if cursor == source_text.len() {
+                    return parts;
+                }
+            }
         }
-        parts.push(&source_text[cursor..end]);
-        cursor = end;
     }
-    if cursor == source_text.len() {
-        parts
-    } else {
-        vec![source_text]
-    }
+
+    vec![source_text]
 }
 
 pub fn prepare_khmer_text_for_rendering(
@@ -241,14 +206,6 @@ mod tests {
          \u{1799}\u{17b6}\u{179b}\u{17d0}\u{1799}"
     }
 
-    fn important_word() -> &'static str {
-        "\u{179f}\u{17c6}\u{1781}\u{17b6}\u{1793}\u{17cb}"
-    }
-
-    fn cambodia_word() -> &'static str {
-        "\u{1780}\u{1798}\u{17d2}\u{1796}\u{17bb}\u{1787}\u{17b6}"
-    }
-
     fn remove_layout_controls(text: &str) -> String {
         text.replace('\u{200b}', "")
     }
@@ -310,7 +267,7 @@ mod tests {
     }
 
     #[test]
-    fn test_khmer_hyphenation_zws_rejects_too_short_parts() {
+    fn test_khmer_layout_splits_common_long_dictionary_tokens() {
         let segmenter = KhmerTextSegmenter::new().unwrap();
         let mut map = SourceMap::new("src.typ".into(), "dest.typ".into());
         let scope = crate::render_prepare::scanner::ScopeState {
@@ -318,7 +275,8 @@ mod tests {
             render_prep_disabled: false,
         };
 
-        for source in [important_word(), cambodia_word()] {
+        for source in ["ភាសាខ្មែរ", "ភាសាផ្លូវការ", "ប្រើប្រាស់", "ប្រចាំថ្ងៃ"]
+        {
             let output = prepare_khmer_text_for_rendering(
                 source,
                 &segmenter.segmenter,
@@ -327,6 +285,10 @@ mod tests {
                 0,
                 &mut map,
                 scope,
+            );
+            assert!(
+                output.contains('\u{200b}'),
+                "expected a ZWSP layout split for {source:?}: {output:?}"
             );
             assert_eq!(remove_layout_controls(&output), source);
         }

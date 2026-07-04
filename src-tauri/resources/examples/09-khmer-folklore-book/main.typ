@@ -1,27 +1,11 @@
+#import "template.typ": khmer_folklore_book
+
 #set document(
   title: "រឿងព្រេងនិទានខ្មែរ",
   author: "Typstry Examples",
 )
 
-// typstry:typography:start
-#set text(font: "MiSans Latin", size: 11pt)
-#show regex("[\u1780-\u17ff]+"): set text(font: "MiSans Khmer", size: 1.05em, lang: "km", hyphenate: true)
-// typstry:typography:end
-
-#set page(
-  paper: "a5",
-  margin: (top: 2.5cm, bottom: 2.5cm, left: 2cm, right: 2cm),
-  header: align(right)[
-    #text(size: 8.5pt, fill: luma(120))[រឿងព្រេងនិទានខ្មែរ]
-  ],
-  footer: context {
-    let page_number = counter(page).get().first()
-    align(center)[#text(size: 9pt)[#page_number]]
-  },
-)
-
-#set par(justify: true, leading: 0.8em, first-line-indent: 1.5em)
-#show heading: set text(fill: rgb("#800020"))
+#show: khmer_folklore_book
 
 #align(center + horizon)[
   #v(-2cm)
