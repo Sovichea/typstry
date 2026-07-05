@@ -37,10 +37,20 @@ describe("editor grapheme navigation", () => {
     expect(selection.main.head).toBe(4);
   });
 
-  test("delete ranges are one Unicode code point, not one grapheme cluster", () => {
+  test("delete ranges are one Unicode code point except Khmer subscript pairs", () => {
     const doc = Text.of(["ខ្មែរ"]);
     expect(codePointDeletionRange(doc, 4, "backward")).toEqual({ from: 3, to: 4 });
     expect(codePointDeletionRange(doc, 0, "forward")).toEqual({ from: 0, to: 1 });
+    expect(codePointDeletionRange(doc, 3, "backward")).toEqual({ from: 1, to: 3 });
+    expect(codePointDeletionRange(doc, 1, "forward")).toEqual({ from: 1, to: 3 });
+  });
+
+  test("deletes Khmer coeng plus consonant together inside longer words", () => {
+    const doc = Text.of(["\u179F\u1798\u17D2\u1794\u178F\u17D2\u178F\u17B7"]);
+    expect(codePointDeletionRange(doc, 4, "backward")).toEqual({ from: 2, to: 4 });
+    expect(codePointDeletionRange(doc, 2, "forward")).toEqual({ from: 2, to: 4 });
+    expect(codePointDeletionRange(doc, 7, "backward")).toEqual({ from: 5, to: 7 });
+    expect(codePointDeletionRange(doc, 5, "forward")).toEqual({ from: 5, to: 7 });
   });
 
   test("extends keyboard selection by Khmer grapheme boundaries", () => {

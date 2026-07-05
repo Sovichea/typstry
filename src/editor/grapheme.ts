@@ -176,10 +176,18 @@ export function codePointDeletionRange(doc: Text, position: number, direction: "
   const local = position - line.from;
   if (direction === "backward") {
     if (local <= 0) return null;
+    const khmerSubscriptFrom = previousKhmerSubscriptPairOffset(line.text, local);
+    if (khmerSubscriptFrom !== null) {
+      return { from: line.from + khmerSubscriptFrom, to: line.from + local };
+    }
     const from = previousCodePointOffset(line.text, local);
     return { from: line.from + from, to: line.from + local };
   }
   if (local >= line.length) return null;
+  const khmerSubscriptTo = nextKhmerSubscriptPairOffset(line.text, local);
+  if (khmerSubscriptTo !== null) {
+    return { from: line.from + local, to: line.from + khmerSubscriptTo };
+  }
   const to = nextCodePointOffset(line.text, local);
   return { from: line.from + local, to: line.from + to };
 }
@@ -230,6 +238,24 @@ function nextCodePointOffset(text: string, offset: number): number {
     return position + 2;
   }
   return Math.min(text.length, position + 1);
+}
+
+function previousKhmerSubscriptPairOffset(text: string, offset: number): number | null {
+  const consonantFrom = previousCodePointOffset(text, offset);
+  if (!isKhmerConsonantAt(text, consonantFrom)) return null;
+  const coengFrom = previousCodePointOffset(text, consonantFrom);
+  return text.slice(coengFrom, consonantFrom) === "\u17D2" ? coengFrom : null;
+}
+
+function nextKhmerSubscriptPairOffset(text: string, offset: number): number | null {
+  if (text.slice(offset, offset + 1) !== "\u17D2") return null;
+  const consonantTo = nextCodePointOffset(text, offset + 1);
+  return isKhmerConsonantAt(text, offset + 1) ? consonantTo : null;
+}
+
+function isKhmerConsonantAt(text: string, offset: number): boolean {
+  const value = text.codePointAt(offset);
+  return value !== undefined && value >= 0x1780 && value <= 0x17A2;
 }
 
 function isHighSurrogate(value: number): boolean {
