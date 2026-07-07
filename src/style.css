@@ -855,6 +855,11 @@ body.typstry-resizing #preview-render-pane {
   position: relative;
 }
 
+.cm-khmer-composition-boundary {
+  display: inline;
+  font-size: 0;
+}
+
 body.typstry-resizing #preview-render-pane iframe {
   visibility: hidden;
 }

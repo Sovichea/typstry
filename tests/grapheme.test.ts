@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { EditorSelection, Text } from "@codemirror/state";
-import { codePointDeletionRange, graphemeBoundaries, moveSelectionByGrapheme, nextGraphemeBoundary, previousGraphemeBoundary, snapPositionToGraphemeBoundary, snapSelectionToGraphemeBoundaries } from "../src/editor/grapheme";
+import { EditorSelection, EditorState, Text } from "@codemirror/state";
+import { codePointDeletionRange, graphemeBoundaries, graphemeSelectionBoundaryFilter, khmerCompositionBoundaryState, moveSelectionByGrapheme, nextGraphemeBoundary, previousGraphemeBoundary, snapPositionToGraphemeBoundary, snapSelectionToGraphemeBoundaries } from "../src/editor/grapheme";
 
 describe("editor grapheme navigation", () => {
   test("keeps Khmer coeng clusters together", () => {
@@ -37,20 +37,55 @@ describe("editor grapheme navigation", () => {
     expect(selection.main.head).toBe(4);
   });
 
-  test("delete ranges are one Unicode code point except Khmer subscript pairs", () => {
+  test("backspace deletes one Unicode code point except Khmer subscript pairs", () => {
     const doc = Text.of(["ខ្មែរ"]);
     expect(codePointDeletionRange(doc, 4, "backward")).toEqual({ from: 3, to: 4 });
-    expect(codePointDeletionRange(doc, 0, "forward")).toEqual({ from: 0, to: 1 });
     expect(codePointDeletionRange(doc, 3, "backward")).toEqual({ from: 1, to: 3 });
-    expect(codePointDeletionRange(doc, 1, "forward")).toEqual({ from: 1, to: 3 });
   });
 
-  test("deletes Khmer coeng plus consonant together inside longer words", () => {
+  test("backspace deletes Khmer coeng plus consonant together inside longer words", () => {
     const doc = Text.of(["\u179F\u1798\u17D2\u1794\u178F\u17D2\u178F\u17B7"]);
     expect(codePointDeletionRange(doc, 4, "backward")).toEqual({ from: 2, to: 4 });
-    expect(codePointDeletionRange(doc, 2, "forward")).toEqual({ from: 2, to: 4 });
     expect(codePointDeletionRange(doc, 7, "backward")).toEqual({ from: 5, to: 7 });
-    expect(codePointDeletionRange(doc, 5, "forward")).toEqual({ from: 5, to: 7 });
+  });
+
+  test("forward delete removes a complete Khmer grapheme cluster", () => {
+    const doc = Text.of(["\u179F\u1798\u17D2\u1794\u178F\u17D2\u178F\u17B7"]);
+    expect(codePointDeletionRange(doc, 0, "forward")).toEqual({ from: 0, to: 1 });
+    expect(codePointDeletionRange(doc, 1, "forward")).toEqual({ from: 1, to: 4 });
+    expect(codePointDeletionRange(doc, 4, "forward")).toEqual({ from: 4, to: 8 });
+  });
+
+  test("preserves a temporary boundary after a newly inserted Khmer coeng", () => {
+    let state = EditorState.create({
+      doc: "\u1780\u1781",
+      selection: { anchor: 1 },
+      extensions: [khmerCompositionBoundaryState, graphemeSelectionBoundaryFilter]
+    });
+    state = state.update({
+      changes: { from: 1, insert: "\u17D2" },
+      selection: { anchor: 2 },
+      userEvent: "input.type"
+    }).state;
+
+    state = state.update({ selection: { anchor: 2 } }).state;
+    expect(state.selection.main.head).toBe(2);
+    expect(codePointDeletionRange(state.doc, 2, "backward", 2)).toEqual({ from: 1, to: 2 });
+    expect(codePointDeletionRange(state.doc, 2, "forward", 2)).toEqual({ from: 2, to: 3 });
+
+    const completed = state.update({
+      changes: { from: 2, insert: "\u1798" },
+      selection: { anchor: 3 },
+      userEvent: "input.type"
+    }).state;
+    expect(graphemeBoundaries(completed.doc.sliceString(0)).map(range => completed.doc.sliceString(range.from, range.to))).toEqual([
+      "\u1780\u17D2\u1798",
+      "\u1781"
+    ]);
+
+    state = state.update({ selection: { anchor: 0 } }).state;
+    state = state.update({ selection: { anchor: 2 } }).state;
+    expect(state.selection.main.head).toBe(3);
   });
 
   test("extends keyboard selection by Khmer grapheme boundaries", () => {

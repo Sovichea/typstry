@@ -1,5 +1,5 @@
-import { EditorSelection, EditorState, type Extension, type Text, type Transaction } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import { EditorSelection, EditorState, StateField, type Extension, type Text, type Transaction } from "@codemirror/state";
+import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 
 type SegmentRecord = { segment: string; index: number };
 type SegmenterLike = {
@@ -18,10 +18,25 @@ export type GraphemeBoundary = {
   to: number;
 };
 
-export function graphemeBoundaries(text: string): GraphemeBoundary[] {
+export function graphemeBoundaries(text: string, temporaryBoundary: number | null = null): GraphemeBoundary[] {
   if (!text) return [];
-  if (/[\u1780-\u17ff]/u.test(text)) return khmerAwareGraphemeBoundaries(text);
-  return unicodeGraphemeBoundaries(text);
+  const boundaries = /[\u1780-\u17ff]/u.test(text)
+    ? khmerAwareGraphemeBoundaries(text)
+    : unicodeGraphemeBoundaries(text);
+  return splitAtTemporaryBoundary(boundaries, temporaryBoundary);
+}
+
+function splitAtTemporaryBoundary(boundaries: GraphemeBoundary[], position: number | null): GraphemeBoundary[] {
+  if (position === null) return boundaries;
+  const split: GraphemeBoundary[] = [];
+  for (const boundary of boundaries) {
+    if (boundary.from < position && position < boundary.to) {
+      split.push({ from: boundary.from, to: position }, { from: position, to: boundary.to });
+    } else {
+      split.push(boundary);
+    }
+  }
+  return split;
 }
 
 function unicodeGraphemeBoundaries(text: string): GraphemeBoundary[] {
@@ -77,11 +92,12 @@ function startsWithKhmerDependentMark(text: string): boolean {
   );
 }
 
-export function previousGraphemeBoundary(doc: Text, position: number): number {
+export function previousGraphemeBoundary(doc: Text, position: number, temporaryBoundary: number | null = null): number {
   const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
   const local = position - line.from;
+  const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
   let previous = 0;
-  for (const boundary of graphemeBoundaries(line.text)) {
+  for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
     if (boundary.to >= local) {
       return line.from + (local <= boundary.from ? previous : boundary.from);
     }
@@ -90,10 +106,11 @@ export function previousGraphemeBoundary(doc: Text, position: number): number {
   return line.from + previous;
 }
 
-export function nextGraphemeBoundary(doc: Text, position: number): number {
+export function nextGraphemeBoundary(doc: Text, position: number, temporaryBoundary: number | null = null): number {
   const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
   const local = position - line.from;
-  for (const boundary of graphemeBoundaries(line.text)) {
+  const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
+  for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
     if (boundary.from <= local && local < boundary.to) return line.from + boundary.to;
     if (local < boundary.from) return line.from + boundary.from;
   }
@@ -105,7 +122,19 @@ export function deletePreviousGrapheme(view: EditorView): boolean {
 }
 
 export function deleteNextGrapheme(view: EditorView): boolean {
-  return deleteByCodePoint(view, "forward");
+  const selection = view.state.selection;
+  if (!selection.main.empty) return false;
+  const temporaryBoundary = getTemporaryKhmerBoundary(view.state);
+  const position = snapPositionToGraphemeBoundary(view.state.doc, selection.main.head, temporaryBoundary);
+  const range = codePointDeletionRange(view.state.doc, position, "forward", temporaryBoundary);
+  if (!range) return false;
+  view.dispatch({
+    changes: range,
+    selection: { anchor: range.from },
+    scrollIntoView: true,
+    userEvent: "delete.forward"
+  });
+  return true;
 }
 
 export function movePreviousGrapheme(view: EditorView): boolean {
@@ -124,10 +153,11 @@ export function selectNextGrapheme(view: EditorView): boolean {
   return moveByGrapheme(view, "forward", true);
 }
 
-export function snapPositionToGraphemeBoundary(doc: Text, position: number): number {
+export function snapPositionToGraphemeBoundary(doc: Text, position: number, temporaryBoundary: number | null = null): number {
   const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
   const local = position - line.from;
-  for (const boundary of graphemeBoundaries(line.text)) {
+  const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
+  for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
     if (local <= boundary.from) return line.from + boundary.from;
     if (boundary.from < local && local < boundary.to) {
       const midpoint = boundary.from + ((boundary.to - boundary.from) / 2);
@@ -137,9 +167,72 @@ export function snapPositionToGraphemeBoundary(doc: Text, position: number): num
   return Math.max(line.from, Math.min(position, line.to));
 }
 
+class KhmerCompositionBoundaryWidget extends WidgetType {
+  eq(): boolean {
+    return true;
+  }
+
+  toDOM(): HTMLElement {
+    const boundary = document.createElement("span");
+    boundary.className = "cm-khmer-composition-boundary";
+    boundary.textContent = "\u200C";
+    boundary.setAttribute("aria-hidden", "true");
+    return boundary;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+const khmerCompositionBoundaryDecoration = Decoration.widget({
+  widget: new KhmerCompositionBoundaryWidget(),
+  side: 1
+});
+
+const temporaryKhmerBoundaryState = StateField.define<number | null>({
+  create: () => null,
+  update(value, transaction) {
+    if (transaction.docChanged) return insertedTrailingCoengBoundary(transaction);
+    if (!transaction.selection) return value;
+    const selection = transaction.newSelection.main;
+    return selection.empty && selection.head === value ? value : null;
+  },
+  provide: field => EditorView.decorations.from(field, boundary => boundary === null
+    ? Decoration.none
+    : Decoration.set([khmerCompositionBoundaryDecoration.range(boundary)]))
+});
+
+export const khmerCompositionBoundaryState: Extension = temporaryKhmerBoundaryState;
+
+function insertedTrailingCoengBoundary(transaction: Transaction): number | null {
+  let boundary: number | null = null;
+  let changedRangeCount = 0;
+  transaction.changes.iterChanges((_fromA, _toA, _fromB, toB, inserted) => {
+    changedRangeCount += 1;
+    if (inserted.sliceString(0).endsWith("\u17D2")) boundary = toB;
+  });
+  if (changedRangeCount !== 1 || boundary === null) return null;
+  const selection = transaction.newSelection.main;
+  if (!selection.empty || selection.head !== boundary) return null;
+  return isKhmerConsonantAt(transaction.newDoc.sliceString(0), boundary) ? boundary : null;
+}
+
+function getTemporaryKhmerBoundary(state: EditorState): number | null {
+  return state.field(temporaryKhmerBoundaryState, false) ?? null;
+}
+
 export const graphemeSelectionBoundaryFilter: Extension = EditorState.transactionFilter.of((transaction: Transaction) => {
   if (!transaction.selection || transaction.docChanged) return transaction;
-  const snapped = snapSelectionToGraphemeBoundaries(transaction.newDoc, transaction.selection);
+  const temporaryBoundary = getTemporaryKhmerBoundary(transaction.startState);
+  const selectionKeepsTemporaryBoundary = temporaryBoundary !== null
+    && transaction.selection.main.empty
+    && transaction.selection.main.head === temporaryBoundary;
+  const snapped = snapSelectionToGraphemeBoundaries(
+    transaction.newDoc,
+    transaction.selection,
+    selectionKeepsTemporaryBoundary ? temporaryBoundary : null
+  );
   if (snapped.eq(transaction.selection)) return transaction;
   return {
     selection: snapped,
@@ -147,10 +240,14 @@ export const graphemeSelectionBoundaryFilter: Extension = EditorState.transactio
   };
 });
 
-export function snapSelectionToGraphemeBoundaries(doc: Text, selection: EditorSelection): EditorSelection {
+export function snapSelectionToGraphemeBoundaries(
+  doc: Text,
+  selection: EditorSelection,
+  temporaryBoundary: number | null = null
+): EditorSelection {
   const ranges = selection.ranges.map(range => {
-    const anchor = snapPositionToGraphemeBoundary(doc, range.anchor);
-    const head = snapPositionToGraphemeBoundary(doc, range.head);
+    const anchor = snapPositionToGraphemeBoundary(doc, range.anchor, temporaryBoundary);
+    const head = snapPositionToGraphemeBoundary(doc, range.head, temporaryBoundary);
     return anchor === head ? EditorSelection.cursor(anchor) : EditorSelection.range(anchor, head);
   });
   return EditorSelection.create(ranges, selection.mainIndex);
@@ -159,8 +256,9 @@ export function snapSelectionToGraphemeBoundaries(doc: Text, selection: EditorSe
 function deleteByCodePoint(view: EditorView, direction: "backward" | "forward"): boolean {
   const selection = view.state.selection;
   if (!selection.main.empty) return false;
-  const position = snapPositionToGraphemeBoundary(view.state.doc, selection.main.head);
-  const range = codePointDeletionRange(view.state.doc, position, direction);
+  const temporaryBoundary = getTemporaryKhmerBoundary(view.state);
+  const position = snapPositionToGraphemeBoundary(view.state.doc, selection.main.head, temporaryBoundary);
+  const range = codePointDeletionRange(view.state.doc, position, direction, temporaryBoundary);
   if (!range) return false;
   view.dispatch({
     changes: range,
@@ -171,7 +269,12 @@ function deleteByCodePoint(view: EditorView, direction: "backward" | "forward"):
   return true;
 }
 
-export function codePointDeletionRange(doc: Text, position: number, direction: "backward" | "forward"): GraphemeBoundary | null {
+export function codePointDeletionRange(
+  doc: Text,
+  position: number,
+  direction: "backward" | "forward",
+  temporaryBoundary: number | null = null
+): GraphemeBoundary | null {
   const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
   const local = position - line.from;
   if (direction === "backward") {
@@ -184,17 +287,19 @@ export function codePointDeletionRange(doc: Text, position: number, direction: "
     return { from: line.from + from, to: line.from + local };
   }
   if (local >= line.length) return null;
-  const khmerSubscriptTo = nextKhmerSubscriptPairOffset(line.text, local);
-  if (khmerSubscriptTo !== null) {
-    return { from: line.from + local, to: line.from + khmerSubscriptTo };
-  }
-  const to = nextCodePointOffset(line.text, local);
-  return { from: line.from + local, to: line.from + to };
+  const to = nextGraphemeBoundary(doc, position, temporaryBoundary);
+  return to > position ? { from: position, to } : null;
 }
 
 function moveByGrapheme(view: EditorView, direction: "backward" | "forward", extend: boolean): boolean {
   const selection = view.state.selection;
-  const nextSelection = moveSelectionByGrapheme(view.state.doc, selection, direction, extend);
+  const nextSelection = moveSelectionByGrapheme(
+    view.state.doc,
+    selection,
+    direction,
+    extend,
+    getTemporaryKhmerBoundary(view.state)
+  );
   if (nextSelection.eq(selection)) return false;
   view.dispatch({
     selection: nextSelection,
@@ -208,15 +313,16 @@ export function moveSelectionByGrapheme(
   doc: Text,
   selection: EditorSelection,
   direction: "backward" | "forward",
-  extend: boolean
+  extend: boolean,
+  temporaryBoundary: number | null = null
 ): EditorSelection {
   const ranges = selection.ranges.map(range => {
-    const head = snapPositionToGraphemeBoundary(doc, range.head);
+    const head = snapPositionToGraphemeBoundary(doc, range.head, temporaryBoundary);
     const target = direction === "backward"
-      ? previousGraphemeBoundary(doc, head)
-      : nextGraphemeBoundary(doc, head);
+      ? previousGraphemeBoundary(doc, head, temporaryBoundary)
+      : nextGraphemeBoundary(doc, head, temporaryBoundary);
     if (extend) {
-      const anchor = snapPositionToGraphemeBoundary(doc, range.anchor);
+      const anchor = snapPositionToGraphemeBoundary(doc, range.anchor, temporaryBoundary);
       return anchor === target ? EditorSelection.cursor(target) : EditorSelection.range(anchor, target);
     }
     return EditorSelection.cursor(target);
@@ -232,25 +338,11 @@ function previousCodePointOffset(text: string, offset: number): number {
   return Math.max(0, position - 1);
 }
 
-function nextCodePointOffset(text: string, offset: number): number {
-  const position = Math.max(0, Math.min(offset, text.length));
-  if (position + 1 < text.length && isHighSurrogate(text.charCodeAt(position)) && isLowSurrogate(text.charCodeAt(position + 1))) {
-    return position + 2;
-  }
-  return Math.min(text.length, position + 1);
-}
-
 function previousKhmerSubscriptPairOffset(text: string, offset: number): number | null {
   const consonantFrom = previousCodePointOffset(text, offset);
   if (!isKhmerConsonantAt(text, consonantFrom)) return null;
   const coengFrom = previousCodePointOffset(text, consonantFrom);
   return text.slice(coengFrom, consonantFrom) === "\u17D2" ? coengFrom : null;
-}
-
-function nextKhmerSubscriptPairOffset(text: string, offset: number): number | null {
-  if (text.slice(offset, offset + 1) !== "\u17D2") return null;
-  const consonantTo = nextCodePointOffset(text, offset + 1);
-  return isKhmerConsonantAt(text, offset + 1) ? consonantTo : null;
 }
 
 function isKhmerConsonantAt(text: string, offset: number): boolean {

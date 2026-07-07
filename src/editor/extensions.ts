@@ -19,7 +19,7 @@ import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
 import { typstFunctionFoldService } from "./folding";
-import { deleteNextGrapheme, deletePreviousGrapheme, graphemeSelectionBoundaryFilter, moveNextGrapheme, movePreviousGrapheme, selectNextGrapheme, selectPreviousGrapheme } from "./grapheme";
+import { deleteNextGrapheme, deletePreviousGrapheme, graphemeSelectionBoundaryFilter, khmerCompositionBoundaryState, moveNextGrapheme, movePreviousGrapheme, selectNextGrapheme, selectPreviousGrapheme } from "./grapheme";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -233,6 +233,7 @@ export function getEditorExtensions(
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
+    khmerCompositionBoundaryState,
     graphemeSelectionBoundaryFilter,
     showZwsCompartment.of(showZeroWidthSpaces),
     preventEscapedBracketAutoClose,
