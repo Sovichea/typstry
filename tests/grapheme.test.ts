@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { EditorSelection, EditorState, Text } from "@codemirror/state";
-import { codePointDeletionRange, graphemeBoundaries, graphemeSelectionBoundaryFilter, khmerCompositionBoundaryState, moveSelectionByGrapheme, nextGraphemeBoundary, previousGraphemeBoundary, snapPositionToGraphemeBoundary, snapSelectionToGraphemeBoundaries } from "../src/editor/grapheme";
+import { codePointDeletionRange, deletionRangesForSelection, graphemeBoundaries, graphemeSelectionBoundaryFilter, moveSelectionByGrapheme, nextGraphemeBoundary, previousGraphemeBoundary, snapPositionToGraphemeBoundary, snapSelectionToGraphemeBoundaries } from "../src/editor/grapheme";
+import { getTemporaryKhmerBoundary, khmerCompositionBoundaryState } from "../src/editor/editingPolicies/khmer/composition";
 
 describe("editor grapheme navigation", () => {
   test("keeps Khmer coeng clusters together", () => {
@@ -56,6 +57,29 @@ describe("editor grapheme navigation", () => {
     expect(codePointDeletionRange(doc, 4, "forward")).toEqual({ from: 4, to: 8 });
   });
 
+  test("computes and merges deletion ranges for multiple cursors", () => {
+    const doc = Text.of(["\u1798\u17D2\u1794 \u178F\u17D2\u178F\u17B7"]);
+    const backward = deletionRangesForSelection(
+      doc,
+      EditorSelection.create([EditorSelection.cursor(3), EditorSelection.cursor(8)]),
+      "backward"
+    );
+    expect(backward).toEqual([{ from: 1, to: 3 }, { from: 7, to: 8 }]);
+
+    const forward = deletionRangesForSelection(
+      doc,
+      EditorSelection.create([EditorSelection.cursor(0), EditorSelection.cursor(4)]),
+      "forward"
+    );
+    expect(forward).toEqual([{ from: 0, to: 3 }, { from: 4, to: 8 }]);
+  });
+
+  test("never splits a non-BMP Unicode code point", () => {
+    const doc = Text.of(["😀"]);
+    expect(codePointDeletionRange(doc, 2, "backward")).toEqual({ from: 0, to: 2 });
+    expect(codePointDeletionRange(doc, 0, "forward")).toEqual({ from: 0, to: 2 });
+  });
+
   test("preserves a temporary boundary after a newly inserted Khmer coeng", () => {
     let state = EditorState.create({
       doc: "\u1780\u1781",
@@ -82,9 +106,19 @@ describe("editor grapheme navigation", () => {
       "\u1780\u17D2\u1798",
       "\u1781"
     ]);
+    expect(getTemporaryKhmerBoundary(completed)).toBeNull();
 
     state = state.update({ selection: { anchor: 0 } }).state;
     state = state.update({ selection: { anchor: 2 } }).state;
+    expect(state.selection.main.head).toBe(2);
+
+    state = state.update({
+      changes: { from: 0, insert: "A" },
+      selection: { anchor: 1 },
+      userEvent: "input.type"
+    }).state;
+    expect(getTemporaryKhmerBoundary(state)).toBe(3);
+    state = state.update({ selection: { anchor: 3 } }).state;
     expect(state.selection.main.head).toBe(3);
   });
 

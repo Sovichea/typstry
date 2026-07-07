@@ -108,6 +108,7 @@ Typstry downloads and manages Tinymist for preview/diagnostics. A separate Typst
 - [Roadmap](./docs/ROADMAP.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
 - [Language tools providers](./docs/LANGUAGE_TOOLS.md)
+- [Script-aware editor policy guide](./docs/SCRIPT_EDITING_POLICIES.md)
 - [Khmer spellcheck and word completion](./docs/KHMER_SPELLCHECK.md)
 - [Preview interception notes](./docs/PREVIEW_INTERCEPTION.md)
 

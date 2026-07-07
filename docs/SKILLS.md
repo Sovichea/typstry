@@ -62,4 +62,8 @@ To add support for a new localized script or language segmenter:
    - The generic frontend controllers (`spellcheck.ts` and `autocomplete.ts`) dynamically fetch provider capabilities via the `get_provider_capabilities` command.
    - Never hardcode script-specific regular expressions (e.g. Khmer RegExp) or routing rules in the frontend controllers. Let the generic controllers match against the retrieved provider patterns and route requests with `provider` ID.
 
+## 7. Script-Aware Editor Policy Boundary
+
+Cursor movement and deletion are separate from spellcheck providers. Implement frontend script tailoring through `src/editor/editingPolicies/` and register exactly one policy per ISO 15924 script in `createDefaultEditingPolicyRegistry()`. Generic CodeMirror commands must not contain new script-specific branches. Optional composition state and decorations are exposed through the policy's `editorExtensions` and `temporaryBoundary` fields. Follow [SCRIPT_EDITING_POLICIES.md](./SCRIPT_EDITING_POLICIES.md) for the complete contract and isolation tests.
+
 *(This file should be continually updated as the project's architectural scope expands).*

@@ -856,8 +856,24 @@ body.typstry-resizing #preview-render-pane {
 }
 
 .cm-khmer-composition-boundary {
-  display: inline;
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  line-height: 0;
+  overflow: hidden;
+  vertical-align: text-bottom;
   font-size: 0;
+}
+
+.cm-khmer-composition-boundary-visible {
+  width: 4px;
+  height: 4px;
+  margin: 0 1px;
+  overflow: visible;
+  border-radius: 50%;
+  vertical-align: middle;
+  background-color: var(--editor-function-color, #3b82f6);
+  opacity: 0.7;
 }
 
 body.typstry-resizing #preview-render-pane iframe {

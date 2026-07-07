@@ -19,7 +19,9 @@ import { bracketColorizer } from "./bracketColorizer";
 import { createHoverTooltip } from "./hover";
 import type { TinymistLspClient } from "../compiler/lsp";
 import { typstFunctionFoldService } from "./folding";
-import { deleteNextGrapheme, deletePreviousGrapheme, graphemeSelectionBoundaryFilter, khmerCompositionBoundaryState, moveNextGrapheme, movePreviousGrapheme, selectNextGrapheme, selectPreviousGrapheme } from "./grapheme";
+import { deleteNextGrapheme, deletePreviousGrapheme, graphemeSelectionBoundaryFilter, moveNextGrapheme, movePreviousGrapheme, selectNextGrapheme, selectPreviousGrapheme } from "./grapheme";
+import { editingPolicyRegistry } from "./editingPolicies/registry";
+import { showInvisibleCharacters } from "./invisibles";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -178,7 +180,7 @@ const shyDecoration = Decoration.widget({
   side: -1
 });
 
-export const showZeroWidthSpaces = ViewPlugin.fromClass(class {
+const showZeroWidthSpacesPlugin = ViewPlugin.fromClass(class {
   decorations: DecorationSet;
 
   constructor(view: EditorView) {
@@ -224,6 +226,11 @@ export const showZeroWidthSpaces = ViewPlugin.fromClass(class {
   decorations: v => v.decorations
 });
 
+export const showZeroWidthSpaces: Extension = [
+  showInvisibleCharacters.of(true),
+  showZeroWidthSpacesPlugin
+];
+
 export function getEditorExtensions(
   getClient: () => TinymistLspClient | undefined,
   getUri: () => string,
@@ -233,7 +240,7 @@ export function getEditorExtensions(
 ): Extension[] {
   return [
     ctrlClickLinkPlugin,
-    khmerCompositionBoundaryState,
+    ...editingPolicyRegistry.editorExtensions(),
     graphemeSelectionBoundaryFilter,
     showZwsCompartment.of(showZeroWidthSpaces),
     preventEscapedBracketAutoClose,
