@@ -14,7 +14,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental build
 
-Typstry is currently beta software. The latest public release is v0.2.1.
+Typstry is currently beta software. The latest public release is v0.2.2.
 
 [![Release](https://img.shields.io/github/v/release/Sovichea/typstry?include_prereleases)](https://github.com/Sovichea/typstry/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)

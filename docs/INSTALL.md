@@ -12,7 +12,7 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental build
 
-Typstry is currently beta software. The latest public release is v0.2.1.
+Typstry is currently beta software. The latest public release is v0.2.2.
 
 ## Build from source
 
