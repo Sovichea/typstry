@@ -23,7 +23,8 @@ use render_prepare::{
 };
 use segmentation::{
     analyze_language_ranges, complete_language_word, get_provider_capabilities,
-    install_hunspell_dictionary, language_suggestions, list_hunspell_catalog, SegmentationRegistry,
+    install_hunspell_dictionary, language_suggestions, list_hunspell_catalog, ProviderCapabilities,
+    SegmentationRegistry,
 };
 use toolchain::active_tinymist;
 
@@ -155,8 +156,9 @@ fn copy_workspace_file(source: String, dest: String) -> Result<(), String> {
 
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Mutex,
+    Arc, Mutex,
 };
+use std::time::Instant;
 use tokio::sync::mpsc;
 
 #[allow(dead_code)]
@@ -179,6 +181,97 @@ struct LspState {
     generation: AtomicU64,
     tx: Mutex<Option<mpsc::Sender<String>>>,
     process: Mutex<Option<tokio::process::Child>>,
+}
+
+#[derive(Clone, Default)]
+struct StartupTimings {
+    entries: Arc<Mutex<Vec<StartupTimingEntry>>>,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StartupTimingEntry {
+    source: &'static str,
+    label: String,
+    ms: f64,
+}
+
+impl StartupTimings {
+    fn record(&self, source: &'static str, label: impl Into<String>, start: Instant) {
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.push(StartupTimingEntry {
+                source,
+                label: label.into(),
+                ms: elapsed,
+            });
+        }
+    }
+
+    fn snapshot(&self) -> Vec<StartupTimingEntry> {
+        self.entries
+            .lock()
+            .map(|entries| entries.clone())
+            .unwrap_or_default()
+    }
+}
+
+#[tauri::command]
+fn get_startup_timings(state: tauri::State<'_, StartupTimings>) -> Vec<StartupTimingEntry> {
+    state.snapshot()
+}
+
+#[tauri::command]
+async fn finish_startup_initialization(
+    app_handle: tauri::AppHandle,
+    registry: tauri::State<'_, SegmentationRegistry>,
+    timings: tauri::State<'_, StartupTimings>,
+) -> Result<Vec<ProviderCapabilities>, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to locate app data directory: {error}"))?;
+    let registry = registry.inner().clone();
+    let timings = timings.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let total_start = Instant::now();
+
+        let legacy_font_start = Instant::now();
+        font_store::remove_legacy_font_cache(&data_dir);
+        timings.record(
+            "deferred startup",
+            "remove legacy font cache",
+            legacy_font_start,
+        );
+
+        let provider_reload_start = Instant::now();
+        registry.reload_installed(&data_dir)?;
+        timings.record(
+            "deferred startup",
+            "load language providers",
+            provider_reload_start,
+        );
+
+        let font_install_start = Instant::now();
+        if let Err(error) = font_store::ensure_base_fonts_installed() {
+            eprintln!("Failed to install bundled fonts for the current user: {error}");
+        }
+        timings.record(
+            "deferred startup",
+            "ensure and register bundled fonts",
+            font_install_start,
+        );
+
+        let capabilities = registry.provider_capabilities()?;
+        timings.record(
+            "deferred startup",
+            "finish startup initialization",
+            total_start,
+        );
+        Ok(capabilities)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1334,8 +1427,16 @@ async fn start_preview_ws_proxy(target_url: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let segmentation_registry =
-        SegmentationRegistry::new().expect("Failed to initialize language segmentation providers");
+    let native_start = Instant::now();
+    let startup_timings = StartupTimings::default();
+    let registry_start = Instant::now();
+    let segmentation_registry = SegmentationRegistry::empty();
+    startup_timings.record(
+        "native startup",
+        "create empty language registry",
+        registry_start,
+    );
+    let setup_timings = startup_timings.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -1346,30 +1447,38 @@ pub fn run() {
             tx: Mutex::new(None),
             process: Mutex::new(None),
         })
+        .manage(startup_timings)
         .manage(segmentation_registry)
-        .setup(|app| {
+        .setup(move |app| {
+            let setup_start = Instant::now();
+            let examples_start = Instant::now();
             if let Err(error) = examples::install_examples_workspace(app.handle()) {
                 eprintln!("Failed to install bundled examples: {error}");
             }
-            if let Ok(data_dir) = app.path().app_local_data_dir() {
-                font_store::remove_legacy_font_cache(&data_dir);
-                if let Err(error) = app
-                    .state::<SegmentationRegistry>()
-                    .reload_installed(&data_dir)
-                {
-                    eprintln!("Failed to load installed language dictionaries: {error}");
-                }
-            }
-            if let Err(error) = font_store::ensure_base_fonts_installed() {
-                eprintln!("Failed to install bundled fonts for the current user: {error}");
-            }
+            setup_timings.record("native startup", "sync bundled examples", examples_start);
+            #[cfg(not(debug_assertions))]
+            let context_menu_start = Instant::now();
             #[cfg(not(debug_assertions))]
             if let Some(webview) = app.get_webview_window("main") {
                 let _ = webview.with_webview(disable_webview_context_menus);
             }
+            #[cfg(not(debug_assertions))]
+            setup_timings.record(
+                "native startup",
+                "configure release webview",
+                context_menu_start,
+            );
+            setup_timings.record("native startup", "tauri setup total", setup_start);
+            setup_timings.record(
+                "native startup",
+                "native run until setup complete",
+                native_start,
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_startup_timings,
+            finish_startup_initialization,
             load_app_settings,
             save_app_settings,
             compile_typst_document,

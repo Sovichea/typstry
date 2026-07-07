@@ -1303,10 +1303,18 @@ pub struct SegmentationRegistry {
 }
 
 impl SegmentationRegistry {
+    pub fn empty() -> Self {
+        Self {
+            providers: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    #[cfg(test)]
     pub fn new() -> Result<Self, String> {
         Self::new_with_data_dir(None)
     }
 
+    #[cfg(test)]
     pub fn new_with_data_dir(data_dir: Option<&Path>) -> Result<Self, String> {
         let providers = Self::load_providers(data_dir)?;
         Ok(Self {
@@ -1329,6 +1337,22 @@ impl SegmentationRegistry {
             .read()
             .map_err(|_| "Language provider registry lock is poisoned.".to_string())?
             .clone())
+    }
+
+    pub fn provider_capabilities(&self) -> Result<Vec<ProviderCapabilities>, String> {
+        Ok(self
+            .provider_snapshot()?
+            .iter()
+            .map(|provider| ProviderCapabilities {
+                id: provider.id().to_owned(),
+                pattern: provider.pattern().to_owned(),
+                display_name: provider.display_name().to_owned(),
+                language_tag: provider.language_tag().to_owned(),
+                engine: provider.engine().to_owned(),
+                support_level: provider.support_level().to_owned(),
+                boundary_mode: provider.boundary_mode().to_owned(),
+            })
+            .collect())
     }
 
     fn load_providers(data_dir: Option<&Path>) -> Result<Vec<Arc<dyn LanguageSegmenter>>, String> {
@@ -1462,19 +1486,7 @@ fn byte_to_utf16_offsets(text: &str) -> Vec<usize> {
 pub fn get_provider_capabilities(
     registry: tauri::State<'_, SegmentationRegistry>,
 ) -> Result<Vec<ProviderCapabilities>, String> {
-    Ok(registry
-        .provider_snapshot()?
-        .iter()
-        .map(|provider| ProviderCapabilities {
-            id: provider.id().to_owned(),
-            pattern: provider.pattern().to_owned(),
-            display_name: provider.display_name().to_owned(),
-            language_tag: provider.language_tag().to_owned(),
-            engine: provider.engine().to_owned(),
-            support_level: provider.support_level().to_owned(),
-            boundary_mode: provider.boundary_mode().to_owned(),
-        })
-        .collect())
+    registry.provider_capabilities()
 }
 
 #[tauri::command]

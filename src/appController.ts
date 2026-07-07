@@ -39,7 +39,7 @@ import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
-import { SpellcheckController } from "./editor/spellcheck";
+import { SpellcheckController, type ProviderCapabilities } from "./editor/spellcheck";
 
 import {
   ensureTypographyTemplateApplication,
@@ -56,6 +56,12 @@ type FallbackDiagnostic = {
   message: string;
   line?: number;
   column?: number;
+};
+
+type StartupTimingEntry = {
+  source: string;
+  label: string;
+  ms: number;
 };
 
 type ExamplesWorkspace = {
@@ -103,6 +109,9 @@ function normalizeEditorText(text: string): string {
 }
 
 export class TypstryWorkspaceController {
+  private readonly startupStart = performance.now();
+  private readonly startupTimings: StartupTimingEntry[] = [];
+  private readonly loggedNativeStartupTimings = new Set<string>();
   private activeMode: EditorMode = "CODE";
   private activeFilePath: string | null = null;
   private previewRootPath: string | null = null;
@@ -336,33 +345,37 @@ export class TypstryWorkspaceController {
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
 
   public async bootstrap() {
-    await this.settingsController.load();
-    await this.spellcheckController.initialize();
+    await this.timeStartup("load settings", () => this.settingsController.load());
+    for (const entry of this.settingsController.getTimings()) this.recordStartupTimingEntry(entry);
+    await this.timeStartup("initialize spellcheck providers", () => this.spellcheckController.initialize());
     this.settingsController.setLanguageProviders(this.spellcheckController.getAllProviders());
-    this.recentProjectsController.initialize();
-    this.initCodeMirror();
-    this.documentOutlineController.initialize();
-    this.applySettingsToRuntime(this.settingsController.value);
-    this.initExplorer();
-    this.editorToolbarController.initialize();
-    this.tabStripController.initialize();
-    this.bindGlobalEvents();
-    this.layoutController.initialize();
-    this.initWordWrap();
-    this.initZwsToggle();
-    this.settingsController.initializePanel();
-    this.toolchainController.initialize();
-    this.contextMenuController.initialize();
-    this.logConsoleController.initialize();
-    this.updateWorkspaceViewportVisibility();
+    this.timeStartupSync("initialize recent projects", () => this.recentProjectsController.initialize());
+    this.timeStartupSync("initialize CodeMirror", () => this.initCodeMirror());
+    this.timeStartupSync("initialize document outline", () => this.documentOutlineController.initialize());
+    this.timeStartupSync("apply settings to runtime", () => this.applySettingsToRuntime(this.settingsController.value));
+    this.timeStartupSync("initialize explorer", () => this.initExplorer());
+    this.timeStartupSync("initialize editor toolbar", () => this.editorToolbarController.initialize());
+    this.timeStartupSync("initialize tab strip", () => this.tabStripController.initialize());
+    this.timeStartupSync("bind global events", () => this.bindGlobalEvents());
+    this.timeStartupSync("initialize layout", () => this.layoutController.initialize());
+    this.timeStartupSync("initialize word wrap label", () => this.initWordWrap());
+    this.timeStartupSync("initialize invisibles toggle", () => this.initZwsToggle());
+    this.timeStartupSync("initialize settings panel", () => this.settingsController.initializePanel());
+    this.timeStartupSync("initialize toolchain UI", () => this.toolchainController.initialize());
+    this.timeStartupSync("initialize context menu", () => this.contextMenuController.initialize());
+    this.timeStartupSync("initialize log console", () => this.logConsoleController.initialize());
+    this.timeStartupSync("update workspace visibility", () => this.updateWorkspaceViewportVisibility());
 
-    await getCurrentWindow().show();
+    await this.timeStartup("show main window", () => getCurrentWindow().show());
+    this.recordStartupTiming("frontend startup", "frontend bootstrap until window shown", this.startupStart);
+    void this.logNativeStartupTimingsToConsole();
+    void this.finishStartupInitialization();
 
     this.setLspStatus({ kind: "starting", message: "Preparing toolchain" });
 
     let toolchain: ToolchainStatus | null = null;
     try {
-      toolchain = await invoke<ToolchainStatus>("get_toolchain_status");
+      toolchain = await this.timeStartup("get toolchain status", () => invoke<ToolchainStatus>("get_toolchain_status"));
     } catch (e) {
       console.error("Failed to check toolchain status:", e);
     }
@@ -372,7 +385,8 @@ export class TypstryWorkspaceController {
     }
 
     this.toolchainController.setStatus(toolchain ?? { typstVersion: null, typstSource: null, tinymistVersion: null, tinymistSource: null, lspAvailable: false, message: "" });
-    await this.initLsp(Boolean(toolchain?.lspAvailable));
+    await this.timeStartup("initialize Tinymist LSP", () => this.initLsp(Boolean(toolchain?.lspAvailable)));
+    this.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
   }
 
   private updateWorkspaceViewportVisibility() {
@@ -1896,6 +1910,66 @@ export class TypstryWorkspaceController {
   private updatePreviewZoomLabel() {
     const label = document.getElementById("preview-zoom-label");
     if (label) label.textContent = `${this.previewFrame.currentZoomPercent}%`;
+  }
+
+  private recordStartupTiming(source: string, label: string, start: number): void {
+    this.recordStartupTimingEntry({ source, label, ms: performance.now() - start });
+  }
+
+  private recordStartupTimingEntry(entry: StartupTimingEntry): void {
+    this.startupTimings.push(entry);
+    this.logStartupTimingToConsole(entry);
+  }
+
+  private logStartupTimingToConsole(entry: StartupTimingEntry): void {
+    console.info(`[startup timing] ${entry.source}: ${entry.label} took ${entry.ms.toFixed(1)} ms`);
+  }
+
+  private async logNativeStartupTimingsToConsole(): Promise<void> {
+    try {
+      const nativeTimings = await invoke<StartupTimingEntry[]>("get_startup_timings");
+      for (const entry of nativeTimings) {
+        const key = `${entry.source}\u0000${entry.label}`;
+        if (this.loggedNativeStartupTimings.has(key)) continue;
+        this.loggedNativeStartupTimings.add(key);
+        this.logStartupTimingToConsole(entry);
+      }
+    } catch (error) {
+      console.warn("Failed to read native startup timings:", error);
+    }
+  }
+
+  private async finishStartupInitialization(): Promise<void> {
+    try {
+      const providers = await this.timeStartup("finish native startup initialization", () =>
+        invoke<ProviderCapabilities[]>("finish_startup_initialization")
+      );
+      this.spellcheckController.setProviders(providers);
+      this.settingsController.setLanguageProviders(this.spellcheckController.getAllProviders());
+    } catch (error) {
+      console.warn("Deferred startup initialization failed:", error);
+    } finally {
+      void this.logNativeStartupTimingsToConsole();
+      void this.settingsController.refreshSystemFonts();
+    }
+  }
+
+  private timeStartupSync<T>(label: string, action: () => T): T {
+    const start = performance.now();
+    try {
+      return action();
+    } finally {
+      this.recordStartupTiming("frontend startup", label, start);
+    }
+  }
+
+  private async timeStartup<T>(label: string, action: () => Promise<T>): Promise<T> {
+    const start = performance.now();
+    try {
+      return await action();
+    } finally {
+      this.recordStartupTiming("frontend startup", label, start);
+    }
   }
 
   private reportPreviewInteractionStatus(status: PreviewInteractionStatus): void {

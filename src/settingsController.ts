@@ -25,6 +25,11 @@ type HunspellCatalogEntry = {
   bundled: boolean;
   source: string;
 };
+export type SettingsTimingEntry = {
+  source: string;
+  label: string;
+  ms: number;
+};
 
 export class SettingsController {
   private settings: AppSettings = cloneDefaultAppSettings();
@@ -33,6 +38,7 @@ export class SettingsController {
   private loadError: string | null = null;
   private systemFonts: SystemFontCatalog = { all: ["MiSans Latin"], monospace: ["Fira Mono"] };
   private languageProviders: LanguageProviderOption[] = [];
+  private readonly timingEntries: SettingsTimingEntry[] = [];
 
   constructor(
     private readonly applySettings: (settings: AppSettings) => void,
@@ -43,10 +49,17 @@ export class SettingsController {
     return this.settings;
   }
 
+  public getTimings(): SettingsTimingEntry[] {
+    return [...this.timingEntries];
+  }
+
   public async load() {
+    const loadStart = performance.now();
     let shouldPersist = false;
     try {
+      const settingsFileStart = performance.now();
       const payload = await invoke<SettingsPayload>("load_app_settings");
+      this.recordTiming("frontend startup", "load settings file", settingsFileStart);
       this.filePath = payload.path;
       if (payload.settings) {
         this.settings = normalizeAppSettings(payload.settings);
@@ -66,8 +79,12 @@ export class SettingsController {
       this.loadError = String(error);
     }
 
-    if (shouldPersist) await this.persist();
-    await this.refreshSystemFonts();
+    if (shouldPersist) {
+      const persistStart = performance.now();
+      await this.persist();
+      this.recordTiming("frontend startup", "persist migrated settings", persistStart);
+    }
+    this.recordTiming("frontend startup", "settings load total", loadStart);
   }
 
   public update(mutator: (settings: AppSettings) => void) {
@@ -413,9 +430,12 @@ export class SettingsController {
     }
   }
 
-  private async refreshSystemFonts(): Promise<void> {
+  public async refreshSystemFonts(): Promise<void> {
+    const totalStart = performance.now();
     try {
+      const nativeFontStart = performance.now();
       this.systemFonts = await invoke<SystemFontCatalog>("list_system_fonts");
+      this.recordTiming("frontend startup", "native list_system_fonts", nativeFontStart);
       const selectedCodeFont = this.settings.editor.codeFont.toLocaleLowerCase();
       if (!this.systemFonts.monospace.some(family => family.toLocaleLowerCase() === selectedCodeFont)) {
         this.settings.editor.codeFont = this.systemFonts.monospace.find(family => family === "Fira Mono")
@@ -432,8 +452,18 @@ export class SettingsController {
       }
       this.populateFontOptions();
       this.populatePanel();
+      this.recordTiming("frontend startup", "refresh system font choices total", totalStart);
     } catch (error) {
       console.warn("Failed to load system font choices.", error);
+      this.recordTiming("frontend startup", "refresh system font choices failed", totalStart);
     }
+  }
+
+  private recordTiming(source: string, label: string, start: number): void {
+    this.timingEntries.push({
+      source,
+      label,
+      ms: performance.now() - start
+    });
   }
 }
