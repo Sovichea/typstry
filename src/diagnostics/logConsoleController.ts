@@ -101,10 +101,11 @@ export class LogConsoleController {
   }
 
   public setDiagnostics(entries: LogConsoleEntryInput[]): void {
+    const filtered = entries.filter(entry => entry.source !== "preview" && entry.source !== "preview iframe" && entry.source !== "inverse sync");
     // Filter out duplicates in incoming diagnostics
     const seen = new Set<string>();
     const uniqueEntries: LogConsoleEntryInput[] = [];
-    for (const entry of entries) {
+    for (const entry of filtered) {
       const key = `${entry.filePath}:${entry.line}:${entry.column}:${canonicalDiagnosticMessage(entry.message)}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -123,6 +124,7 @@ export class LogConsoleController {
   }
 
   public appendLog(entry: LogConsoleEntryInput): void {
+    if (entry.source === "preview" || entry.source === "preview iframe" || entry.source === "inverse sync") return;
     const log = this.createEntry({ ...entry, channel: entry.channel ?? "lsp" });
     if (duplicatesStructuredDiagnostic(log, this.diagnostics)) return;
 

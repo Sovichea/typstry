@@ -21,6 +21,7 @@ export class PreviewFrame {
   private readonly maxSessions = 5;
   private lastInteractionStatusKey = "";
   private previewZoomPercent = 100;
+  private errorOverlay: HTMLDivElement | null = null;
 
   constructor(
     private readonly pane: HTMLElement,
@@ -97,6 +98,7 @@ export class PreviewFrame {
       this.svgIframe.remove();
       this.svgIframe = null;
     }
+    this.clearErrorOverlay();
     for (const [key, item] of this.sessions) item.iframe.classList.toggle("hidden", key !== sessionKey);
     session.usedAt = Date.now();
     this.activeSessionKey = sessionKey;
@@ -484,8 +486,27 @@ export class PreviewFrame {
 
   /**
    * Clear the preview pane and reset state.
+   */  public clearErrorOverlay(): void {
+    if (this.errorOverlay) {
+      this.errorOverlay.remove();
+      this.errorOverlay = null;
+    }
+    if (this.iframe) {
+      try {
+        const doc = this.iframe.contentDocument;
+        const target = doc?.body ?? doc?.documentElement as HTMLElement | null;
+        if (target) {
+          target.style.overflow = "";
+        }
+      } catch {}
+    }
+  }
+
+  /**
+   * Clear the preview pane and reset state.
    */
   public clear(): void {
+    this.clearErrorOverlay();
     for (const item of this.sessions.values()) {
       if (item.blobUrl) URL.revokeObjectURL(item.blobUrl);
       for (const url of item.scriptBlobUrls ?? []) URL.revokeObjectURL(url);
@@ -503,6 +524,7 @@ export class PreviewFrame {
 
   public mountSvgPages(pages: readonly string[]): void {
     this.clearSvg();
+    this.clearErrorOverlay();
     for (const item of this.sessions.values()) {
       item.iframe.classList.add("hidden");
     }
@@ -523,6 +545,7 @@ export class PreviewFrame {
 
   public setLoading(message: string): void {
     this.clearSvg();
+    this.clearErrorOverlay();
     for (const item of this.sessions.values()) item.iframe.classList.add("hidden");
     this.activeSessionKey = "";
     
@@ -536,23 +559,44 @@ export class PreviewFrame {
 
   public setError(title: string, message: string): void {
     this.clearSvg();
-    for (const item of this.sessions.values()) item.iframe.classList.add("hidden");
-    this.activeSessionKey = "";
+    this.clearErrorOverlay();
     
-    const container = document.createElement("div");
-    container.className = "compiler-preview-message error";
-    const titleEl = document.createElement("strong");
-    titleEl.textContent = title;
+    const overlay = document.createElement("div");
+    overlay.className = "compiler-preview-error-overlay";
+    overlay.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
+    overlay.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+    
+    const content = document.createElement("div");
+    content.className = "compiler-preview-error-content";
+    
+    const titleEl = document.createElement("h3");
+    titleEl.className = "compiler-preview-error-title";
+    titleEl.textContent = `ⓧ ${title}`;
+    
     const pre = document.createElement("pre");
+    pre.className = "compiler-preview-error-message";
     pre.textContent = message;
-    container.append(titleEl, pre);
     
-    this.pane.appendChild(container);
-    this.svgIframe = container as unknown as HTMLIFrameElement;
+    content.append(titleEl, pre);
+    overlay.append(content);
+    
+    this.pane.appendChild(overlay);
+    this.errorOverlay = overlay;
+
+    if (this.iframe) {
+      try {
+        const doc = this.iframe.contentDocument;
+        const target = doc?.body ?? doc?.documentElement as HTMLElement | null;
+        if (target) {
+          target.style.overflow = "hidden";
+        }
+      } catch {}
+    }
   }
 
   public setMessage(html: string): void {
     this.clearSvg();
+    this.clearErrorOverlay();
     for (const item of this.sessions.values()) item.iframe.classList.add("hidden");
     this.activeSessionKey = "";
     
@@ -570,6 +614,10 @@ export class PreviewFrame {
   }
 
   private zoomPreview(direction: "in" | "out"): number {
+    if (this.errorOverlay) {
+      this.reportDebug(this.mountedUrl, `Preview zoom ${direction} ignored because there is an active preview error.`);
+      return this.previewZoomPercent;
+    }
     if (!this.mountedUrl) {
       this.reportDebug(this.mountedUrl, `Preview zoom ${direction} ignored because live preview is not active.`);
       return this.previewZoomPercent;

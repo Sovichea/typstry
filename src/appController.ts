@@ -1227,8 +1227,8 @@ export class TypstryWorkspaceController {
       if (generation !== this.fallbackPreviewGeneration || path !== this.activeFilePath) return;
       console.warn("Fallback Typst preview failed:", error);
       this.previewFrame.setError(
-        "Preview unavailable",
-        "Fix the errors listed in Problems to restore the preview."
+        "Preview Render Failed",
+        "The live preview cannot be updated because of compile errors.\nPlease check the Problems panel or Log Console for details."
       );
       this.setLspStatus({ kind: "error", message: "Fallback preview failed" });
     }
@@ -2192,6 +2192,13 @@ export class TypstryWorkspaceController {
     this.editorInstance.dispatch({
       effects: setEditorDiagnosticsEffect.of(editorDiagnostics)
     });
+
+    const activeErrors = editorDiagnostics.filter(d => d.severity === "error");
+    if (activeErrors.length > 0) {
+      this.previewFrame.setError("Preview Render Failed", "The live preview cannot be updated because of compile errors.\nPlease check the Problems panel or Log Console for details.");
+    } else {
+      this.previewFrame.clearErrorOverlay();
+    }
 
     this.logConsoleController.setDiagnostics(filteredDiagnostics
       .filter(diagnostic => !staleDiagnostics.has(diagnostic))
