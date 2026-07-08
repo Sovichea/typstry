@@ -271,8 +271,13 @@ function readToken(stream: StringStream, state: TypstParserState): string | null
       const rest = stream.string.slice(stream.pos);
       const canContinueAfterSpace = /^(?:[([{.]|=>|==|!=|<=|>=|\.\.|[+\-*\/%=<>!&|^~])/.test(rest);
       const closesParentMath = state.expressionParentMode === "math" && stream.peek() === "$";
+      const closesParentMarkup = state.expressionParentMode === "markup" && (
+        (stream.peek() === "*" && state.inStrong)
+        || (stream.peek() === "_" && state.inEmphasis)
+        || (stream.peek() === "]" && state.bracketStack[state.bracketStack.length - 1] === "[")
+      );
 
-      if (closesParentMath || (state.expressionSawWhitespace && !canContinueAfterSpace)) {
+      if (closesParentMath || closesParentMarkup || (state.expressionSawWhitespace && !canContinueAfterSpace)) {
         endCodeExpression(state);
         mode = getCurrentMode(state);
       }

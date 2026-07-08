@@ -99,4 +99,18 @@ describe("Typst stream language", () => {
     expect(tokenName(tokens, "typ")).toBe("string");
     expect(tokenName(tokens, "#let x = 1")).toBe("monospace");
   });
+
+  test("does not leak strong styling past an embedded code expression", () => {
+    const doc = `#let quotation = {
+  ([*#render(t.total-duration)*], [*#render(lead-time-str)*])
+  if timeline.len() > 0 {
+    import "@preview/timeliney:0.4.0"
+  }
+}`;
+    const tokens = parseTokens(doc);
+
+    expect(tokenName(tokens, "if")).toBe("keyword");
+    expect(tokenName(tokens, "import")).toBe("keyword");
+    expect(tokenName(tokens, "timeline") ?? "").not.toContain("strong");
+  });
 });
