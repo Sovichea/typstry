@@ -601,6 +601,7 @@ export class PreviewFrame {
     this.activeSessionKey = "";
     
     const div = document.createElement("div");
+    div.className = "preview-message-host";
     div.innerHTML = html;
     this.pane.appendChild(div);
     this.svgIframe = div as unknown as HTMLIFrameElement;

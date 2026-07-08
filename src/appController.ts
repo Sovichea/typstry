@@ -1083,11 +1083,7 @@ export class TypstryWorkspaceController {
         
         document.getElementById("wysiwym-editor-pane")?.classList.add("hidden");
 
-        this.previewFrame.setMessage(
-          `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
-          `<img src="${tab.content}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,0.12);" />` +
-          `</div>`
-        );
+        this.renderInteractiveImageViewer(tab.content);
         this.editorToolbarController.setDisabled(true);
         this.activeFilePath = path;
         this.isLoadingFile = false;
@@ -1095,6 +1091,7 @@ export class TypstryWorkspaceController {
         this.saveWorkspaceState();
         return;
       } else {
+        document.querySelector(".preview-actions")?.classList.remove("hidden");
         codeRenderPane?.classList.remove("hidden");
         imageViewerPane?.classList.add("hidden");
         if (imageViewerImg) imageViewerImg.style.display = "block"; // Reset styling
@@ -2830,6 +2827,106 @@ export class TypstryWorkspaceController {
       `<div class="preview-disabled-msg" style="margin-top: 8px; font-size: 12px; opacity: 0.75;">Add this directive at the top of the file to preview it standalone.</div>` +
       `</div>`
     );
+  }
+
+  private renderInteractiveImageViewer(src: string) {
+    const previewActions = document.querySelector(".preview-actions");
+    previewActions?.classList.add("hidden");
+
+    this.previewFrame.setMessage(
+      `<div id="interactive-image-container" style="position:relative;width:100%;height:100%;background:var(--ui-bg);overflow:hidden;display:flex;align-items:center;justify-content:center;user-select:none;box-sizing:border-box;">` +
+      `<img id="interactive-image-el" alt="Image preview" draggable="false" style="max-width:none;max-height:none;position:absolute;cursor:grab;user-select:none;will-change:transform;visibility:hidden;" />` +
+      `<button id="interactive-image-fit-btn" style="position:absolute;bottom:16px;right:16px;z-index:10;background:#3db489;color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-family:var(--font-family-sans);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15);font-weight:bold;">Fit to Window</button>` +
+      `</div>`
+    );
+
+    const container = document.getElementById("interactive-image-container");
+    const img = document.getElementById("interactive-image-el") as HTMLImageElement | null;
+    const fitBtn = document.getElementById("interactive-image-fit-btn");
+
+    if (!container || !img) return;
+
+    let scale = 1;
+    let x = 0;
+    let y = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    const updateTransform = () => {
+      img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    };
+
+    const resetToFit = () => {
+      const cWidth = container.clientWidth;
+      const cHeight = container.clientHeight;
+      const iWidth = img.naturalWidth;
+      const iHeight = img.naturalHeight;
+      if (cWidth <= 0 || cHeight <= 0 || iWidth <= 0 || iHeight <= 0) return;
+
+      const scaleX = cWidth / iWidth;
+      const scaleY = cHeight / iHeight;
+      scale = Math.min(scaleX, scaleY, 1);
+      x = 0;
+      y = 0;
+      updateTransform();
+      img.style.visibility = "visible";
+    };
+
+    img.onload = () => {
+      requestAnimationFrame(resetToFit);
+    };
+    img.onerror = () => this.previewFrame.setError(
+      "Image preview unavailable",
+      "Typstry could not decode this image."
+    );
+    img.src = src;
+
+    container.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left - rect.width / 2;
+      const mouseY = e.clientY - rect.top - rect.height / 2;
+
+      const prevScale = scale;
+      if (e.deltaY < 0) {
+        scale = Math.min(scale * zoomFactor, 20);
+      } else {
+        scale = Math.max(scale / zoomFactor, 0.05);
+      }
+
+      x = mouseX - (mouseX - x) * (scale / prevScale);
+      y = mouseY - (mouseY - y) * (scale / prevScale);
+      updateTransform();
+    }, { passive: false });
+
+    container.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      img.style.cursor = "grabbing";
+      startX = e.clientX - x;
+      startY = e.clientY - y;
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      x = e.clientX - startX;
+      y = e.clientY - startY;
+      updateTransform();
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (isDragging) {
+        isDragging = false;
+        img.style.cursor = "grab";
+      }
+    });
+
+    fitBtn?.addEventListener("click", () => {
+      resetToFit();
+    });
   }
 
   private async refreshActivePreviewRoot(): Promise<void> {

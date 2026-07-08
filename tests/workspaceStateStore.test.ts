@@ -15,7 +15,13 @@ describe("workspace state store", () => {
 
   test("round-trips typed workspace state", () => {
     const store = new WorkspaceStateStore();
-    const state = { activeFilePath: "/work/main.typ", openTabs: [], inputContainerWidthPct: 60, explorerSidebarWidthPx: 300 };
+    const state = {
+      activeFilePath: "/work/main.typ",
+      openTabs: [],
+      inputContainerWidthPct: 60,
+      explorerSidebarWidthPx: 300,
+      pinnedMainFilePath: null
+    };
     store.save("/work", state);
     expect(store.load("/work")).toEqual(state);
   });
