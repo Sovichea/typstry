@@ -163,12 +163,18 @@ fn cleanup_dir_previews(dir: &std::path::Path) {
             let path = entry.path();
             if path.is_dir() {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if name != ".git" && name != ".typstry" && name != "node_modules" && name != "target" {
+                if name != ".git"
+                    && name != ".typstry"
+                    && name != "node_modules"
+                    && name != "target"
+                {
                     cleanup_dir_previews(&path);
                 }
             } else if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with('.') && (name.contains("typstry-preview") || name.contains("typstry-check")) {
+                    if name.starts_with('.')
+                        && (name.contains("typstry-preview") || name.contains("typstry-check"))
+                    {
                         let _ = std::fs::remove_file(path);
                     }
                 }
@@ -683,7 +689,12 @@ fn resolve_preview_main(
     file_contents: Option<String>,
     pinned_main_path: Option<String>,
 ) -> Result<PreviewTarget, String> {
-    resolve_preview_target(file_path, workspace_root_path, file_contents, pinned_main_path)
+    resolve_preview_target(
+        file_path,
+        workspace_root_path,
+        file_contents,
+        pinned_main_path,
+    )
 }
 
 #[derive(serde::Serialize)]
@@ -724,8 +735,12 @@ async fn check_typst_document(
         .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
 
     std::fs::write(&input_path, source_code).map_err(|e| format!("Check write failed: {}", e))?;
-    let _input_guard = TempFileGuard { path: input_path.clone() };
-    let _output_guard = TempFileGuard { path: output_path.clone() };
+    let _input_guard = TempFileGuard {
+        path: input_path.clone(),
+    };
+    let _output_guard = TempFileGuard {
+        path: output_path.clone(),
+    };
 
     let mut command = std::process::Command::new(&tinymist_cmd);
     command.current_dir(parent);
@@ -854,13 +869,13 @@ async fn compile_typst_document(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 async fn compile_typst_preview(
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
     source_code: String,
     file_path: String,
     preview_root_path: Option<String>,
 ) -> Result<Vec<String>, String> {
-    use tauri::Manager;
     let active_path = std::path::Path::new(&file_path);
     let preview_path = preview_root_path
         .as_deref()
@@ -885,17 +900,30 @@ async fn compile_typst_preview(
     let temp_dir = std::env::temp_dir();
     let output_pattern = temp_dir.join(format!("{}{{0p}}.svg", prefix));
 
-    let data_dir = app_handle
-        .path()
-        .app_local_data_dir()
-        .map_err(|error| format!("Failed to get data dir: {}", error))?;
-    let tinymist_cmd = active_tinymist(&data_dir)
-        .ok_or_else(|| "No managed Tinymist toolchain is installed.".to_string())?;
+    // Clean up previously generated preview files to prevent disk leak
+    if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with(&format!(".{}.typstry-preview-", file_stem))
+                        && name.ends_with(".svg")
+                    {
+                        let _ = std::fs::remove_file(path);
+                    }
+                }
+            }
+        }
+    }
+
+    let typst_cmd = std::path::PathBuf::from("typst");
 
     std::fs::write(&input_path, preview_source)
         .map_err(|error| format!("Preview source write failed: {}", error))?;
-    let _input_guard = TempFileGuard { path: input_path.clone() };
-    let mut command = std::process::Command::new(&tinymist_cmd);
+    let _input_guard = TempFileGuard {
+        path: input_path.clone(),
+    };
+    let mut command = std::process::Command::new(&typst_cmd);
     command.current_dir(parent);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
@@ -933,25 +961,95 @@ async fn compile_typst_preview(
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
 
-    let mut pages = Vec::with_capacity(page_paths.len());
-    let mut read_error = None;
-    for page in page_paths {
-        match std::fs::read_to_string(&page) {
-            Ok(contents) => pages.push(contents),
-            Err(error) if read_error.is_none() => {
-                read_error = Some(format!("Failed to read preview page: {}", error));
+    if page_paths.is_empty() {
+        return Err("Typst produced no SVG preview pages.".to_string());
+    }
+
+    Ok(page_paths
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect())
+}
+
+#[tauri::command]
+#[allow(dead_code)]
+async fn compile_typst_pdf_preview(
+    _app_handle: tauri::AppHandle,
+    source_code: String,
+    file_path: String,
+    preview_root_path: Option<String>,
+) -> Result<String, String> {
+    let active_path = std::path::Path::new(&file_path);
+    let preview_path = preview_root_path
+        .as_deref()
+        .map(std::path::Path::new)
+        .unwrap_or(active_path);
+    let path = preview_path;
+    let preview_source = if preview_path == active_path {
+        source_code
+    } else {
+        std::fs::read_to_string(preview_path)
+            .map_err(|error| format!("Failed to read preview root: {}", error))?
+    };
+    let parent = path.parent().unwrap_or(std::path::Path::new(""));
+    let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let prefix = format!(".{}.typstry-preview-pdf-{}-", file_stem, nonce);
+    let input_path = parent.join(format!("{}.typ", prefix));
+
+    let temp_dir = std::env::temp_dir();
+    let output_path = temp_dir.join(format!("{}.pdf", prefix));
+
+    // Clean up previously generated PDF preview files to prevent disk leak
+    if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with(&format!(".{}.typstry-preview-pdf-", file_stem))
+                        && name.ends_with(".pdf")
+                    {
+                        let _ = std::fs::remove_file(path);
+                    }
+                }
             }
-            Err(_) => {}
         }
-        let _ = std::fs::remove_file(page);
     }
-    if let Some(error) = read_error {
-        return Err(error);
+
+    let typst_cmd = std::path::PathBuf::from("typst");
+
+    std::fs::write(&input_path, preview_source)
+        .map_err(|error| format!("Preview source write failed: {}", error))?;
+    let _input_guard = TempFileGuard {
+        path: input_path.clone(),
+    };
+
+    let mut command = std::process::Command::new(&typst_cmd);
+    command.current_dir(parent);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
+        .arg("compile")
+        .arg("--root")
+        .arg(".")
+        .arg(
+            input_path
+                .file_name()
+                .ok_or_else(|| "Failed to construct path".to_string())?,
+        )
+        .arg(&output_path)
+        .output()
+        .map_err(|error| format!("Typst compile failed: {}", error))?;
+
+    if !output.status.success() {
+        let _ = std::fs::remove_file(&output_path);
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
     }
-    if pages.is_empty() {
-        return Err("Tinymist produced no SVG preview pages.".to_string());
-    }
-    Ok(pages)
+
+    Ok(output_path.to_string_lossy().to_string())
 }
 
 #[cfg(test)]
@@ -984,6 +1082,7 @@ mod preview_main_tests {
             main_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
             None,
+            None,
         )
         .expect("resolve preview");
 
@@ -1002,6 +1101,7 @@ mod preview_main_tests {
         let resolved = resolve_preview_target(
             chapter_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
+            None,
             None,
         )
         .expect("resolve preview");
@@ -1038,6 +1138,7 @@ mod preview_main_tests {
             library_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
             None,
+            None,
         )
         .expect("resolve preview");
 
@@ -1065,6 +1166,7 @@ mod preview_main_tests {
             draft_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
             Some("// @standalone-preview\nUnsaved chapter".to_string()),
+            None,
         )
         .expect("resolve preview");
 
@@ -1102,6 +1204,7 @@ mod preview_main_tests {
             helper_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
             None,
+            None,
         )
         .expect("resolve preview");
 
@@ -1126,6 +1229,7 @@ mod preview_main_tests {
         let resolved = resolve_preview_target(
             chapter_path.to_string_lossy().to_string(),
             Some(workspace.path().to_string_lossy().to_string()),
+            None,
             None,
         )
         .expect("resolve preview");
@@ -1518,8 +1622,8 @@ fn zip_directory_recursive(
     current_dir: &std::path::Path,
 ) -> Result<(), String> {
     use std::io::{Read, Write};
-    let entries = std::fs::read_dir(current_dir)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries =
+        std::fs::read_dir(current_dir).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -1528,22 +1632,32 @@ fn zip_directory_recursive(
             continue;
         }
 
-        let rel_path = path.strip_prefix(root)
+        let rel_path = path
+            .strip_prefix(root)
             .map_err(|e| format!("Failed to strip prefix: {}", e))?;
         let rel_path_str = rel_path.to_string_lossy().replace('\\', "/");
 
         if path.is_dir() {
-            let _ = writer.add_directory(format!("{}/", rel_path_str), zip::write::FileOptions::<()>::default());
+            let _ = writer.add_directory(
+                format!("{}/", rel_path_str),
+                zip::write::FileOptions::<()>::default(),
+            );
             zip_directory_recursive(writer, root, &path)?;
         } else if path.is_file() {
-            writer.start_file(rel_path_str, zip::write::FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated))
+            writer
+                .start_file(
+                    rel_path_str,
+                    zip::write::FileOptions::<()>::default()
+                        .compression_method(zip::CompressionMethod::Deflated),
+                )
                 .map_err(|e| format!("Failed to start file in zip: {}", e))?;
             let mut file = std::fs::File::open(&path)
                 .map_err(|e| format!("Failed to open file {:?}: {}", path, e))?;
             let mut buffer = Vec::new();
             file.read_to_end(&mut buffer)
                 .map_err(|e| format!("Failed to read file contents: {}", e))?;
-            writer.write_all(&buffer)
+            writer
+                .write_all(&buffer)
                 .map_err(|e| format!("Failed to write file contents to zip: {}", e))?;
         }
     }
@@ -1626,7 +1740,6 @@ pub fn run() {
             load_app_settings,
             save_app_settings,
             compile_typst_document,
-            compile_typst_preview,
             check_typst_document,
             read_workspace_file,
             open_file_externally,

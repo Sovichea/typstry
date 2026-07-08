@@ -1285,6 +1285,14 @@ body.typstry-resizing #preview-render-pane::after {
   min-height: 0;
 }
 
+.preview-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--ui-bg) 72%, transparent);
+}
+
 #preview-render-pane svg {
   max-width: 100%;
   height: auto;

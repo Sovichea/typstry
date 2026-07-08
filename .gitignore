@@ -9,6 +9,10 @@ bun-debug.log
 dist/
 dist-ssr/
 
+# Generated PDF.js resources
+public/cmaps/
+public/standard_fonts/
+
 # Tauri & Rust
 src-tauri/target/
 src-tauri/gen/

@@ -12,6 +12,11 @@ type TinymistPreviewResult = {
   dataPlanePort?: number;
 };
 
+export type TinymistPdfExport = {
+  path: string | null;
+  data: string | null;
+};
+
 export type LspStatusKind = "starting" | "running" | "initializing" | "ready" | "preview-starting" | "preview-ready" | "sync-pending" | "syncing" | "stopped" | "error";
 
 export type LspStatus = {
@@ -458,6 +463,15 @@ export class TinymistLspClient {
       command: "tinymist.pinMain",
       arguments: [path]
     }, 5000);
+  }
+
+  public async exportPdfToMemory(path: string): Promise<TinymistPdfExport> {
+    const result = await this.request<TinymistPdfExport | null>("workspace/executeCommand", {
+      command: "tinymist.exportPdf",
+      arguments: [path, {}, { write: false, open: false }]
+    }, 30000);
+    if (!result?.data) throw new Error("Tinymist returned no PDF preview data.");
+    return result;
   }
 
   public notifyTextChange(uri: string, text: string, version: number): Promise<void> {
