@@ -22,6 +22,7 @@ import type { EditorTextEdit, LspDiagnostic, LspLogEntry, LspSourcePosition, Lsp
 import type { AppSettings } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, relativeFilePath } from "./platform/paths";
+import { isBinaryImagePath, isSupportedInAppPath } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewInteractionStatus } from "./preview/previewFrame";
 import { PreviewSyncController, type InverseSyncResult } from "./preview/previewSyncController";
@@ -74,11 +75,6 @@ type ExamplesWorkspace = {
   entryPath: string;
 };
 
-
-function isBinaryImagePath(path: string): boolean {
-  const ext = path.split('.').pop()?.toLowerCase();
-  return ["png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "avif"].includes(ext ?? "");
-}
 
 type EditorTab = {
   path: string;
@@ -1349,6 +1345,30 @@ export class TypstryWorkspaceController {
   }
 
   private async loadFile(path: string, options: LoadFileOptions = {}) {
+    if (!isSupportedInAppPath(path)) {
+      const shouldOpenExternally = await confirm(
+        `${fileNameFromPath(path)} cannot be opened in Typstry. Would you like to open it with your system application?`,
+        {
+          title: "Unsupported File Format",
+          kind: "warning",
+          okLabel: "Open Externally",
+          cancelLabel: "Cancel"
+        }
+      );
+      if (shouldOpenExternally) {
+        try {
+          await invoke("open_file_externally", { path });
+        } catch (error) {
+          console.error("Failed to open file externally:", error);
+          await message(`The file could not be opened externally.\n\n${String(error)}`, {
+            title: "Open External File Failed",
+            kind: "error"
+          });
+        }
+      }
+      return;
+    }
+
     const existingTab = this.openTabs.find((tab) => filePathKey(tab.path) === filePathKey(path));
     if (existingTab) {
       if (!options.temporary) {

@@ -4482,6 +4482,7 @@ dependencies = [
  "fontdb",
  "futures-util",
  "khmer_segmenter",
+ "open",
  "reqwest 0.12.28",
  "semver",
  "serde",

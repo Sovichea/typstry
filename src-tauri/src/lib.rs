@@ -109,6 +109,16 @@ fn read_workspace_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn open_file_externally(path: String) -> Result<(), String> {
+    let file_path = std::path::Path::new(&path);
+    if !file_path.is_file() {
+        return Err("The selected file does not exist or is not a file.".to_string());
+    }
+
+    open::that_detached(file_path).map_err(|error| format!("Failed to open file: {error}"))
+}
+
+#[tauri::command]
 fn read_workspace_file_as_base64(path: String) -> Result<String, String> {
     use base64::Engine;
     let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -1619,6 +1629,7 @@ pub fn run() {
             compile_typst_preview,
             check_typst_document,
             read_workspace_file,
+            open_file_externally,
             read_workspace_file_as_base64,
             workspace_path_exists,
             cleanup_workspace_preview_files,
