@@ -137,7 +137,8 @@ export class LogConsoleController {
   }
 
   public appendLog(entry: LogConsoleEntryInput): void {
-    if (entry.source === "preview" || entry.source === "preview iframe" || entry.source === "inverse sync") return;
+    if (entry.channel !== "dev"
+      && (entry.source === "preview" || entry.source === "preview iframe" || entry.source === "inverse sync")) return;
     const log = this.createEntry({ ...entry, channel: entry.channel ?? "lsp" });
     if (duplicatesStructuredDiagnostic(log, this.diagnostics)) return;
 

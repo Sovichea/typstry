@@ -27,6 +27,68 @@ export function findPreviewTextMatchInSourceLine(
   );
 }
 
+export function findPreviewTextMatchInSource(
+  source: string,
+  previewText: string,
+  previewOffset: number,
+  preferredSourceOffset = 0
+): { sourceOffset: number } | null {
+  let lineFrom = 0;
+  let best: { sourceOffset: number; distance: number } | null = null;
+  for (const line of source.split("\n")) {
+    const match = findPreviewTextMatchInSourceLine(
+      line,
+      previewText,
+      previewOffset,
+      Math.max(0, Math.min(line.length, preferredSourceOffset - lineFrom))
+    );
+    if (match) {
+      const sourceOffset = lineFrom + match.sourceOffset;
+      const distance = Math.abs(sourceOffset - preferredSourceOffset);
+      if (!best || distance < best.distance) best = { sourceOffset, distance };
+    }
+    lineFrom += line.length + 1;
+  }
+  return best ? { sourceOffset: best.sourceOffset } : null;
+}
+
+export type RankedPreviewTextMatch = { sourceOffset: number; score: number };
+
+export function findRankedPreviewTextMatchInSource(
+  source: string,
+  previewText: string,
+  previewOffset: number,
+  preferredSourceOffset = 0
+): RankedPreviewTextMatch | null {
+  const preview = normalizeWhitespaceWithMap(previewText);
+  const clicked = normalizedOffsetAt(preview.normalizedOffsets, previewOffset);
+  const probes: Array<{ text: string; click: number }> = [];
+  for (const size of [96, 72, 56, 40, 32, 24, 16, 12, 8]) {
+    const start = Math.max(0, Math.min(preview.text.length - size, clicked - Math.floor(size / 2)));
+    const raw = preview.text.slice(start, start + size);
+    const leading = raw.length - raw.trimStart().length;
+    const text = raw.trim();
+    if (text.length >= 8) probes.push({ text, click: Math.max(0, clicked - start - leading) });
+  }
+
+  let lineFrom = 0;
+  let best: { sourceOffset: number; score: number; distance: number } | null = null;
+  for (const line of source.split("\n")) {
+    const normalizedLine = normalizeWhitespaceWithMap(line);
+    for (const probe of probes) {
+      for (let index = normalizedLine.text.indexOf(probe.text); index !== -1; index = normalizedLine.text.indexOf(probe.text, index + 1)) {
+        const sourceOffset = lineFrom + originalOffsetAt(normalizedLine.sourceOffsets, index + Math.min(probe.click, probe.text.length));
+        const distance = Math.abs(sourceOffset - preferredSourceOffset);
+        if (!best || probe.text.length > best.score || (probe.text.length === best.score && distance < best.distance)) {
+          best = { sourceOffset, score: probe.text.length, distance };
+        }
+      }
+    }
+    lineFrom += line.length + 1;
+  }
+  return best ? { sourceOffset: best.sourceOffset, score: best.score } : null;
+}
+
 function findPreviewSnippetInSourceLine(
   sourceLine: string,
   sourceOffsets: readonly number[],
@@ -78,7 +140,9 @@ function normalizeWhitespaceWithMap(source: string): { text: string; sourceOffse
     const codePoint = source.codePointAt(index);
     const char = String.fromCodePoint(codePoint ?? source.charCodeAt(index));
     const width = char.length;
-    if (/\s/u.test(char)) {
+    if (/[\u00ad\u200b\u200c\u200d\ufeff]/u.test(char)) {
+      for (let cursor = 0; cursor < width; cursor += 1) normalizedOffsets[index + cursor] = text.length;
+    } else if (/\s/u.test(char)) {
       if (!inWhitespace) {
         const normalizedIndex = text.length;
         text += " ";

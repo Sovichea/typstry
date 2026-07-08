@@ -1,7 +1,7 @@
-import type { EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import type { LspSourcePosition, PreviewDocumentPosition, TinymistLspClient } from "../compiler/lsp";
 import type { PreviewTextPoint } from "./previewFrame";
-import { findPreviewTextMatchInSourceLine } from "./sourceHighlight";
+import { findPreviewTextMatchInSource, findPreviewTextMatchInSourceLine } from "./sourceHighlight";
 
 export type PreviewSyncDependencies = {
   getEditor: () => EditorView | undefined;
@@ -11,6 +11,7 @@ export type PreviewSyncDependencies = {
   getPreviewTaskId: () => string | null;
   isReady: () => boolean;
   isEnabled: () => boolean;
+  handleForwardPosition?: (path: string, cursor: number) => Promise<boolean>;
   mapForwardPosition?: (path: string, cursor: number) => Promise<{ filepath: string; line: number; character: number } | null>;
 };
 
@@ -40,6 +41,22 @@ export class PreviewSyncController {
     this.pendingTextClick = { ...point, timestamp: Date.now() };
   }
 
+  public navigateFromTextClick(point: PreviewTextPoint): boolean {
+    this.recordTextClick(point);
+    const editor = this.dependencies.getEditor();
+    if (!editor || !point.text.trim()) return false;
+    const preferred = editor.state.selection.main.head;
+    const match = findPreviewTextMatchInSource(editor.state.doc.toString(), point.text, point.offset, preferred);
+    if (!match) return false;
+    this.suppressOnce();
+    editor.dispatch({
+      selection: { anchor: match.sourceOffset },
+      effects: EditorView.scrollIntoView(match.sourceOffset, { y: "center" })
+    });
+    editor.focus();
+    return true;
+  }
+
   public hasRecentTextClick(maxAgeMs = 1500): boolean {
     return this.pendingTextClick !== null && Date.now() - this.pendingTextClick.timestamp <= maxAgeMs;
   }
@@ -58,9 +75,8 @@ export class PreviewSyncController {
 
   public async renderAtCursor(cursor: number): Promise<void> {
     const editor = this.dependencies.getEditor();
-    const client = this.dependencies.getClient();
     const path = this.dependencies.getActiveFilePath();
-    if (!editor || !client || !path || !this.dependencies.getPreviewTaskId() || !this.dependencies.isReady()) return;
+    if (!editor || !path || !this.dependencies.isReady() || !this.dependencies.isEnabled()) return;
 
     this.clearForward();
     await this.navigateToCursor(cursor, ++this.forwardGeneration);
@@ -68,10 +84,18 @@ export class PreviewSyncController {
 
   public async navigateToCursor(cursor: number, generation = ++this.forwardGeneration): Promise<void> {
     const editor = this.dependencies.getEditor();
-    const client = this.dependencies.getClient();
     const path = this.dependencies.getActiveFilePath();
+    if (!editor || !path || !this.dependencies.isReady() || !this.dependencies.isEnabled()) return;
+
+    if (this.dependencies.handleForwardPosition) {
+      const handled = await this.dependencies.handleForwardPosition(path, cursor);
+      if (generation !== this.forwardGeneration) return;
+      if (handled) return;
+    }
+
+    const client = this.dependencies.getClient();
     const taskId = this.dependencies.getPreviewTaskId();
-    if (!editor || !client || !path || !this.dependencies.getPreviewRootPath() || !taskId || !this.dependencies.isReady()) return;
+    if (!client || !this.dependencies.getPreviewRootPath() || !taskId) return;
 
     if (this.dependencies.mapForwardPosition) {
       const mapped = await this.dependencies.mapForwardPosition(path, cursor);
@@ -136,9 +160,9 @@ export class PreviewSyncController {
     return this.dependencies.isEnabled()
       && !!this.dependencies.getActiveFilePath()
       && !!this.dependencies.getPreviewRootPath()
-      && !!this.dependencies.getPreviewTaskId()
       && this.dependencies.isReady()
-      && !!this.dependencies.getClient();
+      && (!!this.dependencies.handleForwardPosition
+        || (!!this.dependencies.getPreviewTaskId() && !!this.dependencies.getClient()));
   }
 
   private isDuplicateForwardTarget(taskId: string, filepath: string, line: number, character: number): boolean {

@@ -255,6 +255,10 @@ export class TinymistLspClient {
       );
     }
 
+    if (payload.method === "tinymist/preview/scrollSource") {
+      void this.handlePreviewScrollSourceNotification(params);
+    }
+
     if (payload.error) {
       const errorMessage = payload.error.message ?? JSON.stringify(payload.error);
       if (
@@ -430,7 +434,12 @@ export class TinymistLspClient {
     });
   }
 
-  public async startPreview(path: string, taskId: string, refreshStyle: "on-type" | "on-save"): Promise<string> {
+  public async startPreview(
+    path: string,
+    taskId: string,
+    refreshStyle: "on-type" | "on-save",
+    partialRendering = supportsResponsivePartialRendering(navigator.userAgent)
+  ): Promise<string> {
     this.setStatus("preview-starting", "Starting preview");
     try {
       const result = await this.request<string | TinymistPreviewResult | null>("workspace/executeCommand", {
@@ -439,7 +448,7 @@ export class TinymistLspClient {
           path,
           taskId,
           refreshStyle,
-          supportsResponsivePartialRendering(navigator.userAgent)
+          partialRendering
         )]
       }, 5000);
       const previewUrl = this.normalizePreviewUrl(result);
@@ -718,6 +727,31 @@ export class TinymistLspClient {
       this.editorView.focus();
     } catch (err) {
       console.warn("Could not scroll to preview source position", position, err);
+    }
+  }
+
+  private async handlePreviewScrollSourceNotification(params: Record<string, unknown> | undefined): Promise<void> {
+    const filepath = typeof params?.filepath === "string" ? params.filepath : undefined;
+    const start = Array.isArray(params?.start) ? params.start : null;
+    if (!filepath || !start || typeof start[0] !== "number" || typeof start[1] !== "number") return;
+    const position: LspSourcePosition = { line: start[0], character: start[1] };
+    try {
+      const mappedSelection = await this.onInverseSync(filePathToUri(filepath), position);
+      if (!this.editorView) return;
+      const defaultCursorPos = this.editorPositionFromLspPosition(position);
+      const selection = typeof mappedSelection === "number"
+        ? { anchor: mappedSelection }
+        : mappedSelection && typeof mappedSelection.anchor === "number"
+          ? mappedSelection
+          : { anchor: defaultCursorPos };
+      const scrollPos = selection.head ?? selection.anchor;
+      this.editorView.dispatch({
+        selection,
+        effects: EditorView.scrollIntoView(scrollPos, { y: "center" })
+      });
+      this.editorView.focus();
+    } catch (error) {
+      console.warn("Could not apply Tinymist preview source position", position, error);
     }
   }
 

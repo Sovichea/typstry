@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { findPreviewTextMatchInSourceLine } from "../src/preview/sourceHighlight";
+import {
+  findPreviewTextMatchInSource,
+  findPreviewTextMatchInSourceLine,
+  findRankedPreviewTextMatchInSource
+} from "../src/preview/sourceHighlight";
 
 describe("preview source highlighting", () => {
   test("maps preview text clicks back into a source line", () => {
@@ -24,5 +28,30 @@ describe("preview source highlighting", () => {
 
   test("uses the source-position hint to disambiguate repeated text", () => {
     expect(findPreviewTextMatchInSourceLine("កូន ខ្មែរ កូន ខ្មែរ", "កូន ខ្មែរ", 5, 10)).toEqual({ sourceOffset: 15 });
+  });
+
+  test("finds rendered text in a multi-line source document", () => {
+    const source = "= First\n\n#include \"chapter.typ\"\n\nភាសាខ្មែរសម្រាប់សរសេរ";
+    expect(findPreviewTextMatchInSource(source, "ភាសាខ្មែរសម្រាប់សរសេរ", 8, 0))
+      .toEqual({ sourceOffset: source.indexOf("ភាសាខ្មែរ") + 8 });
+  });
+
+  test("ranks a long click context instead of an unrelated short fragment", () => {
+    const source = "កូននៅទីនេះ\n\nភាសាខ្មែរមានប្រវត្តិយូរអង្វែងសម្រាប់ប្រជាជនខ្មែរ";
+    const preview = "ភាសាខ្មែរមានប្រវត្តិយូរអង្វែងសម្រាប់ប្រជាជនខ្មែរ";
+    const match = findRankedPreviewTextMatchInSource(source, preview, 20, 0);
+    expect(match?.sourceOffset).toBe(source.indexOf("ភាសាខ្មែរ") + 20);
+    expect(match?.score).toBeGreaterThanOrEqual(24);
+  });
+
+  test("rejects ambiguous three-character fallback matches", () => {
+    expect(findRankedPreviewTextMatchInSource("abc elsewhere", "abc", 1, 0)).toBeNull();
+  });
+
+  test("matches prepared Khmer PDF text containing invisible boundaries", () => {
+    const source = "ភាសាខ្មែរមានប្រវត្តិយូរអង្វែង";
+    const rendered = "ភាសាខ្មែរ\u200bមាន\u200bប្រវត្តិ\u200bយូរអង្វែង";
+    const match = findRankedPreviewTextMatchInSource(source, rendered, rendered.indexOf("ប្រវត្តិ") + 3, 0);
+    expect(match?.sourceOffset).toBe(source.indexOf("ប្រវត្តិ") + 3);
   });
 });
