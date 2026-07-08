@@ -81,7 +81,8 @@ export class LogConsoleController {
   private readonly body = document.getElementById("log-console-body")!;
   private readonly toggleButton = document.getElementById("log-console-toggle") as HTMLButtonElement;
   private readonly closeButton = document.getElementById("log-console-close") as HTMLButtonElement;
-  private readonly count = document.getElementById("diagnostic-count")!;
+  private readonly errorCount = document.getElementById("diagnostic-error-count")!;
+  private readonly warningCount = document.getElementById("diagnostic-warning-count")!;
   private readonly tabs = [...document.querySelectorAll<HTMLButtonElement>("[data-log-console-tab]")];
 
   constructor(private readonly onNavigate: (entry: LogConsoleEntryInput) => void | Promise<void>) {}
@@ -258,14 +259,28 @@ export class LogConsoleController {
     const total = this.diagnostics.length;
     const spellcheck = this.spellcheckIssues.filter(entry => entry.counted !== false).length;
     const problems = total + spellcheck;
-    this.count.textContent = problems > 99 ? "99+" : String(problems);
+    const totalWarnings = warnings + spellcheck;
+
+    this.errorCount.textContent = errors > 99 ? "99+" : String(errors);
+    this.warningCount.textContent = totalWarnings > 99 ? "99+" : String(totalWarnings);
+
+    // Toggle active state classes on parent items
+    const errorItem = this.errorCount.closest(".status-count-item");
+    if (errorItem) {
+      errorItem.classList.toggle("active", errors > 0);
+    }
+    const warningItem = this.warningCount.closest(".status-count-item");
+    if (warningItem) {
+      warningItem.classList.toggle("active", totalWarnings > 0);
+    }
+
     this.setTabCount("all", problems);
     this.setTabCount("lsp", total);
     this.setTabCount("spellcheck", spellcheck);
     this.setTabCount("dev", this.logs.filter(entry => entry.channel === "dev").length);
-    this.toggleButton.dataset.state = errors ? "error" : (warnings || spellcheck) ? "warning" : "ok";
+    this.toggleButton.dataset.state = errors ? "error" : totalWarnings ? "warning" : "ok";
     this.toggleButton.setAttribute("aria-expanded", String(this.visible));
-    this.toggleButton.setAttribute("aria-label", `${this.visible ? "Hide" : "Show"} log console, ${problems} problem${problems === 1 ? "" : "s"}`);
+    this.toggleButton.setAttribute("aria-label", `${this.visible ? "Hide" : "Show"} log console, ${errors} error${errors === 1 ? "" : "s"}, ${totalWarnings} warning${totalWarnings === 1 ? "" : "s"}`);
   }
 
   private setTabCount(tab: LogConsoleTab, value: number): void {

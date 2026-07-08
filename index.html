@@ -1891,7 +1891,14 @@
                     aria-expanded="false"
                 >
                     <span class="status-label">Logs</span>
-                    <span id="diagnostic-count" class="status-count">0</span>
+                    <span class="status-count-item error">
+                        <span class="status-count-icon" id="status-error-icon"></span>
+                        <span id="diagnostic-error-count" class="status-count">0</span>
+                    </span>
+                    <span class="status-count-item warning">
+                        <span class="status-count-icon" id="status-warning-icon"></span>
+                        <span id="diagnostic-warning-count" class="status-count">0</span>
+                    </span>
                 </button>
                 <button
                     id="dock-preview-status-btn"

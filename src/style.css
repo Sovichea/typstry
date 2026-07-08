@@ -1586,20 +1586,41 @@ body.typstry-resizing #preview-render-pane::after {
   justify-content: center;
   border-radius: 8px;
   background: var(--ui-border);
-  color: var(--ui-text);
+  color: var(--ui-text-muted);
   font-size: 11px;
   font-weight: 700;
   padding: 0 5px;
 }
 
-.status-button[data-state="error"] .status-count {
+.status-count-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-count-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ui-text-muted);
+}
+
+.status-count-item.error.active .status-count {
   background: #c92a2a;
   color: #ffffff;
 }
 
-.status-button[data-state="warning"] .status-count {
+.status-count-item.error.active .status-count-icon {
+  color: #ea4e4e;
+}
+
+.status-count-item.warning.active .status-count {
   background: #b08800;
   color: #ffffff;
+}
+
+.status-count-item.warning.active .status-count-icon {
+  color: #e8a838;
 }
 
 .status-dot {
