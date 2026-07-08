@@ -18,7 +18,9 @@ export class PreviewFrame {
   private readonly sessions = new Map<string, { iframe: HTMLIFrameElement; url: string; usedAt: number; scrollKey: string; blobUrl?: string; scriptBlobUrls?: string[] }>();
   private readonly scrollPositions = new Map<string, { top: number; left: number }>();
   private readonly zoomBySession = new Map<string, number>();
-  private readonly maxSessions = 5;
+  // Each Tinymist iframe owns a WASM renderer, SVG DOM, raster cache and
+  // WebSocket. Keep only one warm fallback in addition to the active preview.
+  private readonly maxSessions = 2;
   private lastInteractionStatusKey = "";
   private previewZoomPercent = 100;
   private errorOverlay: HTMLDivElement | null = null;
@@ -125,9 +127,7 @@ export class PreviewFrame {
     }
     if (existing) {
       this.reportDebug(previewUrl, `Replacing existing preview session ${sessionKey}.`);
-      if (existing.blobUrl) URL.revokeObjectURL(existing.blobUrl);
-      for (const url of existing.scriptBlobUrls ?? []) URL.revokeObjectURL(url);
-      existing.iframe.remove();
+      this.disposeSession(existing);
     }
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
@@ -508,8 +508,7 @@ export class PreviewFrame {
   public clear(): void {
     this.clearErrorOverlay();
     for (const item of this.sessions.values()) {
-      if (item.blobUrl) URL.revokeObjectURL(item.blobUrl);
-      for (const url of item.scriptBlobUrls ?? []) URL.revokeObjectURL(url);
+      this.disposeSession(item);
     }
     this.pane.innerHTML = "";
     this.sessions.clear();
@@ -693,11 +692,20 @@ export class PreviewFrame {
         .filter(([key]) => key !== this.activeSessionKey)
         .sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
       if (!candidate) return;
-      if (candidate[1].blobUrl) URL.revokeObjectURL(candidate[1].blobUrl);
-      for (const url of candidate[1].scriptBlobUrls ?? []) URL.revokeObjectURL(url);
-      candidate[1].iframe.remove();
+      this.disposeSession(candidate[1]);
       this.sessions.delete(candidate[0]);
     }
+  }
+
+  private disposeSession(session: { iframe: HTMLIFrameElement; blobUrl?: string; scriptBlobUrls?: string[] }): void {
+    // Navigating away closes the renderer WebSocket immediately. Removing the
+    // element alone can leave its browsing context alive until a later GC pass.
+    try {
+      session.iframe.src = "about:blank";
+    } catch {}
+    session.iframe.remove();
+    if (session.blobUrl) URL.revokeObjectURL(session.blobUrl);
+    for (const url of session.scriptBlobUrls ?? []) URL.revokeObjectURL(url);
   }
 
   private captureActiveScroll(): void {

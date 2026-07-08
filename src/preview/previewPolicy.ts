@@ -28,3 +28,18 @@ export function previewSessionIdentity(rootPath: string, style: PreviewRefreshSt
   }
   return { key, taskId: `typstry-preview-${(hash >>> 0).toString(16)}` };
 }
+
+export function tinymistPreviewArguments(
+  path: string,
+  taskId: string,
+  refreshStyle: PreviewRefreshStyle
+): string[] {
+  return [
+    "--task-id", taskId,
+    "--not-primary",
+    "--data-plane-host=127.0.0.1:0",
+    "--partial-rendering", "true",
+    "--refresh-style", refreshStyle,
+    path
+  ];
+}

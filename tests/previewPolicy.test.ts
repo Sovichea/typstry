@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { allowsStandalonePreview, previewRefreshStyle, previewSessionIdentity } from "../src/preview/previewPolicy";
+import { allowsStandalonePreview, previewRefreshStyle, previewSessionIdentity, tinymistPreviewArguments } from "../src/preview/previewPolicy";
 
 describe("preview policy", () => {
   test("only accepts the directive on the first line", () => {
@@ -20,5 +20,11 @@ describe("preview policy", () => {
     const saved = previewSessionIdentity("C:\\docs\\main.typ", "on-save");
     expect(live).toEqual(previewSessionIdentity("C:\\docs\\main.typ", "on-type"));
     expect(live.taskId).not.toBe(saved.taskId);
+  });
+
+  test("enables Tinymist partial rendering for live previews", () => {
+    const args = tinymistPreviewArguments("C:\\docs\\main.typ", "preview-1", "on-type");
+    expect(args).toContain("--partial-rendering");
+    expect(args[args.indexOf("--partial-rendering") + 1]).toBe("true");
   });
 });
