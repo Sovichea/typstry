@@ -18,7 +18,7 @@ import { looksLikeStalePrefixDiagnostic, setEditorDiagnosticsEffect } from "./ed
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
 import { WorkspaceExplorer } from "./components/explorer";
 import { TinymistLspClient } from "./compiler/lsp";
-import type { EditorTextEdit, LspDiagnostic, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
+import type { EditorTextEdit, LspDiagnostic, LspInverseSyncResult, LspLogEntry, LspSourcePosition, LspStatus } from "./compiler/lsp";
 import type { AppSettings } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, relativeFilePath } from "./platform/paths";
@@ -1894,7 +1894,7 @@ export class TypstryWorkspaceController {
   }
 
 
-  private async handleInverseSync(uri: string | undefined, position: LspSourcePosition): Promise<number> {
+  private async handleInverseSync(uri: string | undefined, position: LspSourcePosition): Promise<LspInverseSyncResult> {
     this.appendDeveloperLog({
       kind: "info",
       source: "inverse sync",
@@ -1906,7 +1906,7 @@ export class TypstryWorkspaceController {
         source: "inverse sync",
         message: "Ignored inverse sync because it did not originate from Typstry's docked DOM-intercepted preview."
       });
-      return this.editorInstance.state.selection.main.head;
+      return { handled: true };
     }
 
     let targetPath = uri ? filePathFromUri(uri) : null;
@@ -1929,20 +1929,45 @@ export class TypstryWorkspaceController {
 
     this.previewSyncController.clearForward();
     
-    let defaultCursorPos = 0;
+    let cursor = 0;
     if (this.settingsController.value.preview.khmerRenderPreparation && targetPath && uri) {
       const relPath = targetPath.startsWith(this.workspaceRootPath!)
         ? targetPath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
         : targetPath;
       const cacheContent = this.preparedContentsCache.get(filePathKey(targetPath))?.preparedText || "";
-      defaultCursorPos = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, position, cacheContent) ?? 0;
-      return defaultCursorPos;
+      cursor = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, position, cacheContent) ?? 0;
     } else {
-      defaultCursorPos = this.editorPositionFromLspPosition(position) ?? 0;
+      const defaultCursorPos = this.editorPositionFromLspPosition(position) ?? 0;
       const result = this.previewSyncController.mapInversePosition(position, defaultCursorPos);
       this.reportInverseSyncResult(result, position);
-      return result.cursor;
+      cursor = result.cursor;
     }
+
+    await this.applyInverseSyncSelection(cursor);
+    return { handled: true };
+  }
+
+  private async applyInverseSyncSelection(cursor: number): Promise<void> {
+    const editor = this.editorInstance;
+    const target = Math.max(0, Math.min(cursor, editor.state.doc.length));
+    await nextAnimationFrame();
+    editor.dispatch({
+      selection: { anchor: target },
+      effects: EditorView.scrollIntoView(target, { y: "center" })
+    });
+    editor.focus();
+    window.setTimeout(() => {
+      if (this.editorInstance !== editor) return;
+      if (editor.state.selection.main.head !== target) return;
+      editor.dispatch({
+        effects: EditorView.scrollIntoView(target, { y: "center" })
+      });
+    }, 60);
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "inverse sync",
+      message: `Editor inverse position applied: offset=${target}.`
+    });
   }
 
   private async handlePdfPreviewClick(point: PreviewTextPoint): Promise<void> {
@@ -3718,4 +3743,8 @@ export class TypstryWorkspaceController {
     }
   }
 
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }

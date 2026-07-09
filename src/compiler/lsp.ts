@@ -103,7 +103,13 @@ export type LspEditorSelection = {
   head?: number;
 };
 
+export type LspInverseSyncResult = number | LspEditorSelection | { handled: true } | void;
+
 type LspPositionEncoding = "utf-8" | "utf-16" | "utf-32";
+
+function inverseSyncWasHandled(result: LspInverseSyncResult): result is { handled: true } {
+  return !!result && typeof result === "object" && "handled" in result && result.handled === true;
+}
 
 function isLspDiagnostic(value: unknown): value is LspDiagnostic {
   if (!isRecord(value) || typeof value.message !== "string") return false;
@@ -148,7 +154,7 @@ export class TinymistLspClient {
     private getWorkspaceRoot: () => string | null,
     private onSvgPreviewStream: (svgContent: string) => void,
     private onStatus: (status: LspStatus) => void = () => {},
-    private onInverseSync: (uri: string | undefined, position: LspSourcePosition) => number | LspEditorSelection | void | Promise<number | LspEditorSelection | void> = () => {},
+    private onInverseSync: (uri: string | undefined, position: LspSourcePosition) => LspInverseSyncResult | Promise<LspInverseSyncResult> = () => {},
     private onDiagnostics: (uri: string, diagnostics: LspDiagnostic[], version?: number) => void = () => {},
     private onLog: (entry: LspLogEntry) => void = () => {},
     private onDocumentOutline: (items: TinymistDocumentOutlineItem[]) => void = () => {}
@@ -711,6 +717,7 @@ export class TinymistLspClient {
     try {
       const uri = typeof params?.uri === "string" ? params.uri : undefined;
       const mappedSelection = await this.onInverseSync(uri, position);
+      if (inverseSyncWasHandled(mappedSelection)) return;
       if (!this.editorView) return;
 
       const defaultCursorPos = this.editorPositionFromLspPosition(position);
@@ -737,6 +744,7 @@ export class TinymistLspClient {
     const position: LspSourcePosition = { line: start[0], character: start[1] };
     try {
       const mappedSelection = await this.onInverseSync(filePathToUri(filepath), position);
+      if (inverseSyncWasHandled(mappedSelection)) return;
       if (!this.editorView) return;
       const defaultCursorPos = this.editorPositionFromLspPosition(position);
       const selection = typeof mappedSelection === "number"

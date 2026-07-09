@@ -161,8 +161,8 @@ export class PreviewFrame {
       #viewer-container{box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
       .pdf-page-container{position:relative;box-sizing:border-box;flex:none;margin:0 auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);overflow:hidden}
       .pdf-page-canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
-      .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;opacity:1;--scale-factor:1}
-      .textLayer span,.textLayer br{position:absolute;color:transparent;white-space:pre;cursor:text;transform-origin:0 0}
+      .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;opacity:1;--scale-factor:1;pointer-events:none;user-select:none}
+      .textLayer span,.textLayer br{position:absolute;color:transparent;white-space:pre;transform-origin:0 0}
       .annotation-link{position:absolute;display:block}
       ::selection{background:rgba(0,120,215,.35)}
     </style></head><body><div id="viewer-container"></div></body></html>`;
