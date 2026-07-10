@@ -2307,14 +2307,14 @@ button.welcome-item:disabled {
 
 .cm-invisible-block-widget {
   display: inline-block;
-  width: 0.6em;
-  height: 1.2em;
-  background-color: rgba(239, 68, 68, 0.75);
-  border: 1px solid rgba(239, 68, 68, 0.75);
+  width: 1ch;
+  height: 1.05em;
+  background-color: color-mix(in srgb, var(--editor-cursor-contrast-color, #ef4444) 52%, transparent);
+  border: 1px solid color-mix(in srgb, var(--editor-cursor-contrast-color, #ef4444) 70%, transparent);
   border-radius: 2px;
-  vertical-align: middle;
-  margin: 0 1px;
+  vertical-align: -0.12em;
   box-sizing: border-box;
+  opacity: 0.8;
 }
 
 .cm-tooltip-autocomplete {

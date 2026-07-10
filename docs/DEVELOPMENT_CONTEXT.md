@@ -15,7 +15,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - Global app shortcuts use physical `KeyboardEvent.code` values instead of localized `event.key`, so Ctrl/Alt shortcuts continue to work under Khmer and other non-Latin keyboard layouts.
 - UI text surfaces use `--font-family-sans`, which combines the UI Latin font with the selected complex-script fallback. Search panels, hover popups, fallback preview messages, and other app-rendered text should not hardcode `sans-serif` or `monospace`.
 - LSP autocomplete may show a display-only `#` prefix for Typst functions/keywords, but insertion must only add `#` when Tinymist did not provide an explicit `textEdit`.
-- Docked live preview uses Typstry DOM interception, not direct Tinymist iframe mounting, so Khmer inverse sync can inspect rendered text. The release-build failure chain and current blob/WASM/WebSocket proxy design are documented in `PREVIEW_INTERCEPTION.md`.
+- Docked preview uses Typstry's virtualized PDF viewer. Forward and inverse sync use Tinymist source-map positions; PDF text matching and DOM text refinement are intentionally removed because they were unreliable for Khmer, repeated text, and generated preview files. Current behavior is documented in `PREVIEW_INTERCEPTION.md`.
 - Recent validation for the current work: `bun test`, `bun run build`, `cargo fmt --check` from `src-tauri/`, `cargo test --lib segmentation -- --nocapture` from `src-tauri/`, and `git diff --check`.
 
 ---
@@ -34,7 +34,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
   - `src/components/contextMenuController.ts`: Editor/explorer/preview context menus and filesystem actions.
   - `src/compiler/lspTransport.ts`: Sole Tauri IPC transport for Tinymist JSON-RPC; `jsonRpc.ts` parses and narrows untrusted messages.
   - `src/compiler/lsp.ts`: Typed Tinymist client and JSON-RPC request router, not a browser WebSocket.
-  - `src/preview/`: Pure source highlighting, iframe ownership, and forward/inverse preview synchronization state.
+  - `src/preview/`: Virtualized PDF preview rendering and forward/inverse preview synchronization state.
   - `src/workspace/`: Typed workspace-state persistence and recent-project rendering.
   - `src/wysiwym/adapter.ts`: WYSIWYM block parsing, DOM rendering, and Typst serialization.
   - `src/diagnostics/logConsoleController.ts`, `src/editor/fontManager.ts`, `src/editor/toolbarController.ts`, `src/layout/layoutController.ts`: Feature-local DOM/state controllers. `fontCatalog.ts` defines the selectable code and Unicode font engines; `documentTypography.ts` generates managed document font rules.

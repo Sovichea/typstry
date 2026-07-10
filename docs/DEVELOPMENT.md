@@ -54,7 +54,7 @@ Each preview root has a uniquely identified Tinymist task whose iframe is cached
 
 Put `// @standalone-preview` on an imported file's first line to give that chapter an independent preview. The Preview setting selects whether every preview refreshes on type or on save. When `main.typ` applies a local template with `#show: template.with(...)`, Typstry creates a temporary preview entry that applies the same template without modifying the chapter. References to labels outside the chapter appear as explanatory placeholders in this standalone view; open `main.typ` to inspect final numbering and reference output.
 
-Preview DOM interception is documented in [PREVIEW_INTERCEPTION.md](./PREVIEW_INTERCEPTION.md).
+PDF preview and source-map synchronization are documented in [PREVIEW_INTERCEPTION.md](./PREVIEW_INTERCEPTION.md).
 
 ## Release builds
 

@@ -447,7 +447,8 @@ mod tests {
         };
 
         let prepared_path =
-            prepare_single_in_memory_file(&options, &segmenter, &source_path, &source).unwrap();
+            prepare_single_in_memory_file(&options, Some(&segmenter), &source_path, &source)
+                .unwrap();
         let prepared = fs::read_to_string(prepared_path).unwrap();
         let _ = fs::remove_dir_all(&cache_root);
 

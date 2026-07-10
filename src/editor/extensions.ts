@@ -168,6 +168,16 @@ export const ctrlClickLinkPlugin = ViewPlugin.fromClass(class {
 });
 
 
+class InvisibleBlockWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-invisible-block-widget";
+    return span;
+  }
+  eq(_other: InvisibleBlockWidget) { return true; }
+  ignoreEvent() { return false; }
+}
+
 class ZWSWidget extends WidgetType {
   toDOM() {
     const span = document.createElement("span");
@@ -183,19 +193,8 @@ const zwsDecoration = Decoration.widget({
   side: -1
 });
 
-class InvisibleBlockWidget extends WidgetType {
-  toDOM() {
-    const span = document.createElement("span");
-    span.className = "cm-invisible-block-widget";
-    return span;
-  }
-  eq(_other: InvisibleBlockWidget) { return true; }
-  ignoreEvent() { return false; }
-}
-
-const invisibleBlockDecoration = Decoration.widget({
-  widget: new InvisibleBlockWidget(),
-  side: -1
+const invisibleBlockDecoration = Decoration.replace({
+  widget: new InvisibleBlockWidget()
 });
 
 const showZeroWidthSpacesPlugin = ViewPlugin.fromClass(class {
