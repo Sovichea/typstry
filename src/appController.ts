@@ -187,6 +187,7 @@ export class TypstryWorkspaceController {
   private pdfPreviewTimer: number | null = null;
   private pdfPreviewRunning = false;
   private queuedPdfPreviewContents: string | null = null;
+  private lastPdfBase64 = "";
   private editorScrollbarPointerActive = false;
   private readonly externalConflictPaths = new Set<string>();
   private readonly settingsController = new SettingsController(
@@ -245,7 +246,6 @@ export class TypstryWorkspaceController {
   private readonly layoutController = new LayoutController(
     () => this.saveWorkspaceState(),
     () => this.logConsoleController.setVisible(false),
-    () => this.previewFrame.currentUrl,
     message => this.appendDeveloperLog({ kind: "info", source: "preview layout", message })
   );
   private readonly workspaceStateStore = new WorkspaceStateStore();
@@ -340,6 +340,12 @@ export class TypstryWorkspaceController {
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
 
   public async bootstrap() {
+    const isPreviewWindow = window.location.search.includes("mode=preview");
+    if (isPreviewWindow) {
+      await this.bootstrapPreviewWindow();
+      return;
+    }
+
     await this.timeStartup("load settings", () => this.settingsController.load());
     for (const entry of this.settingsController.getTimings()) this.recordStartupTimingEntry(entry);
     await this.timeStartup("initialize spellcheck providers", () => this.spellcheckController.initialize());
@@ -382,6 +388,50 @@ export class TypstryWorkspaceController {
     this.toolchainController.setStatus(toolchain ?? { typstVersion: null, typstSource: null, tinymistVersion: null, tinymistSource: null, lspAvailable: false, message: "" });
     await this.timeStartup("initialize Tinymist LSP", () => this.initLsp(Boolean(toolchain?.lspAvailable)));
     this.recordStartupTiming("frontend startup", "frontend bootstrap including LSP", this.startupStart);
+  }
+
+  private async bootstrapPreviewWindow() {
+    document.body.classList.add("preview-only-mode");
+    
+    document.getElementById("preview-zoom-in-btn")?.addEventListener("click", () => {
+      this.previewFrame?.zoomIn();
+    });
+    document.getElementById("preview-zoom-out-btn")?.addEventListener("click", () => {
+      this.previewFrame?.zoomOut();
+    });
+
+    const undockBtn = document.getElementById("undock-preview-btn");
+    if (undockBtn) {
+      undockBtn.title = "Dock Preview";
+      undockBtn.addEventListener("click", () => {
+        void getCurrentWindow().close();
+      });
+    }
+
+    const previewWrapper = document.getElementById("preview-container-wrapper");
+    if (previewWrapper) {
+      previewWrapper.classList.remove("hidden");
+      previewWrapper.style.display = "flex";
+      previewWrapper.style.width = "100%";
+      previewWrapper.style.height = "100%";
+    }
+    
+    await getCurrentWindow().show();
+
+    const { listen, emit } = await import("@tauri-apps/api/event");
+    
+    listen<string>("pdf-update", (event) => {
+      const base64Data = event.payload;
+      const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath ?? "preview";
+      void this.previewFrame?.loadPdfData(base64Data, rootPath);
+    });
+
+    listen<{ page_no: number; x: number; y: number }>("pdf-forward-sync", (event) => {
+      const pos = event.payload;
+      void this.previewFrame?.revealDocumentPosition(pos);
+    });
+
+    emit("preview-window-ready");
   }
 
   private updateWorkspaceViewportVisibility() {
@@ -1869,7 +1919,11 @@ export class TypstryWorkspaceController {
         previewPath,
         previewRefreshStyle(this.settingsController.value.preview.renderMode)
       ).taskId;
+      this.lastPdfBase64 = pdf.data!;
       await this.previewFrame.loadPdfData(pdf.data!, previewPath);
+      import("@tauri-apps/api/event").then(({ emit }) => {
+        emit("pdf-update", pdf.data!);
+      }).catch(err => console.error("Error emitting pdf-update", err));
     } catch (error) {
       if (generation !== this.pdfPreviewGeneration) return;
       console.error("PDF Preview compilation failed:", error);
@@ -2345,6 +2399,13 @@ export class TypstryWorkspaceController {
   }
 
   private async handlePdfPreviewClick(point: PreviewClickPoint): Promise<void> {
+    const isPreviewWindow = window.location.search.includes("mode=preview");
+    if (isPreviewWindow) {
+      import("@tauri-apps/api/event").then(({ emit }) => {
+        emit("pdf-click", point);
+      }).catch(err => console.error("Error emitting pdf-click", err));
+      return;
+    }
     const position = point.documentPosition;
     const client = this.lspClient;
     const rootPath = this.previewRootPath;
@@ -2452,6 +2513,9 @@ export class TypstryWorkspaceController {
       message: `Compiler document position: candidates=${positions.length}, page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}.`
     });
     void this.previewFrame.revealDocumentPosition(position);
+    import("@tauri-apps/api/event").then(({ emit }) => {
+      emit("pdf-forward-sync", position);
+    }).catch(err => console.error("Error emitting pdf-forward-sync", err));
   }
 
   private updatePreviewZoomLabel(zoomPercent = this.previewFrame.currentZoomPercent) {
@@ -3440,6 +3504,18 @@ export class TypstryWorkspaceController {
   }
 
   private bindGlobalEvents() {
+    import("@tauri-apps/api/event").then(({ listen, emit }) => {
+      listen("preview-window-ready", () => {
+        if (this.lastPdfBase64) {
+          emit("pdf-update", this.lastPdfBase64);
+        }
+      });
+      listen<PreviewClickPoint>("pdf-click", (event) => {
+        const point = event.payload;
+        void this.handlePdfPreviewClick(point);
+      });
+    }).catch(err => console.error("Error setting up Tauri preview event listeners", err));
+
     window.addEventListener("beforeunload", () => {
       this.workspaceWatcher.stop();
       this.saveWorkspaceState();

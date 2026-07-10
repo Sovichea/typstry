@@ -2308,8 +2308,8 @@ button.welcome-item:disabled {
 .cm-invisible-block-widget {
   display: inline-block;
   width: 0.6em;
-  height: 0.85em;
-  background-color: rgba(239, 68, 68, 0.38);
+  height: 1.2em;
+  background-color: rgba(239, 68, 68, 0.75);
   border: 1px solid rgba(239, 68, 68, 0.75);
   border-radius: 2px;
   vertical-align: middle;
@@ -2450,4 +2450,37 @@ button.welcome-item:disabled {
   color: var(--ui-header-text);
 }
 
+.preview-only-mode .titlebar,
+.preview-only-mode #sidebar-activity-bar,
+.preview-only-mode #explorer-sidebar,
+.preview-only-mode #explorer-resizer,
+.preview-only-mode #input-container-wrapper,
+.preview-only-mode #editor-preview-resizer,
+.preview-only-mode #welcome-screen,
+.preview-only-mode #status-bar,
+.preview-only-mode #log-console,
+.preview-only-mode .settings-overlay {
+  display: none !important;
+}
 
+.preview-only-mode #app-container,
+.preview-only-mode #workspace-viewport {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+}
+
+.preview-only-mode #preview-container-wrapper {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.preview-only-mode #undock-preview-btn {
+  display: flex !important;
+}

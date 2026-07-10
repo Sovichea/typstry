@@ -17,6 +17,7 @@
     "core:window:allow-show",
     "core:window:allow-set-theme",
     "core:webview:default",
+    "core:webview:allow-create-webview-window",
     "dialog:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",

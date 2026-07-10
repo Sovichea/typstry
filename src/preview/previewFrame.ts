@@ -48,7 +48,18 @@ export class PreviewFrame {
     private readonly onPreviewClick: (point: PreviewClickPoint) => void,
     private readonly onInteractionStatus?: (status: PreviewInteractionStatus) => void,
     private readonly onZoomChanged?: (zoomPercent: number) => void
-  ) {}
+  ) {
+    this.pane.addEventListener("wheel", event => {
+      if (event.ctrlKey) {
+        event.preventDefault();
+        if (event.deltaY < 0) {
+          this.zoomIn();
+        } else {
+          this.zoomOut();
+        }
+      }
+    }, { passive: false });
+  }
 
   public get element(): HTMLIFrameElement | null {
     return this.iframe;
@@ -76,7 +87,7 @@ export class PreviewFrame {
     this.previewZoomPercent = percent;
     this.onZoomChanged?.(percent);
     this.cancelAllPageRenders();
-    this.layoutPageSlots();
+    this.layoutPageSlots({ preserveExistingPages: true });
     this.restoreScrollAnchor(anchor);
     requestAnimationFrame(() => this.renderVisiblePages());
     return percent;
@@ -167,7 +178,7 @@ export class PreviewFrame {
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
     iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
-      html,body{margin:0;width:100%;height:100%;background:#d8d8d8}
+      html,body{margin:0;width:100%;height:100%;background:transparent}
       body{overflow:auto;font-family:sans-serif}
       #viewer-container{box-sizing:border-box;min-width:100%;width:max-content;padding:20px;display:flex;flex-direction:column;gap:20px}
       .pdf-page-container{position:relative;box-sizing:border-box;flex:none;margin:0 auto;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);overflow:hidden}
@@ -277,8 +288,6 @@ export class PreviewFrame {
       canvas.className = "pdf-page-canvas";
       canvas.width = Math.max(1, Math.floor(renderViewport.width));
       canvas.height = Math.max(1, Math.floor(renderViewport.height));
-      canvas.style.width = `${cssViewport.width}px`;
-      canvas.style.height = `${cssViewport.height}px`;
       if (!replacingExistingPage) slot.appendChild(canvas);
 
       const context = canvas.getContext("2d", { alpha: false });
@@ -472,6 +481,17 @@ export class PreviewFrame {
       this.debugInverse(`PDF coordinate resolved: page=${pageNo}, x=${point.documentPosition?.x.toFixed(2)}, y=${point.documentPosition?.y.toFixed(2)}.`);
       this.onPreviewClick(point);
     }, true);
+
+    doc.addEventListener("wheel", event => {
+      if (event.ctrlKey) {
+        event.preventDefault();
+        if (event.deltaY < 0) {
+          this.zoomIn();
+        } else {
+          this.zoomOut();
+        }
+      }
+    }, { passive: false });
   }
 
   private pdfDocumentPointAtClick(pageNo: number, slot: HTMLElement, event: MouseEvent): PreviewClickPoint {

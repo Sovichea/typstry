@@ -1,12 +1,9 @@
-import { open as openUrl } from "@tauri-apps/plugin-shell";
-
 export class LayoutController {
   private static readonly dragThresholdPx = 4;
 
   constructor(
     private readonly onLayoutChanged: () => void,
     private readonly onHideLogConsole: () => void,
-    private readonly getPreviewUrl: () => string,
     private readonly onDebug: (message: string) => void = () => {}
   ) {}
 
@@ -19,7 +16,14 @@ export class LayoutController {
     const previewWrapper = document.getElementById("preview-container-wrapper");
     const resizer = document.getElementById("editor-preview-resizer");
     const input = document.getElementById("input-container-wrapper");
-    const dock = document.getElementById("dock-preview-status-btn");
+    
+    import("@tauri-apps/api/webviewWindow").then(async ({ WebviewWindow }) => {
+      const win = await WebviewWindow.getByLabel("preview");
+      if (win) {
+        await win.close();
+      }
+    }).catch(err => console.error("Error closing preview window", err));
+
     const before = previewWrapper
       ? `before class="${previewWrapper.className}", inline="${previewWrapper.style.display}", computed="${getComputedStyle(previewWrapper).display}"`
       : "before missing preview wrapper";
@@ -33,7 +37,6 @@ export class LayoutController {
     }
     input?.classList.remove("hidden");
     if (input && input.style.width === "100%") input.style.width = "50%";
-    dock?.classList.add("hidden");
     const after = previewWrapper
       ? `after class="${previewWrapper.className}", inline="${previewWrapper.style.display}", computed="${getComputedStyle(previewWrapper).display}", rect=${Math.round(previewWrapper.getBoundingClientRect().width)}x${Math.round(previewWrapper.getBoundingClientRect().height)}`
       : "after missing preview wrapper";
@@ -84,25 +87,26 @@ export class LayoutController {
     const preview = document.getElementById("preview-render-pane");
     const resizer = document.getElementById("editor-preview-resizer");
     const input = document.getElementById("input-container-wrapper");
-    const dock = document.getElementById("dock-preview-status-btn");
     const restoreDock = () => this.dockPreview();
-    dock?.addEventListener("click", restoreDock);
     if (!undock || !preview || !previewWrapper) return;
 
     undock.addEventListener("click", async () => {
-      const previewUrl = this.getPreviewUrl() || preview.querySelector<HTMLIFrameElement>("iframe")?.src || "";
-      if (!previewUrl) {
-        alert("Live preview is not currently active.");
-        return;
-      }
       previewWrapper.style.display = "none";
       if (resizer) resizer.style.display = "none";
       if (input) input.style.width = "100%";
-      dock?.classList.remove("hidden");
       try {
-        await openUrl(previewUrl);
+        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+        const win = new WebviewWindow("preview", {
+          url: "index.html?mode=preview",
+          title: "Typstry - Live Preview",
+          width: 800,
+          height: 600
+        });
+        win.once("tauri://close-requested", () => {
+          restoreDock();
+        });
       } catch (error) {
-        console.error("Shell open failed", error);
+        console.error("Failed to create WebviewWindow", error);
         alert("Could not open external preview window.");
         restoreDock();
       }
