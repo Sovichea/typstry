@@ -385,18 +385,18 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ### Task checklist
 
-- [ ] **P1.1 — Define the terminology source of truth.** Add the approved product description, one-line pitch, feature taxonomy, and support-level definitions to the development documentation.
-- [ ] **P1.2 — Rewrite public positioning.** Update the README, repository description, About content, and release-document templates to use the complex-script-first description.
-- [ ] **P1.3 — Audit user-facing terminology.** Find Khmer-only or ambiguous generic labels in Settings, onboarding, language downloads, logs, dialogs, and tooltips; replace them with the approved terms.
-- [ ] **P1.4 — Define support levels.** Specify the exact capabilities required for `Basic`, `Enhanced`, and `Deep`, including how experimental support is displayed.
-- [ ] **P1.5 — Display support metadata.** Add support level and provider-dependent feature labels to installed-language and language-catalog UI entries. Depends on `P1.4`.
-- [ ] **P1.6 — Document feature independence.** Explain that script-aware editing, spellcheck, correction, and typing suggestions can be enabled independently.
+- [x] **P1.1 — Define the terminology source of truth.** Add the approved product description, one-line pitch, feature taxonomy, and support-level definitions to the development documentation.
+- [x] **P1.2 — Rewrite public positioning.** Update the README, repository description, About content, and release-document templates to use the complex-script-first description. README, release workflow, and GitHub repository metadata are aligned. Typstry does not currently have an About dialog.
+- [x] **P1.3 — Audit user-facing terminology.** Find Khmer-only or ambiguous generic labels in Settings, onboarding, language downloads, logs, dialogs, and tooltips; replace them with the approved terms.
+- [x] **P1.4 — Define support levels.** Specify the exact capabilities required for `Basic`, `Enhanced`, and `Deep`, including how experimental support is displayed.
+- [x] **P1.5 — Display support metadata.** Add support level and provider-dependent feature labels to installed-language and language-catalog UI entries. Depends on `P1.4`.
+- [x] **P1.6 — Document feature independence.** Explain that script-aware editing, spellcheck, correction, and typing suggestions can be enabled independently.
 
 ### Acceptance criteria
 
-- [ ] The README answers what Typstry is, who it serves, and why Khmer has special depth without implying Khmer-only scope.
-- [ ] Settings distinguish script-aware editing from spellcheck and typing suggestions.
-- [ ] A language entry cannot imply completion or reliable segmentation unless its provider advertises those capabilities.
+- [x] The README answers what Typstry is, who it serves, and why Khmer has special depth without implying Khmer-only scope.
+- [x] Settings distinguish script-aware editing from spellcheck and typing suggestions.
+- [x] A language entry cannot imply completion or reliable segmentation unless its provider advertises those capabilities.
 
 ## Phase 2: Stabilize the extension contracts
 

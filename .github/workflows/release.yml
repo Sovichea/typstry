@@ -59,7 +59,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'Typstry v__VERSION__'
-          releaseBody: 'Typstry v__VERSION__ release.'
+          releaseBody: 'Typstry v__VERSION__: a complex-script-first Typst environment for research and long-form multilingual writing. Khmer is the first deeply supported language.'
           releaseDraft: true
           prerelease: false
           tauriScript: bun run tauri

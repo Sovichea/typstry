@@ -2,6 +2,7 @@ import { StateEffect, StateField, type EditorState, type Extension, type Text } 
 import { syntaxTree } from "@codemirror/language";
 import { Decoration, EditorView, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
+import type { LanguageProviderCapabilities } from "../languageSupport";
 import { editingPolicyRegistry } from "./editingPolicies/registry";
 
 export type EditorToken = {
@@ -19,16 +20,7 @@ export type AnalyzeResponse = {
   tokens: EditorToken[];
 };
 
-export type ProviderCapabilities = {
-  id: string;
-  pattern: string;
-  displayName?: string;
-  languageTag?: string;
-  engine?: string;
-  supportLevel?: string;
-  boundaryMode?: string;
-  supportsCorrections?: boolean;
-};
+export type ProviderCapabilities = LanguageProviderCapabilities;
 
 export type SpellingIssue = {
   provider: string;
@@ -181,7 +173,9 @@ export class SpellcheckController {
   }
 
   private getPatterns(): RegExp[] {
-    return this.getProviders().map(p => new RegExp(p.pattern, "u"));
+    return this.getProviders()
+      .filter(provider => provider.supportsSpellcheck !== false)
+      .map(provider => new RegExp(provider.pattern, "u"));
   }
 
   public extension(): Extension {
@@ -350,7 +344,7 @@ export class SpellcheckController {
     // TODO: Re-enable correction menus for segmented scripts when providers can
     // identify the user's complete intended word instead of an unknown fragment.
     const provider = this.providers.find(candidate => candidate.id === issue.provider);
-    if (provider?.supportsCorrections === false) return [];
+    if (provider?.supportsCorrections !== true) return [];
     const request = ++this.suggestionRequestGeneration;
     const cached = this.suggestionCache.get(issue.word);
     if (cached) return this.suggestionRequestIsCurrent(request, issue) ? cached : [];

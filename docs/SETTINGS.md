@@ -66,7 +66,9 @@ The typography toolbar controls the fonts used by the compiled document, separat
 
 ## Language tools
 
-Language spellcheck and typing word suggestions can be controlled independently in Editor settings.
+Script-aware editing, spellcheck, correction suggestions, and typing word suggestions are independent capabilities. Script-aware editing is applied automatically where Typstry has a tested policy; it does not depend on a dictionary or on spellcheck being enabled.
+
+Spellcheck and typing word suggestions can be controlled independently in Editor settings. Corrections are shown only when the active provider advertises reliable correction support.
 
 The **Language tools** setting chooses which installed providers participate:
 
@@ -75,10 +77,19 @@ The **Language tools** setting chooses which installed providers participate:
 
 **Add language...** downloads additional Hunspell dictionaries from a starter catalog that includes several complex-script languages as well as common Latin-script dictionaries.
 
+Installed languages display both support depth and stability:
+
+- **Basic** provides dictionary-backed spelling with general boundaries and does not imply reliable segmentation or completion.
+- **Enhanced** adds a tested tokenizer, word completion, or another language-aware capability.
+- **Deep** combines dedicated language tooling with script-aware editing where the script requires tailoring.
+- **Experimental** is a separate stability label and may appear alongside any depth level.
+
 Bundled providers include:
 
 - Khmer through the custom Khmer segmenter.
 - English (US) through Hunspell-format dictionary resources.
+
+Khmer is currently **Deep · Experimental**. Bundled English is **Enhanced · Stable**. Downloaded Hunspell-compatible dictionaries are **Basic · Stable** unless a tested language-specific provider supersedes them.
 
 Provider architecture is documented in [LANGUAGE_TOOLS.md](./LANGUAGE_TOOLS.md), and modern Khmer encoding policy is documented in [KHMER_SPELLCHECK.md](./KHMER_SPELLCHECK.md).
 

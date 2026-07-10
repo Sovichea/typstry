@@ -45,6 +45,13 @@ pub struct HunspellCatalogEntry {
     pub installed: bool,
     pub bundled: bool,
     pub source: String,
+    pub support_level: String,
+    pub stability: String,
+    pub boundary_mode: String,
+    pub supports_spellcheck: bool,
+    pub supports_corrections: bool,
+    pub supports_completion: bool,
+    pub has_editing_policy: bool,
 }
 
 const HUNSPELL_CATALOG: &[HunspellCatalogSpec] = &[
@@ -394,6 +401,10 @@ impl LanguageSegmenter for KhmerProvider {
     }
 
     fn support_level(&self) -> &'static str {
+        "deep"
+    }
+
+    fn stability(&self) -> &'static str {
         "experimental"
     }
 
@@ -405,6 +416,14 @@ impl LanguageSegmenter for KhmerProvider {
         // TODO: Re-enable when Khmer analysis can return reliable intended-word
         // spans instead of unknown fragments inside an unspaced run.
         false
+    }
+
+    fn supports_completion(&self) -> bool {
+        true
+    }
+
+    fn has_editing_policy(&self) -> bool {
+        true
     }
 
     fn pattern(&self) -> &'static str {
@@ -905,11 +924,15 @@ impl LanguageSegmenter for EnglishHunspellProvider {
     }
 
     fn support_level(&self) -> &'static str {
-        "full"
+        "enhanced"
     }
 
     fn boundary_mode(&self) -> &'static str {
         "unicode-word"
+    }
+
+    fn supports_completion(&self) -> bool {
+        true
     }
 
     fn pattern(&self) -> &'static str {
@@ -1169,6 +1192,13 @@ fn catalog_entry(data_dir: Option<&Path>, spec: &HunspellCatalogSpec) -> Hunspel
         installed: data_dir.is_some_and(|dir| is_hunspell_installed(dir, spec.locale)),
         bundled: false,
         source: "LibreOffice dictionaries".to_string(),
+        support_level: "basic".to_string(),
+        stability: "stable".to_string(),
+        boundary_mode: "unicode-word".to_string(),
+        supports_spellcheck: true,
+        supports_corrections: true,
+        supports_completion: false,
+        has_editing_policy: false,
     }
 }
 
@@ -1356,8 +1386,12 @@ impl SegmentationRegistry {
                 language_tag: provider.language_tag().to_owned(),
                 engine: provider.engine().to_owned(),
                 support_level: provider.support_level().to_owned(),
+                stability: provider.stability().to_owned(),
                 boundary_mode: provider.boundary_mode().to_owned(),
+                supports_spellcheck: provider.supports_spellcheck(),
                 supports_corrections: provider.supports_corrections(),
+                supports_completion: provider.supports_completion(),
+                has_editing_policy: provider.has_editing_policy(),
             })
             .collect())
     }
@@ -1512,6 +1546,13 @@ pub fn list_hunspell_catalog(
         installed: true,
         bundled: true,
         source: "Bundled with Typstry".to_string(),
+        support_level: "enhanced".to_string(),
+        stability: "stable".to_string(),
+        boundary_mode: "unicode-word".to_string(),
+        supports_spellcheck: true,
+        supports_corrections: true,
+        supports_completion: true,
+        has_editing_policy: false,
     }];
     entries.extend(
         HUNSPELL_CATALOG
@@ -1580,7 +1621,11 @@ pub async fn language_suggestions(
     tokio::task::spawn_blocking(move || {
         let provider = providers.iter().find(|p| p.id() == request.provider);
         let suggestions = if let Some(provider) = provider {
-            provider.suggestions(&request.word, request.limit.min(50))
+            if provider.supports_corrections() {
+                provider.suggestions(&request.word, request.limit.min(50))
+            } else {
+                Vec::new()
+            }
         } else {
             Vec::new()
         };
@@ -1613,6 +1658,9 @@ fn complete_with_provider(
     provider: &dyn LanguageSegmenter,
     request: &CompletionRequest,
 ) -> Result<Option<CompletionResponse>, String> {
+    if !provider.supports_completion() {
+        return Ok(None);
+    }
     let analysis = provider.analyze(&request.text)?;
     let Some(end_index) = analysis
         .tokens
@@ -2035,6 +2083,40 @@ mod tests {
             .any(|token| token.provider == "hunspell:en_US"
                 && token.source_text == "wrld"
                 && !token.known));
+    }
+
+    #[test]
+    fn reports_support_depth_stability_and_independent_capabilities() {
+        let registry = SegmentationRegistry::new().expect("registry");
+        let capabilities = registry.provider_capabilities().expect("capabilities");
+        let khmer = capabilities
+            .iter()
+            .find(|provider| provider.id == "khmer-segmenter")
+            .expect("Khmer capabilities");
+        assert_eq!(khmer.support_level, "deep");
+        assert_eq!(khmer.stability, "experimental");
+        assert!(khmer.supports_spellcheck);
+        assert!(khmer.supports_completion);
+        assert!(khmer.has_editing_policy);
+        assert!(!khmer.supports_corrections);
+
+        let english = capabilities
+            .iter()
+            .find(|provider| provider.id == "hunspell:en_US")
+            .expect("English capabilities");
+        assert_eq!(english.support_level, "enhanced");
+        assert_eq!(english.stability, "stable");
+        assert!(english.supports_spellcheck);
+        assert!(english.supports_completion);
+        assert!(!english.has_editing_policy);
+
+        let fallback = catalog_entry(None, &HUNSPELL_CATALOG[0]);
+        assert_eq!(fallback.support_level, "basic");
+        assert_eq!(fallback.stability, "stable");
+        assert!(fallback.supports_spellcheck);
+        assert!(fallback.supports_corrections);
+        assert!(!fallback.supports_completion);
+        assert!(!fallback.has_editing_policy);
     }
 
     #[test]

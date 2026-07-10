@@ -1,12 +1,12 @@
 # Khmer Spellcheck and Word Completion
 
-Typstry provides local Khmer spellcheck, correction suggestions, and optional word completion through the Rust language-provider registry. The editor and IPC contracts remain provider-neutral; Khmer-specific segmentation and comparison rules stay in `src-tauri/src/segmentation/registry.rs` and the pinned `third_party/khmer_segmenter` submodule.
+Typstry provides local Khmer spellcheck and optional word completion through the Rust language-provider registry. The correction implementation remains in the provider but is not currently advertised because segmented unknown fragments do not provide reliable intended-word spans. The editor and IPC contracts remain provider-neutral; Khmer-specific segmentation and comparison rules stay in `src-tauri/src/segmentation/registry.rs` and the pinned `third_party/khmer_segmenter` submodule.
 
 ## User controls
 
-Editor settings expose two independent features:
+Script-aware Khmer editing is applied independently from these two user controls:
 
-- **Language spellcheck** marks unknown words and supplies correction suggestions. Right-click an underlined word to replace it or add it to the personal dictionary.
+- **Spellcheck** marks unknown words. Right-click an underlined word to add it to the personal dictionary or ignore it; Khmer replacement suggestions remain disabled until intended-word spans are reliable.
 - **Typing word suggestions** shows dictionary completions while typing. It can be disabled without disabling spellcheck or Typst/Tinymist code completion.
 
 Personal dictionary entries are normalized, deduplicated, and stored in the `editor.userDictionary` array in Typstry's platform-specific `settings.json`. Adding a word triggers fresh analysis immediately. Personal entries affect spellcheck only; they do not modify the bundled Khmer dictionary or completion ranking.
@@ -38,7 +38,9 @@ This policy follows the modern encoding model described by [Unicode Technical No
 
 ## Correction suggestions
 
-The provider first looks for dictionary prefix matches, then uses a pre-compiled base-consonant cluster-aware suggestion index (`suggestion_index`) to query candidate words of matching length and leading glyphs. It runs a weighted edit-distance evaluation over these bounded candidates without performing a sequential full-dictionary scan. Results retain the provider ID so correction requests are routed to the provider that produced the issue. Personal dictionary words are filtered by the frontend after native analysis.
+Khmer correction suggestions are currently disabled through the provider capability contract. Deterministic segmentation can expose only an unknown fragment inside the user's intended unspaced word, so replacing that fragment would be unsafe.
+
+The retained implementation first looks for dictionary prefix matches, then uses a pre-compiled base-consonant cluster-aware suggestion index (`suggestion_index`) to query candidate words of matching length and leading glyphs. It runs a weighted edit-distance evaluation over bounded candidates without performing a sequential full-dictionary scan. It may be re-enabled only after analysis can return a reliable intended-word source span.
 
 The dictionary word source (`khmer_dictionary_words.txt`) is filtered during the backend initialization stage to exclude noisy sentences, translation fragments, or entries containing spaces, digits, or punctuation marks (e.g., "?"), preserving only clean vocabulary tokens.
 
@@ -50,7 +52,7 @@ The frontend refreshes bounded native results after every Khmer character. Accep
 
 When the current token is already a known dictionary word, Typstry includes that exact word as the first completion option before longer ranked suggestions. For example, typing `ការងារ` returns `ការងារ` first so Enter can accept the current word instead of forcing the next candidate.
 
-Word completion remains controlled by the **Typing word suggestions** setting. Disabling it removes dictionary completions while leaving spellcheck, correction suggestions, and Typst/Tinymist code completion available.
+Word completion remains controlled by the **Typing word suggestions** setting. Disabling it removes dictionary completions while leaving spellcheck, script-aware Khmer editing, and Typst/Tinymist code completion available.
 
 ## Validation
 

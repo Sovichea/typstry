@@ -143,6 +143,7 @@ Typstry downloads and manages Tinymist for preview and diagnostics. A separate T
 
 ## Documentation
 
+- [Product direction and terminology](./docs/PRODUCT_DIRECTION.md)
 - [Complex-script-first implementation plan](./docs/COMPLEX_SCRIPT_FIRST_IMPLEMENTATION_PLAN.md)
 - [Install and build from source](./docs/INSTALL.md)
 - [Development guide](./docs/DEVELOPMENT.md)

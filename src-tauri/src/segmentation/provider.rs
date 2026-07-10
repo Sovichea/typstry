@@ -92,8 +92,12 @@ pub struct ProviderCapabilities {
     pub language_tag: String,
     pub engine: String,
     pub support_level: String,
+    pub stability: String,
     pub boundary_mode: String,
+    pub supports_spellcheck: bool,
     pub supports_corrections: bool,
+    pub supports_completion: bool,
+    pub has_editing_policy: bool,
 }
 
 pub trait LanguageSegmenter: Send + Sync {
@@ -108,13 +112,25 @@ pub trait LanguageSegmenter: Send + Sync {
         "custom"
     }
     fn support_level(&self) -> &'static str {
-        "full"
+        "basic"
+    }
+    fn stability(&self) -> &'static str {
+        "stable"
     }
     fn boundary_mode(&self) -> &'static str {
         "custom"
     }
+    fn supports_spellcheck(&self) -> bool {
+        true
+    }
     fn supports_corrections(&self) -> bool {
         true
+    }
+    fn supports_completion(&self) -> bool {
+        false
+    }
+    fn has_editing_policy(&self) -> bool {
+        false
     }
     fn pattern(&self) -> &'static str;
     fn supports(&self, text: &str) -> bool;

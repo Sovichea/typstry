@@ -45,6 +45,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 - CodeMirror owns editor state, syntax behavior, autocomplete, selection, and decorations.
 - Tinymist provides Typst diagnostics, preview, export, and source synchronization.
 - Language analysis is handled by the Rust provider registry. Bundled providers include custom Khmer support and English Hunspell support.
+- Public positioning, feature names, and Basic/Enhanced/Deep language-support criteria are defined in [PRODUCT_DIRECTION.md](./PRODUCT_DIRECTION.md).
 - Script-aware cursor movement and deletion use the frontend policy registry documented in [SCRIPT_EDITING_POLICIES.md](./SCRIPT_EDITING_POLICIES.md).
 - Settings are stored in a versioned `settings.json` in the platform application-config directory.
 

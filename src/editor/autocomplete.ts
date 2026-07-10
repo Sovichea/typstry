@@ -1,6 +1,7 @@
 import { autocompletion, CompletionContext, snippetCompletion, Completion } from "@codemirror/autocomplete";
 import type { Text } from "@codemirror/state";
 import type { TinymistLspClient } from "../compiler/lsp";
+import type { LanguageProviderCapabilities } from "../languageSupport";
 import { invoke } from "@tauri-apps/api/core";
 
 type LspPosition = { line: number; character?: number };
@@ -280,16 +281,7 @@ function getCmCompletionType(kind?: number): string {
   }
 }
 
-export type ProviderCapabilities = {
-  id: string;
-  pattern: string;
-  displayName?: string;
-  languageTag?: string;
-  engine?: string;
-  supportLevel?: string;
-  boundaryMode?: string;
-  supportsCorrections?: boolean;
-};
+export type ProviderCapabilities = LanguageProviderCapabilities;
 
 export function createTypstAutocomplete(
   getClient: () => TinymistLspClient | undefined,
@@ -304,6 +296,7 @@ export function createTypstAutocomplete(
         if (languageWordCompletion) {
           const providers = getProviders();
           for (const provider of providers) {
+            if (provider.supportsCompletion !== true) continue;
             const pattern = new RegExp(provider.pattern + "$", "u");
             const word = context.matchBefore(pattern);
             if (word) {

@@ -4,28 +4,19 @@ import { cloneDefaultAppSettings, normalizeAppSettings, type AppSettings, type T
 import {
   unicodeFontPreferenceOptions,
 } from "./editor/fontCatalog";
+import {
+  boundaryModeLabel,
+  providerFeatureLabels,
+  providerStabilityLabel,
+  supportLevelPresentation,
+  type LanguageCatalogCapabilities,
+  type LanguageProviderCapabilities
+} from "./languageSupport";
 
 type SettingsPayload = { path: string; settings: unknown | null };
 type SystemFontCatalog = { all: string[]; monospace: string[] };
-type LanguageProviderOption = {
-  id: string;
-  pattern: string;
-  displayName?: string;
-  languageTag?: string;
-  engine?: string;
-  supportLevel?: string;
-  boundaryMode?: string;
-  supportsCorrections?: boolean;
-};
-type HunspellCatalogEntry = {
-  id: string;
-  locale: string;
-  displayName: string;
-  languageTag: string;
-  installed: boolean;
-  bundled: boolean;
-  source: string;
-};
+type LanguageProviderOption = LanguageProviderCapabilities;
+type HunspellCatalogEntry = LanguageCatalogCapabilities;
 export type SettingsTimingEntry = {
   source: string;
   label: string;
@@ -303,7 +294,7 @@ export class SettingsController {
     if (!container) return;
     if (this.languageProviders.length === 0) {
       const empty = document.createElement("small");
-      empty.textContent = "No language providers are installed.";
+      empty.textContent = "No languages are installed.";
       container.replaceChildren(empty);
       return;
     }
@@ -332,17 +323,30 @@ export class SettingsController {
       const title = document.createElement("div");
       title.className = "settings-language-provider-title";
       title.textContent = this.languageProviderLabel(provider);
+      const support = supportLevelPresentation(provider.supportLevel);
+      const supportBadge = this.createSupportBadge(support.level, support.label, support.description);
+      const titleRow = document.createElement("div");
+      titleRow.className = "settings-language-provider-title-row";
+      titleRow.append(title, supportBadge);
+      if (providerStabilityLabel(provider.stability) === "Experimental") {
+        titleRow.append(this.createStabilityBadge());
+      }
       const details = document.createElement("div");
       details.className = "settings-language-provider-meta";
       details.textContent = [
         provider.languageTag,
-        provider.engine,
-        provider.supportLevel
+        boundaryModeLabel(provider.boundaryMode),
+        provider.engine?.split("_").join(" ")
       ].filter(Boolean).join(" · ");
-      const text = document.createElement("span");
-      text.append(title, details);
+      const features = document.createElement("div");
+      features.className = "settings-language-provider-features";
+      features.textContent = providerFeatureLabels(provider).join(" · ") || "No active language-tool capabilities";
+      const text = document.createElement("div");
+      text.className = "settings-language-provider-text";
+      text.append(titleRow, details, features);
       const label = document.createElement("label");
       label.className = "settings-language-provider";
+      label.title = support.description;
       label.append(text, checkbox);
       return label;
     });
@@ -378,7 +382,7 @@ export class SettingsController {
 
     const header = document.createElement("div");
     header.className = "settings-language-catalog-header";
-    header.textContent = "Downloadable Hunspell dictionaries from LibreOffice. Complex-script dictionaries are included where available.";
+    header.textContent = "Downloadable dictionaries provide Basic support unless Typstry has a tested language-specific provider. Basic support does not imply reliable segmentation or word completion.";
     const list = document.createElement("div");
     list.className = "settings-language-catalog-list";
     list.replaceChildren(...entries.map(entry => this.renderLanguageCatalogRow(entry)));
@@ -389,15 +393,23 @@ export class SettingsController {
     const title = document.createElement("div");
     title.className = "settings-language-catalog-title";
     title.textContent = entry.displayName;
+    const support = supportLevelPresentation(entry.supportLevel);
+    const titleRow = document.createElement("div");
+    titleRow.className = "settings-language-provider-title-row";
+    titleRow.append(title, this.createSupportBadge(support.level, support.label, support.description));
     const meta = document.createElement("div");
     meta.className = "settings-language-catalog-meta";
     meta.textContent = [
       entry.languageTag,
       entry.bundled ? "bundled" : entry.installed ? "installed" : "Hunspell",
+      boundaryModeLabel(entry.boundaryMode),
       entry.source
     ].filter(Boolean).join(" · ");
+    const features = document.createElement("div");
+    features.className = "settings-language-provider-features";
+    features.textContent = providerFeatureLabels(entry).join(" · ") || "No active language-tool capabilities";
     const text = document.createElement("div");
-    text.append(title, meta);
+    text.append(titleRow, meta, features);
 
     const button = document.createElement("button");
     button.className = "settings-secondary-button";
@@ -408,8 +420,25 @@ export class SettingsController {
 
     const row = document.createElement("div");
     row.className = "settings-language-catalog-row";
+    row.title = support.description;
     row.append(text, button);
     return row;
+  }
+
+  private createSupportBadge(level: "basic" | "enhanced" | "deep", label: string, description: string): HTMLSpanElement {
+    const badge = document.createElement("span");
+    badge.className = `settings-language-support-badge support-${level}`;
+    badge.textContent = label;
+    badge.title = description;
+    return badge;
+  }
+
+  private createStabilityBadge(): HTMLSpanElement {
+    const badge = document.createElement("span");
+    badge.className = "settings-language-support-badge stability-experimental";
+    badge.textContent = "Experimental";
+    badge.title = "This provider is still being validated and may have known limitations.";
+    return badge;
   }
 
   private async installLanguage(entry: HunspellCatalogEntry, button: HTMLButtonElement): Promise<void> {

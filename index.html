@@ -2187,15 +2187,25 @@
                                     ></span
                                 ></label
                             >
+                            <div class="settings-capability-note">
+                                <strong>Script-aware editing</strong>
+                                <small
+                                    >Applied automatically where Typstry has a
+                                    tested script policy. It is independent
+                                    from dictionaries, spellcheck, and typing
+                                    suggestions.</small
+                                >
+                            </div>
                             <label class="settings-toggle"
                                 ><input
                                     id="settings-spellcheck"
                                     type="checkbox"
                                 /><span
-                                    ><strong>Language spellcheck</strong
+                                    ><strong>Spellcheck</strong
                                     ><small
-                                        >Mark unknown words and provide
-                                        correction suggestions.</small
+                                        >Mark unknown words in prose.
+                                        Corrections are available only when the
+                                        enabled provider supports them.</small
                                     ></span
                                 ></label
                             >
@@ -2212,13 +2222,13 @@
                                 ></label
                             >
                             <div class="settings-field">
-                                <label>Language tools</label>
+                                <label>Installed languages</label>
                                 <div class="settings-language-tools">
                                     <div
                                         id="settings-language-providers"
                                         class="settings-check-list"
                                         role="group"
-                                        aria-label="Enabled language providers"
+                                        aria-label="Enabled language support"
                                     ></div>
                                     <button
                                         id="settings-add-language"
@@ -2234,9 +2244,10 @@
                                     ></div>
                                 </div>
                                 <small
-                                    >Choose which installed language providers
-                                    participate in spellcheck and typing word
-                                    suggestions.</small
+                                    >Enable the languages that can participate
+                                    in spellcheck and typing suggestions. Each
+                                    row lists its actual capabilities and
+                                    support depth.</small
                                 >
                             </div>
                             <label class="settings-toggle"
