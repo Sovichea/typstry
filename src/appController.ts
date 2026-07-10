@@ -26,7 +26,6 @@ import { isBinaryImagePath, isSupportedInAppPath } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewInteractionStatus, type PreviewTextPoint } from "./preview/previewFrame";
 import { PreviewSyncController, type InverseSyncResult } from "./preview/previewSyncController";
-import { findRankedPreviewTextMatchInSource } from "./preview/sourceHighlight";
 import { allowsStandalonePreview, previewRefreshStyle, previewSessionIdentity, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
@@ -113,15 +112,6 @@ function normalizeEditorText(text: string): string {
   return text.replace(/\r\n?/g, "\n");
 }
 
-function inverseDebugText(text: string, offset: number): string {
-  const start = Math.max(0, offset - 20);
-  const sample = text.slice(start, Math.min(text.length, offset + 36));
-  const codePoints = [...sample]
-    .map(character => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`)
-    .join(" ");
-  return `text=${JSON.stringify(sample)}, codePoints=[${codePoints}]`;
-}
-
 function isScrollbarPointerEvent(element: HTMLElement, event: PointerEvent): boolean {
   const rect = element.getBoundingClientRect();
   const canScrollVertically = element.scrollHeight > element.clientHeight;
@@ -186,7 +176,6 @@ export class TypstryWorkspaceController {
   private lspSyncGenerations = new Map<string, number>();
   private workspaceChangeQueue: Promise<void> = Promise.resolve();
   private pdfPreviewGeneration = 0;
-  private pdfInverseSyncGeneration = 0;
   private pdfSyncPreviewTaskKey: string | null = null;
   private pdfSyncSocket: WebSocket | null = null;
   private pdfSyncSocketUrl = "";
@@ -2210,14 +2199,14 @@ export class TypstryWorkspaceController {
       return false;
     }
 
-    const socket = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync");
-    if (!socket) {
+    const sourceMapSession = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "forward sync");
+    if (!sourceMapSession) {
       this.appendDeveloperLog({
         kind: "warning",
         source: "forward sync",
-        message: "Skipped forward sync: source-map socket unavailable."
+        message: "Skipped PDF forward sync: source-map socket unavailable."
       });
-      return true;
+      return false;
     }
 
     const generation = ++this.pdfForwardSyncGeneration;
@@ -2233,7 +2222,7 @@ export class TypstryWorkspaceController {
       }
     }, 5000);
 
-    await client.scrollPreview(taskId, {
+    await client.scrollPreview(sourceMapSession.taskId, {
       event: "panelScrollTo",
       filepath: target.filepath,
       line: target.line,
@@ -2290,41 +2279,43 @@ export class TypstryWorkspaceController {
     rootPath: string,
     taskId: string,
     source: "forward sync" | "inverse sync"
-  ): Promise<WebSocket | null> {
-    const taskKey = `${filePathKey(rootPath)}\u0000${taskId}`;
-    if (this.pdfSyncPreviewTaskKey !== taskKey) {
-      this.appendDeveloperLog({
-        kind: "info",
-        source,
-        message: `Starting hidden Tinymist source-map session: root=${rootPath}; task=${taskId}; mode=${previewRefreshStyle(this.settingsController.value.preview.renderMode)}; active=${this.activeFilePath ?? "n/a"}.`
-      });
-      const url = await client.startPreview(
-        rootPath,
-        taskId,
-        previewRefreshStyle(this.settingsController.value.preview.renderMode),
-        false
-      );
-      if (!url) {
+  ): Promise<{ socket: WebSocket; taskId: string } | null> {
+    const taskIds = [...new Set([taskId, `${taskId}-source-map`])];
+    for (const candidateTaskId of taskIds) {
+      const taskKey = `${filePathKey(rootPath)}\u0000${candidateTaskId}`;
+      if (this.pdfSyncPreviewTaskKey !== taskKey) {
         this.appendDeveloperLog({
-          kind: "warning",
+          kind: "info",
           source,
-          message: "Tinymist source-map session failed to start."
+          message: `Starting hidden Tinymist source-map session: root=${rootPath}; task=${candidateTaskId}; mode=${previewRefreshStyle(this.settingsController.value.preview.renderMode)}; active=${this.activeFilePath ?? "n/a"}.`
         });
-        return null;
+        const url = await client.startPreview(
+          rootPath,
+          candidateTaskId,
+          previewRefreshStyle(this.settingsController.value.preview.renderMode),
+          false
+        );
+        if (!url) {
+          this.appendDeveloperLog({
+            kind: "warning",
+            source,
+            message: `Tinymist source-map session failed to start for task ${candidateTaskId}.`
+          });
+          continue;
+        }
+        this.pdfSyncPreviewTaskKey = taskKey;
       }
-      this.pdfSyncPreviewTaskKey = taskKey;
-    }
 
-    const dataPlaneUrl = client.getLatestPreviewDataPlaneUrl();
-    const socket = await this.ensurePdfSyncSocket(dataPlaneUrl);
-    if (!socket) {
+      const dataPlaneUrl = client.getLatestPreviewDataPlaneUrl();
+      const socket = await this.ensurePdfSyncSocket(dataPlaneUrl, source);
+      if (socket) return { socket, taskId: candidateTaskId };
       this.appendDeveloperLog({
         kind: "warning",
         source,
-        message: `Tinymist data-plane connection failed: ${dataPlaneUrl || "URL unavailable"}.`
+        message: `Tinymist data-plane connection failed for task ${candidateTaskId}: ${dataPlaneUrl || "URL unavailable"}.`
       });
     }
-    return socket;
+    return null;
   }
 
   private async handlePdfPreviewClick(point: PreviewTextPoint): Promise<void> {
@@ -2336,46 +2327,18 @@ export class TypstryWorkspaceController {
       this.appendDeveloperLog({
         kind: "warning",
         source: "inverse sync",
-        message: "Compiler inverse sync unavailable; falling back to PDF text matching."
+        message: `Skipped PDF inverse sync: position=${!!position}, client=${!!client}, root=${rootPath ?? "n/a"}, task=${taskId ?? "n/a"}, lspReady=${this.lspReady}.`
       });
-      await this.navigateFromPdfText(point);
       return;
     }
 
-    const taskKey = `${filePathKey(rootPath)}\u0000${taskId}`;
-    if (this.pdfSyncPreviewTaskKey !== taskKey) {
-      this.appendDeveloperLog({
-        kind: "info",
-        source: "inverse sync",
-        message: `Starting hidden Tinymist source-map session: root=${rootPath}; task=${taskId}; mode=${previewRefreshStyle(this.settingsController.value.preview.renderMode)}; active=${this.activeFilePath ?? "n/a"}.`
-      });
-      const url = await client.startPreview(
-        rootPath,
-        taskId,
-        previewRefreshStyle(this.settingsController.value.preview.renderMode),
-        false
-      );
-      if (!url) {
-        this.appendDeveloperLog({
-          kind: "warning",
-          source: "inverse sync",
-          message: "Tinymist source-map session failed to start; falling back to PDF text matching."
-        });
-        await this.navigateFromPdfText(point);
-        return;
-      }
-      this.pdfSyncPreviewTaskKey = taskKey;
-    }
-
-    const dataPlaneUrl = client.getLatestPreviewDataPlaneUrl();
-    const socket = await this.ensurePdfSyncSocket(dataPlaneUrl);
-    if (!socket) {
+    const sourceMapSession = await this.ensurePdfSourceMapSocket(client, rootPath, taskId, "inverse sync");
+    if (!sourceMapSession) {
       this.appendDeveloperLog({
         kind: "warning",
         source: "inverse sync",
-        message: `Tinymist data-plane connection failed: ${dataPlaneUrl || "URL unavailable"}.`
+        message: "Skipped PDF inverse sync: source-map socket unavailable."
       });
-      await this.navigateFromPdfText(point);
       return;
     }
     this.previewSyncController.recordTextClick(point);
@@ -2384,10 +2347,10 @@ export class TypstryWorkspaceController {
       source: "inverse sync",
       message: `Sending compiler inverse position: page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}.`
     });
-    socket.send(`src-point ${JSON.stringify(position)}`);
+    sourceMapSession.socket.send(`src-point ${JSON.stringify(position)}`);
   }
 
-  private async ensurePdfSyncSocket(url: string): Promise<WebSocket | null> {
+  private async ensurePdfSyncSocket(url: string, source: "forward sync" | "inverse sync"): Promise<WebSocket | null> {
     if (!url) return null;
     if (this.pdfSyncSocketUrl === url && this.pdfSyncSocket?.readyState === WebSocket.OPEN) {
       return this.pdfSyncSocket;
@@ -2409,7 +2372,7 @@ export class TypstryWorkspaceController {
         socket.send("current");
         this.appendDeveloperLog({
           kind: "info",
-          source: "inverse sync",
+          source,
           message: `Tinymist data-plane connected: ${url}.`
         });
         resolve(socket);
@@ -2463,101 +2426,6 @@ export class TypstryWorkspaceController {
       message: `Compiler document position: candidates=${positions.length}, page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}.`
     });
     void this.previewFrame.revealDocumentPosition(position);
-  }
-
-  private async navigateFromPdfText(point: PreviewTextPoint): Promise<void> {
-    if (!point.text.trim()) {
-      this.appendDeveloperLog({ kind: "warning", source: "inverse sync", message: "PDF click rejected: extracted text is empty." });
-      return;
-    }
-    const generation = ++this.pdfInverseSyncGeneration;
-    this.appendDeveloperLog({
-      kind: "info",
-      source: "inverse sync",
-      message: `Resolving PDF click ${generation}: page=${point.pageNo ?? "n/a"}, offset=${point.offset}/${point.text.length}, ${inverseDebugText(point.text, point.offset)}.`
-    });
-    const queuedPaths: string[] = [];
-    const queuedKeys = new Set<string>();
-    const enqueue = (path: string | null | undefined) => {
-      if (!path || !path.toLowerCase().endsWith(".typ")) return;
-      const key = filePathKey(path);
-      if (queuedKeys.has(key)) return;
-      queuedKeys.add(key);
-      queuedPaths.push(path);
-    };
-
-    enqueue(this.activeFilePath);
-    for (const tab of this.openTabs) enqueue(tab.path);
-    enqueue(this.previewMainPath);
-    enqueue(this.previewRootPath);
-
-    const visited = new Set<string>();
-    let best: { path: string; sourceOffset: number; score: number } | null = null;
-    while (queuedPaths.length > 0 && visited.size < 100) {
-      if (generation !== this.pdfInverseSyncGeneration) return;
-      const path = queuedPaths.shift()!;
-      const key = filePathKey(path);
-      if (visited.has(key)) continue;
-      visited.add(key);
-      const tab = this.openTabs.find(candidate => filePathKey(candidate.path) === key);
-      let source = tab?.content ?? null;
-      if (source === null) {
-        try {
-          source = normalizeEditorText(await invoke<string>("read_workspace_file", { path }));
-          if (generation !== this.pdfInverseSyncGeneration) return;
-        } catch {
-          continue;
-        }
-      }
-
-      const preferred = tab?.selectionHead ?? 0;
-      const match = findRankedPreviewTextMatchInSource(source, point.text, point.offset, preferred);
-      if (match) {
-        this.appendDeveloperLog({
-          kind: "info",
-          source: "inverse sync",
-          message: `Candidate for click ${generation}: score=${match.score}, offset=${match.sourceOffset}, file=${path}.`
-        });
-        if (!best || match.score > best.score) best = { path, ...match };
-      }
-
-      const parent = await dirname(path);
-      const referencePattern = /#(?:include|import)\s+"([^"\r\n]+)"/gu;
-      for (const reference of source.matchAll(referencePattern)) {
-        const relative = reference[1];
-        if (!relative || relative.startsWith("@") || /^[a-z]+:/iu.test(relative)) continue;
-        try { enqueue(await join(parent, relative)); } catch {}
-      }
-    }
-
-    if (generation !== this.pdfInverseSyncGeneration) {
-      this.appendDeveloperLog({ kind: "info", source: "inverse sync", message: `Click ${generation} cancelled by a newer click.` });
-      return;
-    }
-    if (!best) {
-      this.appendDeveloperLog({
-        kind: "warning",
-        source: "inverse sync",
-        message: `No source match for click ${generation}; searched ${visited.size} Typst file(s).`
-      });
-      return;
-    }
-    this.appendDeveloperLog({
-      kind: "info",
-      source: "inverse sync",
-      message: `Selected click ${generation}: score=${best.score}, offset=${best.sourceOffset}, file=${best.path}.`
-    });
-    const session = this.capturePreviewSession();
-    await this.loadFile(best.path, { preservePreviewSession: session });
-    if (generation !== this.pdfInverseSyncGeneration) return;
-    if (this.activeMode === "WYSIWYM") this.switchViewLayoutMode();
-    this.previewSyncController.suppressOnce();
-    const cursor = Math.max(0, Math.min(best.sourceOffset, this.editorInstance.state.doc.length));
-    this.editorInstance.dispatch({
-      selection: { anchor: cursor },
-      effects: EditorView.scrollIntoView(cursor, { y: "center" })
-    });
-    this.editorInstance.focus();
   }
 
   private updatePreviewZoomLabel(zoomPercent = this.previewFrame.currentZoomPercent) {
