@@ -172,8 +172,6 @@ export class TypstryWorkspaceController {
   private readonly openedDocumentUris = new Set<string>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
   private lastPreviewRenderMode: PreviewRefreshStyle | undefined = undefined;
-  private preparedContentsCache = new Map<string, { content: string; preparedText: string; generatedPath: string }>();
-  private lspSyncGenerations = new Map<string, number>();
   private workspaceChangeQueue: Promise<void> = Promise.resolve();
   private pdfPreviewGeneration = 0;
   private pdfSyncPreviewTaskKey: string | null = null;
@@ -549,6 +547,13 @@ export class TypstryWorkspaceController {
     this.lastKhmerRenderPrepState = preview.khmerRenderPreparation;
     const previewRenderModeChanged = this.lastPreviewRenderMode !== undefined && this.lastPreviewRenderMode !== preview.renderMode;
     this.lastPreviewRenderMode = preview.renderMode;
+    if (previewRenderModeChanged && preview.renderMode !== "on-type") {
+      if (this.pdfPreviewTimer) {
+        window.clearTimeout(this.pdfPreviewTimer);
+        this.pdfPreviewTimer = null;
+      }
+      this.queuedPdfPreviewContents = null;
+    }
 
     const khmerPrepStatus = document.getElementById("khmer-prep-status");
     if (khmerPrepStatus) {
@@ -559,7 +564,7 @@ export class TypstryWorkspaceController {
       }
     }
 
-    if (khmerPrepChanged) {
+    if (khmerPrepChanged && preview.renderMode === "on-type") {
       void this.prepareRenderProjectIfNeeded().then(() => this.refreshActivePreviewRoot());
     } else if (previewRenderModeChanged) {
       void this.refreshActivePreviewRoot();
@@ -1305,10 +1310,6 @@ export class TypstryWorkspaceController {
       this.lspClient = new TinymistLspClient(
         () => {
           if (!this.workspaceRootPath) return null;
-          if (this.settingsController.value.preview.khmerRenderPreparation) {
-            const cacheRoot = this.getCacheRootPath();
-            return cacheRoot ? `${cacheRoot}/render` : this.workspaceRootPath;
-          }
           return this.workspaceRootPath;
         },
         () => {},
@@ -1723,21 +1724,13 @@ export class TypstryWorkspaceController {
   }
 
   private applyPreviewTargetToTab(tab: EditorTab, target: PreviewTarget): void {
-    let mappedTarget = target;
-    if (this.settingsController.value.preview.khmerRenderPreparation) {
-      mappedTarget = {
-        ...target,
-        rootPath: this.mapToCachePath(target.rootPath),
-        mainPath: this.mapToCachePath(target.mainPath)
-      };
-    }
     const style = previewRefreshStyle(this.settingsController.value.preview.renderMode);
-    const identity = mappedTarget.rootPath ? previewSessionIdentity(mappedTarget.rootPath, style) : null;
-    tab.previewRootPath = mappedTarget.rootPath;
-    tab.previewMainPath = mappedTarget.mainPath;
+    const identity = target.rootPath ? previewSessionIdentity(target.rootPath, style) : null;
+    tab.previewRootPath = target.rootPath;
+    tab.previewMainPath = target.mainPath;
     tab.previewTaskId = identity?.taskId ?? null;
     tab.previewSessionKey = identity?.key ?? null;
-    tab.previewImported = mappedTarget.imported;
+    tab.previewImported = target.imported;
     tab.previewStandalone = target.standalone;
     this.previewRootPath = tab.previewRootPath;
     this.previewMainPath = tab.previewMainPath;
@@ -1762,11 +1755,7 @@ export class TypstryWorkspaceController {
     if (!target.imported || !target.mainPath || !this.previewRootPath || !this.previewSessionKey) {
       return null;
     }
-    const mappedMainPath = this.settingsController.value.preview.khmerRenderPreparation
-      ? this.mapToCachePath(target.mainPath)
-      : target.mainPath;
-    if (!mappedMainPath) return null;
-    const mainKey = filePathKey(mappedMainPath);
+    const mainKey = filePathKey(target.mainPath);
     const currentRootMatchesMain = filePathKey(this.previewRootPath) === mainKey;
     const currentMainMatchesMain = this.previewMainPath
       ? filePathKey(this.previewMainPath) === mainKey
@@ -1835,9 +1824,6 @@ export class TypstryWorkspaceController {
       if (existingSource !== previewSource) {
         await invoke("save_workspace_file", { path: previewPath, contents: previewSource });
       }
-      if (this.settingsController.value.preview.khmerRenderPreparation) {
-        await this.getLspUriAndContent(previewPath, previewSource);
-      }
       return { ...target, rootPath: previewPath };
     } catch (error) {
       this.appendLspLog({
@@ -1857,10 +1843,7 @@ export class TypstryWorkspaceController {
 
   private async updatePinnedMain(path: string | null, force = false): Promise<boolean> {
     if (!this.lspReady || !this.lspClient) return false;
-    let targetPath = path;
-    if (this.settingsController.value.preview.khmerRenderPreparation && path) {
-      targetPath = this.mapToCachePath(path);
-    }
+    const targetPath = path;
     if (!force && filePathKey(this.pinnedLspMainPath ?? "") === filePathKey(targetPath ?? "")) return false;
     try {
       await this.lspClient.pinMain(targetPath);
@@ -1931,7 +1914,7 @@ export class TypstryWorkspaceController {
         "Preview Render Failed",
         String(error)
       );
-      this.setLspStatus({ kind: "error", message: "PDF compile failed" });
+      this.setLspStatus({ kind: "preview-ready", message: "PDF compile failed" });
     } finally {
       this.pdfPreviewRunning = false;
       const queued = this.queuedPdfPreviewContents;
@@ -1953,13 +1936,10 @@ export class TypstryWorkspaceController {
     const rootPath = this.previewMainPath ?? this.previewRootPath ?? this.activeFilePath;
     if (!rootPath) return null;
 
-    const shouldMirror = this.settingsController.value.preview.renderMode === "on-type"
-      || this.settingsController.value.preview.khmerRenderPreparation;
+    const shouldMirror = this.settingsController.value.preview.renderMode === "on-type";
     if (!shouldMirror || !this.workspaceRootPath) {
       this.pdfPreviewGeneratedFiles.clear();
-      return this.settingsController.value.preview.khmerRenderPreparation
-        ? this.mapToCachePath(rootPath)
-        : rootPath;
+      return rootPath;
     }
 
     const cacheRoot = this.getCacheRootPath();
@@ -1975,15 +1955,31 @@ export class TypstryWorkspaceController {
       generateSourceMap: true
     };
     const result = await invoke<{ generatedEntryFile: string }>("prepare_render_project", { options });
-    const activeGenerated = await invoke<{ generatedPath: string; preparedText: string }>("prepare_render_file", {
-      options,
-      filePath: originalActivePath,
-      sourceCode: contents
-    });
-    this.pdfPreviewGeneratedFiles.set(filePathKey(originalActivePath), activeGenerated);
-    const version = ++this.currentVersion;
-    await this.openDocumentIfNeeded(filePathToUri(activeGenerated.generatedPath), activeGenerated.preparedText, version);
-    await this.lspClient.notifyTextChange(filePathToUri(activeGenerated.generatedPath), activeGenerated.preparedText, version);
+    const tabsToOverlay = this.openTabs
+      .filter(tab => tab.path.toLowerCase().endsWith(".typ"))
+      .filter(tab => this.workspaceRootPath && relativeFilePath(this.workspaceRootPath, this.mapToOriginalPath(tab.path)) !== null);
+    const overlaid = new Set<string>();
+    for (const tab of tabsToOverlay) {
+      const originalTabPath = this.mapToOriginalPath(tab.path);
+      overlaid.add(filePathKey(originalTabPath));
+      const sourceCode = filePathKey(originalTabPath) === filePathKey(originalActivePath)
+        ? contents
+        : tab.content;
+      const generated = await invoke<{ generatedPath: string; preparedText: string }>("prepare_render_file", {
+        options,
+        filePath: originalTabPath,
+        sourceCode
+      });
+      this.pdfPreviewGeneratedFiles.set(filePathKey(originalTabPath), generated);
+    }
+    if (!overlaid.has(filePathKey(originalActivePath))) {
+      const activeGenerated = await invoke<{ generatedPath: string; preparedText: string }>("prepare_render_file", {
+        options,
+        filePath: originalActivePath,
+        sourceCode: contents
+      });
+      this.pdfPreviewGeneratedFiles.set(filePathKey(originalActivePath), activeGenerated);
+    }
     return result.generatedEntryFile;
   }
 
@@ -2025,7 +2021,11 @@ export class TypstryWorkspaceController {
         activeTab.version = version;
         activeTab.latestVersion = version;
       }
-      if (this.previewImported && allowsStandalonePreview(rawText) !== this.previewStandalone) {
+      if (
+        this.previewImported
+        && allowsStandalonePreview(rawText) !== this.previewStandalone
+        && this.settingsController.value.preview.renderMode === "on-type"
+      ) {
         void this.refreshActivePreviewRoot();
       }
       this.pendingLspSyncPath = this.activeFilePath;
@@ -2042,7 +2042,12 @@ export class TypstryWorkspaceController {
         this.lspSyncDebounceMs
       );
     }
-    if (!this.isLoadingFile && this.activeFilePath && this.activeFilePath.toLowerCase().endsWith(".typ")) {
+    if (
+      !this.isLoadingFile
+      && this.activeFilePath
+      && this.activeFilePath.toLowerCase().endsWith(".typ")
+      && this.settingsController.value.preview.renderMode === "on-type"
+    ) {
       this.schedulePdfPreview(rawText);
     }
   }
@@ -2151,10 +2156,8 @@ export class TypstryWorkspaceController {
       return { handled: true };
     }
 
-    let targetPath = uri ? filePathFromUri(uri) : null;
-    if (this.settingsController.value.preview.khmerRenderPreparation && targetPath) {
-      targetPath = this.mapToOriginalPath(targetPath);
-    }
+    const rawTargetPath = uri ? filePathFromUri(uri) : null;
+    let targetPath = rawTargetPath ? this.mapToOriginalPath(rawTargetPath) : null;
     const existingTargetTab = targetPath
       ? this.openTabs.find((tab) => filePathKey(tab.path) === filePathKey(targetPath))
       : null;
@@ -2172,11 +2175,11 @@ export class TypstryWorkspaceController {
     this.previewSyncController.clearForward();
     
     let cursor = 0;
-    if (this.settingsController.value.preview.khmerRenderPreparation && targetPath && uri) {
+    if (rawTargetPath && targetPath && this.isRenderCachePath(rawTargetPath)) {
       const relPath = targetPath.startsWith(this.workspaceRootPath!)
         ? targetPath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
         : targetPath;
-      const cacheContent = this.preparedContentsCache.get(filePathKey(targetPath))?.preparedText || "";
+      const cacheContent = await this.pdfGeneratedPreviewText(targetPath);
       cursor = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, position, cacheContent) ?? 0;
     } else {
       cursor = this.editorPositionFromLspPosition(position) ?? 0;
@@ -2658,15 +2661,17 @@ export class TypstryWorkspaceController {
 
       const editorDiagnostics: EditorDiagnostic[] = [];
       const staleDiagnostics = new Set<LspDiagnostic>();
+      const rawPath = filePathFromUri(uri);
+      const fromRenderCache = this.isRenderCachePath(rawPath);
       const relPath = originalPath.startsWith(this.workspaceRootPath!)
         ? originalPath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
         : originalPath;
-      const cacheContent = this.preparedContentsCache.get(filePathKey(originalPath))?.preparedText || "";
+      const cacheContent = fromRenderCache ? await this.pdfGeneratedPreviewText(originalPath) : "";
 
       for (const diagnostic of filteredDiagnostics) {
         let from: number | null = null;
         let to: number | null = null;
-        if (this.settingsController.value.preview.khmerRenderPreparation) {
+        if (fromRenderCache) {
           from = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, diagnostic.range.start, cacheContent);
           to = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, diagnostic.range.end, cacheContent);
         } else {
@@ -2700,10 +2705,12 @@ export class TypstryWorkspaceController {
       this.logConsoleController.setDiagnostics(originalPath, filteredDiagnostics.map((diagnostic) => this.logEntryFromDiagnostic(uri, diagnostic)));
     }
 
-    if (this.logConsoleController.getErrorCount() > 0) {
-      this.previewFrame.setError("Preview Render Failed", "The live preview cannot be updated because of compile errors.\nPlease check the Problems panel or Log Console for details.");
-    } else {
-      this.previewFrame.clearErrorOverlay();
+    if (this.settingsController.value.preview.renderMode === "on-type") {
+      if (this.logConsoleController.getErrorCount() > 0) {
+        this.previewFrame.setError("Preview Render Failed", "The live preview cannot be updated because of compile errors.\nPlease check the Problems panel or Log Console for details.");
+      } else {
+        this.previewFrame.clearErrorOverlay();
+      }
     }
   }
 
@@ -2847,20 +2854,18 @@ export class TypstryWorkspaceController {
   }
 
   private async navigateToLspLocation(uri: string, line: number, character: number) {
-    let filePath = filePathFromUri(uri);
-    if (this.settingsController.value.preview.khmerRenderPreparation) {
-      filePath = this.mapToOriginalPath(filePath);
-    }
+    const rawPath = filePathFromUri(uri);
+    let filePath = this.mapToOriginalPath(rawPath);
     if (filePath !== this.activeFilePath) {
       await this.loadFile(filePath);
     }
     
     let cursor = 0;
-    if (this.settingsController.value.preview.khmerRenderPreparation && this.lspClient) {
+    if (this.isRenderCachePath(rawPath) && this.lspClient) {
       const relPath = filePath.startsWith(this.workspaceRootPath!)
         ? filePath.substring(this.workspaceRootPath!.length).replace(/^[/\\]+/, "")
         : filePath;
-      const cacheContent = this.preparedContentsCache.get(filePathKey(filePath))?.preparedText || "";
+      const cacheContent = await this.pdfGeneratedPreviewText(filePath);
       cursor = await this.mapCacheLspPositionToOriginalEditorOffset(relPath, { line, character }, cacheContent) ?? 0;
     } else if (this.lspClient) {
       cursor = this.lspClient.editorPositionFromLspPosition({ line, character });
@@ -3052,12 +3057,8 @@ export class TypstryWorkspaceController {
       const defaultType: 1 | 2 | 3 = change.kind === "create" ? 1 : change.kind === "remove" ? 3 : 2;
       const lastPathIndex = change.paths.length - 1;
       const changes = change.paths.map((path, index) => {
-        let targetPath = path;
-        if (this.settingsController.value.preview.khmerRenderPreparation) {
-          targetPath = this.mapToCachePath(path)!;
-        }
         return {
-          uri: filePathToUri(targetPath),
+          uri: filePathToUri(path),
           type: change.kind === "rename" && change.paths.length > 1
             ? (index === lastPathIndex ? 1 : 3) as 1 | 3
             : defaultType
@@ -3685,10 +3686,21 @@ export class TypstryWorkspaceController {
         let targetContent = content;
         
         if (this.settingsController.value.preview.khmerRenderPreparation) {
-          const lspRes = await this.getLspUriAndContent(this.activeFilePath, content);
-          if (lspRes) {
-            targetFilePath = filePathFromUri(lspRes.uri);
-            targetContent = lspRes.content;
+          const cacheRoot = this.getCacheRootPath();
+          if (cacheRoot && this.workspaceRootPath) {
+            const prepared = await invoke<{ generatedPath: string; preparedText: string }>("prepare_render_file", {
+              options: {
+                enableKhmerZws: true,
+                projectRoot: this.workspaceRootPath,
+                entryFile: this.activeFilePath,
+                cacheRoot,
+                generateSourceMap: false
+              },
+              filePath: this.activeFilePath,
+              sourceCode: content
+            });
+            targetFilePath = prepared.generatedPath;
+            targetContent = prepared.preparedText;
           }
         }
 
@@ -3963,22 +3975,6 @@ export class TypstryWorkspaceController {
     return `${this.workspaceRootPath}/.typstry/cache`.replace(/\\/g, "/");
   }
 
-  private mapToCachePath(originalPath: string | null): string | null {
-    if (!originalPath || !this.workspaceRootPath) return originalPath;
-    
-    const cachePrefix = `${this.workspaceRootPath}/.typstry/cache/`.replace(/\\/g, "/").toLowerCase();
-    const cleanPath = originalPath.replace(/\\/g, "/").toLowerCase();
-    if (cleanPath.includes(cachePrefix) || cleanPath.includes("/.typstry/cache/")) {
-      return originalPath;
-    }
-
-    const relPath = originalPath.startsWith(this.workspaceRootPath)
-      ? originalPath.substring(this.workspaceRootPath.length)
-      : originalPath;
-    const cleanRel = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
-    return `${this.workspaceRootPath}/.typstry/cache/render/${cleanRel}`;
-  }
-
   private mapToOriginalPath(cachePath: string): string {
     if (!this.workspaceRootPath) {
       return cachePath;
@@ -3992,67 +3988,37 @@ export class TypstryWorkspaceController {
     return cachePath;
   }
 
-  private async getLspUriAndContent(path: string, originalContent: string): Promise<{ uri: string; content: string } | null> {
-    if (!this.settingsController.value.preview.khmerRenderPreparation || !this.workspaceRootPath) {
-      return { uri: filePathToUri(path), content: originalContent };
-    }
+  private isRenderCachePath(path: string): boolean {
+    if (!this.workspaceRootPath) return false;
+    const prefix = `${this.workspaceRootPath}/.typstry/cache/render/`.replace(/\\/g, "/").toLowerCase();
+    return path.replace(/\\/g, "/").toLowerCase().startsWith(prefix);
+  }
+
+  private async pdfGeneratedPreviewText(originalPath: string): Promise<string> {
+    const key = filePathKey(originalPath);
+    const cached = this.pdfPreviewGeneratedFiles.get(key);
+    if (cached) return cached.preparedText;
+    if (!this.workspaceRootPath) return "";
+    const relativePath = relativeFilePath(this.workspaceRootPath, originalPath);
+    if (relativePath === null) return "";
     const cacheRoot = this.getCacheRootPath();
-    if (!cacheRoot) {
-      return { uri: filePathToUri(path), content: originalContent };
-    }
-    
-    const key = filePathKey(path);
-    const cached = this.preparedContentsCache.get(key);
-    if (cached && cached.content === originalContent) {
-      return {
-        uri: filePathToUri(cached.generatedPath),
-        content: cached.preparedText
-      };
-    }
-
-    const gen = (this.lspSyncGenerations.get(key) ?? 0) + 1;
-    this.lspSyncGenerations.set(key, gen);
-
+    if (!cacheRoot) return "";
+    const generatedPath = `${cacheRoot}/render/${relativePath.replace(/\\/g, "/")}`;
     try {
-      const res = await invoke<any>("prepare_render_file", {
-        options: {
-          enableKhmerZws: true,
-          projectRoot: this.workspaceRootPath,
-          entryFile: this.activeFilePath || path,
-          cacheRoot,
-          generateSourceMap: true
-        },
-        filePath: path,
-        sourceCode: originalContent
-      });
-      
-      if (this.lspSyncGenerations.get(key) !== gen) {
-        return null;
-      }
-      
-      this.preparedContentsCache.set(key, {
-        content: originalContent,
-        preparedText: res.preparedText,
-        generatedPath: res.generatedPath
-      });
-      return {
-        uri: filePathToUri(res.generatedPath),
-        content: res.preparedText
-      };
-    } catch (err) {
-      console.error("Failed to prepare render file:", err);
-      if (this.lspSyncGenerations.get(key) !== gen) {
-        return null;
-      }
-      return { uri: filePathToUri(path), content: originalContent };
+      const preparedText = normalizeEditorText(await invoke<string>("read_workspace_file", { path: generatedPath }));
+      this.pdfPreviewGeneratedFiles.set(key, { generatedPath, preparedText });
+      return preparedText;
+    } catch {
+      return "";
     }
+  }
+
+  private async getLspUriAndContent(path: string, originalContent: string): Promise<{ uri: string; content: string } | null> {
+    return { uri: filePathToUri(path), content: originalContent };
   }
 
   private getActiveLspUri(): string {
     if (!this.activeFilePath) return "";
-    if (this.settingsController.value.preview.khmerRenderPreparation) {
-      return filePathToUri(this.mapToCachePath(this.activeFilePath)!);
-    }
     return filePathToUri(this.activeFilePath);
   }
 
@@ -4098,7 +4064,9 @@ export class TypstryWorkspaceController {
 
 
   private async prepareRenderProjectIfNeeded(): Promise<void> {
-    if (!this.workspaceRootPath || !this.settingsController.value.preview.khmerRenderPreparation) {
+    if (!this.workspaceRootPath
+      || !this.settingsController.value.preview.khmerRenderPreparation
+      || this.settingsController.value.preview.renderMode !== "on-type") {
       return;
     }
     const cacheRoot = this.getCacheRootPath();

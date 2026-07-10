@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sortFileNodes, type FileNode } from "../src/components/explorer";
+import { isHiddenWorkspaceEntry, sortFileNodes, type FileNode } from "../src/components/explorer";
 
 describe("workspace explorer", () => {
   test("sorts folders before files without mutating the source list", () => {
@@ -11,5 +11,11 @@ describe("workspace explorer", () => {
 
     expect(sortFileNodes(nodes).map(node => node.name)).toEqual(["assets", "a.typ", "z.typ"]);
     expect(nodes.map(node => node.name)).toEqual(["z.typ", "assets", "a.typ"]);
+  });
+
+  test("hides Typstry's managed workspace cache directory", () => {
+    expect(isHiddenWorkspaceEntry(".typstry")).toBe(true);
+    expect(isHiddenWorkspaceEntry(".typst")).toBe(false);
+    expect(isHiddenWorkspaceEntry("typstry")).toBe(false);
   });
 });

@@ -465,7 +465,7 @@ export class TinymistLspClient {
         )]
       }, 5000);
       const previewUrl = this.normalizePreviewUrl(result);
-      this.setStatus(previewUrl ? "preview-ready" : "error", previewUrl ? "Preview ready" : "Preview URL unavailable");
+      this.setStatus(previewUrl ? "preview-ready" : "ready", previewUrl ? "Preview ready" : "Preview URL unavailable");
       return previewUrl;
     } catch (error) {
       console.error("Tinymist preview startup failed:", error);
@@ -476,7 +476,7 @@ export class TinymistLspClient {
           : JSON.stringify(error);
       this.onLog({ kind: "error", source: "preview", message: `Preview startup failed: ${message}` });
       this.onPreviewStartupFailed({ path, taskId, refreshStyle, partialRendering, message });
-      this.setStatus("error", "Preview startup failed");
+      this.setStatus("ready", "Preview startup failed");
       return "";
     }
   }
