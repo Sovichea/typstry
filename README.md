@@ -1,6 +1,6 @@
 # Typstry
 
-> A local-first Typst editor with first-class Khmer and complex-script support.
+> A complex-script-first Typst environment for research and long-form multilingual writing.
 
 ## Download Typstry
 
@@ -24,84 +24,126 @@ Typstry is currently beta software. The latest public release is v0.2.2.
   <img src="./assets/typstry-wordmark.png" alt="Typstry" width="400"/>
 </p>
 
+## What is Typstry?
+
+Typstry is a local-first writing environment for Typst, designed for research papers, technical documentation, theses, books, and other long-form documents.
+
+It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typstry focuses on Unicode-safe editing, script-aware interaction, responsive PDF preview, extensible language tools, and multi-file project workflows while keeping the underlying Typst source portable.
+
+Khmer is the first language with deep support, including tailored cursor and deletion behavior, spellcheck, and word completion. Khmer demonstrates the depth Typstry aims to provide; it is not the boundary of the project. The editing-policy and language-provider architecture is designed so other languages can add their own behavior without changing or weakening Khmer support.
+
 ## Screenshots
 
 <!--
 Recommended capture list:
 
-1. Replace or update ./assets/screenshot-editor.png with the main editor + docked live preview.
-2. Add ./assets/demo-live-preview.gif showing typing in Typst and live preview updating.
-3. Add ./assets/demo-khmer-suggestions.gif showing Khmer word suggestions and spellcheck.
-4. Add ./assets/screenshot-language-settings.png showing separate spellcheck, word suggestion, and language download settings.
-5. Add ./assets/screenshot-template-preview.png showing main.typ + included chapter preview if you want to highlight thesis/book workflows.
+1. Replace or update ./assets/screenshot-editor.png with a multi-file research project, editor, and docked PDF preview.
+2. Add ./assets/demo-live-preview.gif showing an included chapter updating the shared full-document preview.
+3. Add ./assets/demo-khmer-script-editing.gif showing Khmer cursor movement, deletion, completion, and spellcheck.
+4. Add ./assets/screenshot-language-settings.png showing support levels, separate spellcheck and typing-suggestion controls, and downloadable dictionaries.
+5. Add ./assets/screenshot-project-workflow.png showing main.typ, templates, chapters, bibliography, and figures in one workspace.
 
 Keep images around 1600px wide or smaller so GitHub README loading stays reasonable.
 -->
 
-### Editor and live preview
+### Editor and document preview
 
 <p align="center">
-  <img src="./assets/screenshot-editor.png" alt="Typstry editor and preview" width="800"/>
+  <img src="./assets/screenshot-editor.png" alt="Typstry editor with docked document preview" width="800"/>
 </p>
 
-<!-- TODO: Add an animated preview demo later.
+<!-- TODO: Add an animated multi-file preview demo.
 <p align="center">
-  <img src="./assets/demo-live-preview.gif" alt="Typing in Typstry with live Typst preview updating" width="800"/>
-</p>
--->
-
-### Khmer and complex-script language tools
-
-<p align="center">
-  <img src="./assets/screenshot-khmer-word-suggestion.png" alt="Khmer word suggestion in Typstry" width="800"/>
-</p>
-
-<!-- TODO: Add animated Khmer language-tools demo later.
-<p align="center">
-  <img src="./assets/demo-khmer-suggestions.gif" alt="Khmer spellcheck and word suggestions in Typstry" width="800"/>
+  <img src="./assets/demo-live-preview.gif" alt="Editing an included Typst chapter while the full document preview updates" width="800"/>
 </p>
 -->
 
-### Welcome screen
+### Khmer script-aware editing and language tools
+
+<p align="center">
+  <img src="./assets/screenshot-khmer-word-suggestion.png" alt="Khmer word completion in Typstry" width="800"/>
+</p>
+
+<!-- TODO: Add the Khmer script-aware editing demo.
+<p align="center">
+  <img src="./assets/demo-khmer-script-editing.gif" alt="Khmer script-aware navigation, deletion, spellcheck, and completion in Typstry" width="800"/>
+</p>
+-->
+
+### Project workspace
 
 <p align="center">
   <img src="./assets/screenshot-welcome.png" alt="Typstry welcome screen" width="800"/>
 </p>
 
-<!-- TODO: Add settings screenshot after the language download UI is visually final.
+<!-- TODO: Add project-workflow and language-settings screenshots after their layouts are final.
 <p align="center">
-  <img src="./assets/screenshot-language-settings.png" alt="Typstry language settings with spellcheck, word suggestions, and downloadable dictionaries" width="800"/>
+  <img src="./assets/screenshot-project-workflow.png" alt="A multi-file Typstry project with templates, chapters, bibliography, and figures" width="800"/>
+</p>
+<p align="center">
+  <img src="./assets/screenshot-language-settings.png" alt="Typstry language settings with support levels and downloadable dictionaries" width="800"/>
 </p>
 -->
 
 ## Why Typstry?
 
-Typstry is built for Typst documents where Unicode quality matters: Khmer, Arabic, Hebrew, Lao, Thai, Vietnamese, mixed-script technical writing, and long local documents with live preview.
+Most editors treat complex-script support as a font or rendering concern. Reliable authoring also depends on cursor boundaries, deletion behavior, IME input, Unicode-safe ranges, language segmentation, completion, search, diagnostics, and consistent source-to-preview navigation.
 
-Most code editors can open Typst files. Typstry focuses on the editing details that become painful in complex-script documents: font fallback, cursor behavior, local preview, language tools, and source/preview synchronization.
+Typstry treats these as core editor responsibilities. Script-aware editing policies remain separate from dictionaries and language tools, allowing each language to tailor only the behavior it owns. Khmer is the reference implementation for this architecture.
+
+Typstry also treats a document as a project rather than an isolated file. A real research document may contain a main file, templates, chapters, includes, bibliography databases, figures, data, and files that can be previewed independently. Typstry is being designed around that structure while preserving compatibility with the standard Typst ecosystem.
 
 ## Highlights
 
-- Local-first desktop editor built with Tauri, Bun, Rust, and CodeMirror 6.
-- Tinymist-powered Typst preview, diagnostics, export, and source synchronization.
-- First-class complex-script font fallback for editor text and Typstry UI text.
-- Khmer spellcheck and word suggestions through a custom Khmer segmenter.
-- English spellcheck bundled by default, with downloadable Hunspell dictionaries for additional languages.
-- Separate settings for spellcheck and typing word suggestions.
-- Template-aware preview for included chapter files.
-- Writable example workspace for Unicode-heavy Typst documents.
+- Local-first desktop authoring with ordinary, portable Typst source files.
+- CodeMirror editing with Unicode-safe ranges and complex-script font fallback.
+- Script-aware editing-policy registry with deeply tailored Khmer behavior.
+- Khmer spellcheck and word completion through the pinned Khmer segmenter.
+- English spellcheck bundled by default, with optional Hunspell-compatible dictionaries for additional languages.
+- Independent controls for script-aware editing, spellcheck, and typing suggestions.
+- Tinymist diagnostics and managed Typst tooling.
+- Virtualized PDF preview designed for long documents and constrained memory use.
+- Main-document and standalone-preview workflows for multi-file projects.
+- Workspace support for templates, chapters, includes, bibliography files, figures, and external assets.
+
+## Language support
+
+Language support is capability-based rather than all-or-nothing:
+
+- **Deep support** can include a script editing policy, reliable segmentation, spellcheck, and word completion. Khmer is the first deep implementation.
+- **Enhanced support** can add a tokenizer or other language-specific boundary logic without requiring custom editor behavior.
+- **Basic support** uses a compatible dictionary where available. This can provide useful spellcheck, but it is not presented as reliable segmentation for languages that require a dedicated tokenizer.
+
+The long-term goal is for contributors to add a language through explicit policy and provider modules without modifying generic CodeMirror integration or another language’s implementation.
+
+## Research-document workflow
+
+Typstry is designed around one project identity and one configured main document. Opening an included chapter should keep the full-document preview, scroll context, and source relationships intact instead of treating every active file as a separate document.
+
+The planned scalable workflow covers:
+
+- project and main-document identity;
+- included chapters, templates, imports, bibliographies, figures, and data;
+- explicit standalone previews;
+- render-on-type and render-on-save policies;
+- revision-safe diagnostics, language analysis, compilation, and source navigation;
+- virtualized preview rendering for long PDFs;
+- workspace restoration and recovery after compiler or LSP failures.
+
+The detailed architecture and trackable work are recorded in the [complex-script-first implementation plan](./docs/COMPLEX_SCRIPT_FIRST_IMPLEMENTATION_PLAN.md).
 
 ## Quick start
 
 1. Download the latest installer from [Releases](https://github.com/Sovichea/typstry/releases/latest).
 2. Install and open Typstry.
-3. Open a Typst workspace or use the included examples from the welcome screen.
-4. Open Settings to configure fonts, language tools, preview behavior, and the managed Tinymist toolchain.
+3. Open a Typst workspace or use an included example from the welcome screen.
+4. Configure fonts, language tools, preview behavior, and the managed Tinymist toolchain in Settings.
 
-Typstry downloads and manages Tinymist for preview/diagnostics. A separate Typst installation is not required for normal use.
+Typstry downloads and manages Tinymist for preview and diagnostics. A separate Typst installation is not required for normal use.
 
 ## Documentation
 
+- [Complex-script-first implementation plan](./docs/COMPLEX_SCRIPT_FIRST_IMPLEMENTATION_PLAN.md)
 - [Install and build from source](./docs/INSTALL.md)
 - [Development guide](./docs/DEVELOPMENT.md)
 - [Settings reference](./docs/SETTINGS.md)
@@ -110,22 +152,21 @@ Typstry downloads and manages Tinymist for preview/diagnostics. A separate Typst
 - [Language tools providers](./docs/LANGUAGE_TOOLS.md)
 - [Script-aware editor policy guide](./docs/SCRIPT_EDITING_POLICIES.md)
 - [Khmer spellcheck and word completion](./docs/KHMER_SPELLCHECK.md)
-- [Preview interception notes](./docs/PREVIEW_INTERCEPTION.md)
+- [Preview implementation notes](./docs/PREVIEW_INTERCEPTION.md)
 
 ## Beta status
 
-Typstry is beta software. Windows and Linux builds are the most actively tested. macOS builds are experimental and may require additional verification, signing, and notarization work before broad distribution.
+Typstry is beta software. Windows and Linux builds are the most actively tested. macOS builds are experimental and require broader verification, signing, and notarization work before general release.
 
-Please report issues with:
+When reporting an issue, include:
 
-- Operating system and installer used.
-- Typst document type.
-- Language/script used.
-- Preview, inverse sync, font, cursor, wrapping, or spellcheck problems.
+- operating system and installer;
+- Typst project structure and main-file configuration;
+- language and script;
+- a minimal source example where possible;
+- preview, diagnostics, font, cursor, wrapping, search, or language-tool symptoms.
 
 ## For developers
-
-Clone and run the desktop app:
 
 ```bash
 git clone --recurse-submodules https://github.com/Sovichea/typstry.git
@@ -134,17 +175,7 @@ bun install --frozen-lockfile
 bun run tauri dev
 ```
 
-Run validation before submitting changes:
-
-```bash
-bun test
-bun run build
-cargo fmt --manifest-path src-tauri/Cargo.toml --package typstry -- --check
-cargo check --manifest-path src-tauri/Cargo.toml --lib
-cargo test --manifest-path src-tauri/Cargo.toml --lib
-```
-
-More details are in [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+See the [development guide](./docs/DEVELOPMENT.md) for validation commands and contributor requirements.
 
 ## License
 
