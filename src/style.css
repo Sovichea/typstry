@@ -2564,3 +2564,23 @@ button.welcome-item:disabled {
 .preview-only-mode #undock-preview-btn {
   display: flex !important;
 }
+
+/* Pinned Main Tab Styling */
+.editor-tab.pinned-main-tab {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: var(--ui-hover);
+  border-left: 3px solid #3db489 !important;
+  border-right: 1px solid var(--ui-border);
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.12);
+}
+
+.editor-tab.pinned-main-tab .editor-tab-title {
+  color: #3db489;
+  font-weight: bold;
+}
+
+.editor-tab.pinned-main-tab.active {
+  background: var(--ui-bg);
+}

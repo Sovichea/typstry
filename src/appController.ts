@@ -892,12 +892,24 @@ export class TypstryWorkspaceController {
     );
   }
 
+  private sortPinnedMainTabFirst() {
+    if (!this.pinnedMainFilePath) return;
+    const index = this.openTabs.findIndex(tab => filePathKey(tab.path) === filePathKey(this.pinnedMainFilePath!));
+    if (index > 0) {
+      const [pinnedTab] = this.openTabs.splice(index, 1);
+      pinnedTab.temporary = false; // Pinned is permanent
+      this.openTabs.unshift(pinnedTab);
+    }
+  }
+
   private renderEditorTabs() {
+    this.sortPinnedMainTabFirst();
     this.editorTabBar.innerHTML = "";
 
     for (const tab of this.openTabs) {
+      const isPinnedMain = this.pinnedMainFilePath && filePathKey(tab.path) === filePathKey(this.pinnedMainFilePath);
       const tabButton = document.createElement("button");
-      tabButton.className = `editor-tab${tab.path === this.activeFilePath ? " active" : ""}${tab.isDirty ? " dirty" : ""}${tab.temporary ? " temporary" : ""}`;
+      tabButton.className = `editor-tab${tab.path === this.activeFilePath ? " active" : ""}${tab.isDirty ? " dirty" : ""}${tab.temporary ? " temporary" : ""}${isPinnedMain ? " pinned-main-tab" : ""}`;
       tabButton.type = "button";
       tabButton.role = "tab";
       tabButton.title = tab.path;
@@ -914,20 +926,22 @@ export class TypstryWorkspaceController {
       dirtyDot.setAttribute("aria-hidden", "true");
       tabButton.appendChild(dirtyDot);
 
-      const closeButton = document.createElement("span");
-      closeButton.className = "editor-tab-close";
-      closeButton.appendChild(createAppIcon("x", { size: 13 }));
-      closeButton.title = "Close";
-      closeButton.setAttribute("aria-label", `Close ${fileNameFromPath(tab.path)}`);
-      tabButton.appendChild(closeButton);
+      if (!isPinnedMain) {
+        const closeButton = document.createElement("span");
+        closeButton.className = "editor-tab-close";
+        closeButton.appendChild(createAppIcon("x", { size: 13 }));
+        closeButton.title = "Close";
+        closeButton.setAttribute("aria-label", `Close ${fileNameFromPath(tab.path)}`);
+        tabButton.appendChild(closeButton);
+
+        closeButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          void this.closeEditorTab(tab.path);
+        });
+      }
 
       tabButton.addEventListener("click", () => {
         void this.activateEditorTab(tab.path);
-      });
-
-      closeButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        void this.closeEditorTab(tab.path);
       });
 
       tabButton.addEventListener("dblclick", () => {
@@ -1073,6 +1087,9 @@ export class TypstryWorkspaceController {
   }
 
   private async closeEditorTab(path: string, skipDirtyCheck = false) {
+    if (this.pinnedMainFilePath && filePathKey(path) === filePathKey(this.pinnedMainFilePath)) {
+      return;
+    }
     const tabIndex = this.openTabs.findIndex((tab) => tab.path === path);
     if (tabIndex === -1) return;
 
@@ -1137,6 +1154,9 @@ export class TypstryWorkspaceController {
   }
 
   private async activateEditorTab(path: string, persistCurrent = true, options: ActivateEditorTabOptions = {}) {
+    if (this.workspaceRootPath) {
+      void this.explorer.revealPath(path);
+    }
     const tab = this.openTabs.find((candidate) => filePathKey(candidate.path) === filePathKey(path));
     const sameActivePath = this.activeFilePath !== null && filePathKey(this.activeFilePath) === filePathKey(path);
     const activeEditorMatchesTab = tab !== undefined && (
@@ -3688,6 +3708,13 @@ export class TypstryWorkspaceController {
   private async setPinnedMainFile(path: string | null): Promise<void> {
     this.pinnedMainFilePath = path;
     this.saveWorkspaceState();
+    
+    if (path) {
+      await this.loadFile(path, { temporary: false });
+      this.sortPinnedMainTabFirst();
+    }
+    
+    this.renderEditorTabs();
     
     if (this.workspaceRootPath) {
       await this.explorer.loadWorkspace(this.workspaceRootPath);

@@ -30,10 +30,25 @@ export class TabStripController {
     this.updateFrame = requestAnimationFrame(() => {
       this.updateFrame = null;
       if (revealActive) {
-        this.strip.querySelector<HTMLElement>(".editor-tab.active")?.scrollIntoView({
-          block: "nearest",
-          inline: "nearest"
-        });
+        const activeTab = this.strip.querySelector<HTMLElement>(".editor-tab.active");
+        if (activeTab) {
+          const pinnedTab = this.strip.querySelector<HTMLElement>(".editor-tab.pinned-main-tab");
+          const pinnedWidth = pinnedTab ? pinnedTab.offsetWidth : 0;
+
+          const rect = activeTab.getBoundingClientRect();
+          const stripRect = this.strip.getBoundingClientRect();
+          const tabLeft = rect.left - stripRect.left + this.strip.scrollLeft;
+          const tabRight = tabLeft + rect.width;
+
+          const viewLeft = this.strip.scrollLeft + pinnedWidth;
+          const viewRight = this.strip.scrollLeft + this.strip.clientWidth;
+
+          if (tabLeft < viewLeft) {
+            this.strip.scrollLeft = tabLeft - pinnedWidth;
+          } else if (tabRight > viewRight) {
+            this.strip.scrollLeft = tabRight - this.strip.clientWidth;
+          }
+        }
       }
       const maxScroll = Math.max(0, this.strip.scrollWidth - this.strip.clientWidth);
       const overflowing = maxScroll > 1;

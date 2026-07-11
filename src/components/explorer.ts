@@ -33,6 +33,7 @@ export function isHiddenWorkspaceEntry(name: string): boolean {
 
 export class WorkspaceExplorer {
   private loadGeneration = 0;
+  private workspaceRootPath: string | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -41,6 +42,7 @@ export class WorkspaceExplorer {
   ) {}
 
   public async loadWorkspace(rootPath: string) {
+    this.workspaceRootPath = rootPath;
     const generation = ++this.loadGeneration;
     const viewState = this.captureViewState();
     const isFirstLoad = !this.container.querySelector(".file-tree-branch");
@@ -57,6 +59,47 @@ export class WorkspaceExplorer {
     } catch {
       if (generation !== this.loadGeneration) return;
       this.container.innerHTML = `<div class="explorer-error">Access Refused.</div>`;
+    }
+  }
+
+  public async revealPath(targetPath: string): Promise<void> {
+    if (!this.workspaceRootPath) return;
+
+    const parents: string[] = [];
+    let current = targetPath;
+    while (true) {
+      const lastSlash = Math.max(current.lastIndexOf("/"), current.lastIndexOf("\\"));
+      if (lastSlash === -1) break;
+      const parent = current.substring(0, lastSlash);
+      if (parent.length <= this.workspaceRootPath.length) {
+        break;
+      }
+      parents.push(parent);
+      current = parent;
+    }
+
+    const viewState = this.captureViewState();
+    for (const parent of parents) {
+      viewState.expandedPaths.add(parent);
+    }
+    viewState.selectedPath = targetPath;
+
+    const generation = ++this.loadGeneration;
+    try {
+      const nodes = await this.readDirectory(this.workspaceRootPath);
+      await this.hydrateExpandedDirectories(nodes, viewState.expandedPaths);
+      if (generation !== this.loadGeneration) return;
+      this.container.innerHTML = "";
+      this.container.appendChild(this.renderTree(nodes, 0, viewState.expandedPaths, viewState.selectedPath));
+
+      const selectedEl = this.container.querySelector<HTMLElement>(
+        `[data-path="${targetPath.replace(/\\/g, "\\\\")}"]`
+      );
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    } catch (e) {
+      console.warn("Failed to reveal path in explorer:", targetPath, e);
     }
   }
 
