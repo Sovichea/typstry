@@ -1,0 +1,114 @@
+{
+  "_comment": "Language analysis fixture template. Copy to tests/fixtures/<language>/language.json.",
+  "_instructions": [
+    "All 'from' and 'to' values are UTF-16 code unit offsets (same as JavaScript string .length).",
+    "sourceText must match text.slice(sourceFromUtf16, sourceToUtf16) exactly.",
+    "normalizedText is the provider's internal normalized form (may equal sourceText).",
+    "'known' means the word exists in the provider's dictionary.",
+    "'knownPrefix' means the word is a prefix of at least one known word (enables completion).",
+    "Non-BMP characters: U+10000 occupies 2 UTF-16 code units but 4 UTF-8 bytes."
+  ],
+  "provider": "REPLACE_WITH_PROVIDER_ID",
+  "version": 1,
+  "cases": [
+    {
+      "_category": "canonical",
+      "name": "known word is classified correctly",
+      "input": "REPLACE_ME",
+      "expected_tokens": [
+        {
+          "provider": "REPLACE_WITH_PROVIDER_ID",
+          "sourceFromUtf16": 0,
+          "sourceToUtf16": 0,
+          "sourceText": "REPLACE_ME",
+          "normalizedText": "REPLACE_ME",
+          "known": true,
+          "knownPrefix": true
+        }
+      ]
+    },
+    {
+      "_category": "canonical",
+      "name": "unknown word is classified correctly",
+      "input": "XYZXYZXYZ",
+      "expected_tokens": [
+        {
+          "provider": "REPLACE_WITH_PROVIDER_ID",
+          "sourceFromUtf16": 0,
+          "sourceToUtf16": 9,
+          "sourceText": "XYZXYZXYZ",
+          "normalizedText": "XYZXYZXYZ",
+          "known": false,
+          "knownPrefix": false
+        }
+      ]
+    },
+    {
+      "_category": "non-canonical",
+      "name": "normalized form differs from source (e.g. ZWSP/ZWNJ stripped)",
+      "input": "REPLACE_ME_WITH_ZWSP_EXAMPLE",
+      "expected_tokens": [
+        {
+          "provider": "REPLACE_WITH_PROVIDER_ID",
+          "sourceFromUtf16": 0,
+          "sourceToUtf16": 0,
+          "sourceText": "REPLACE_ME",
+          "normalizedText": "REPLACE_ME_NORMALIZED",
+          "known": true,
+          "knownPrefix": true
+        }
+      ]
+    },
+    {
+      "_category": "mixed-script",
+      "name": "latin text in a script document is routed to latin provider",
+      "_comment": "The provider under test should only emit tokens for its own script range.",
+      "input": "latin REPLACE_WITH_SCRIPT_WORD latin",
+      "expected_tokens": [
+        {
+          "_comment": "Only the script word should appear; Latin ranges handled by another provider.",
+          "provider": "REPLACE_WITH_PROVIDER_ID",
+          "sourceFromUtf16": 6,
+          "sourceToUtf16": 0,
+          "sourceText": "REPLACE_WITH_SCRIPT_WORD",
+          "normalizedText": "REPLACE_WITH_SCRIPT_WORD",
+          "known": true,
+          "knownPrefix": true
+        }
+      ]
+    },
+    {
+      "_category": "non-BMP",
+      "name": "non-BMP code point in surrounding text does not panic",
+      "_comment": "U+10437 (Deseret SMALL LETTER YEE) occupies 2 UTF-16 code units.",
+      "input": "\uD801\uDC37 REPLACE_ME \uD801\uDC37",
+      "expected_tokens": []
+    },
+    {
+      "_category": "performance",
+      "name": "100-word document analyzes within 100ms p95",
+      "_comment": "This is a marker entry. Run performance assertions separately in performanceDiagnostics.test.ts.",
+      "input": "REPLACE_WITH_100_WORD_DOCUMENT",
+      "budget_ms": 100,
+      "expected_tokens": []
+    }
+  ],
+  "completion_cases": [
+    {
+      "name": "prefix returns known word completions",
+      "prefix": "REPLACE_ME_PREFIX",
+      "limit": 10,
+      "expected_min": 1,
+      "expected_max": 10
+    }
+  ],
+  "suggestion_cases": [
+    {
+      "name": "near-miss word returns correction candidates",
+      "word": "REPLACE_ME_MISSPELLED",
+      "limit": 5,
+      "expected_min": 0,
+      "expected_max": 5
+    }
+  ]
+}

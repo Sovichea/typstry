@@ -1,0 +1,99 @@
+name: Contributor Contracts
+
+on:
+  push:
+    paths:
+      - "src/editor/editingPolicies/**"
+      - "src-tauri/src/segmentation/**"
+      - "tests/fixtures/**"
+      - "tests/editingPolicies.test.ts"
+      - "tests/khmerReference.test.ts"
+      - "tests/laoReference.test.ts"
+      - "tests/languageSupport.test.ts"
+      - "package.json"
+  pull_request:
+    paths:
+      - "src/editor/editingPolicies/**"
+      - "src-tauri/src/segmentation/**"
+      - "tests/fixtures/**"
+      - "tests/editingPolicies.test.ts"
+      - "tests/khmerReference.test.ts"
+      - "tests/laoReference.test.ts"
+      - "tests/languageSupport.test.ts"
+      - "package.json"
+
+jobs:
+  frontend-conformance:
+    name: Frontend policy conformance
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run conformance suite (editing policies + language tools)
+        run: bun run conform
+
+      - name: Khmer regression guard
+        run: bun test tests/khmerReference.test.ts
+        # This step is intentionally separate so that a Khmer regression
+        # is reported as its own named failure, not hidden inside the conform suite.
+
+  rust-provider-conformance:
+    name: Rust provider conformance
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust format check
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: Rust type check
+        run: cargo check --lib
+        working-directory: src-tauri
+
+      - name: Rust provider conformance tests (includes license check)
+        run: cargo test --lib segmentation
+        working-directory: src-tauri
+
+      - name: All registered providers have declared licenses
+        run: cargo test --lib license_tests
+        working-directory: src-tauri
+
+  linux-conformance:
+    name: Cross-platform conformance (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run conformance suite
+        run: bun run conform
+
+      - name: Set up Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust provider conformance tests
+        run: cargo test --lib segmentation
+        working-directory: src-tauri
+
+      - name: All registered providers have declared licenses
+        run: cargo test --lib license_tests
+        working-directory: src-tauri

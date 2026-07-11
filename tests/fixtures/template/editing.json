@@ -1,0 +1,101 @@
+{
+  "_comment": "Editing fixture template. Copy to tests/fixtures/<script>/editing.json.",
+  "_instructions": [
+    "Set contractVersion to the current SCRIPT_EDITING_POLICY_CONTRACT_VERSION (1).",
+    "Each entry in 'boundaries', 'backwardDeletion', 'forwardDeletion', and 'movement'",
+    "is a locked reference test. Once committed, changes require a documented justification.",
+    "Offsets are UTF-16 code unit indices (same as JavaScript string .length).",
+    "Use \\uXXXX escapes for non-ASCII characters in JSON 'text' fields.",
+    "For non-BMP code points use surrogate pairs: U+10000 = '\\uD800\\uDC00'."
+  ],
+  "contractVersion": 1,
+  "boundaries": [
+    {
+      "name": "latin word is one unit",
+      "text": "hello",
+      "expected": [
+        { "from": 0, "to": 1 },
+        { "from": 1, "to": 2 },
+        { "from": 2, "to": 3 },
+        { "from": 3, "to": 4 },
+        { "from": 4, "to": 5 }
+      ]
+    },
+    {
+      "_comment": "TODO: Add a canonical script example that merges into one editing unit.",
+      "name": "TODO: script-specific cluster merges into one unit",
+      "text": "REPLACE_ME",
+      "expected": [
+        { "from": 0, "to": 2 }
+      ]
+    },
+    {
+      "_comment": "TODO: Add a mixed-script example (script + Latin punctuation).",
+      "name": "TODO: mixed-script string segments correctly",
+      "text": "REPLACE_ME",
+      "expected": []
+    }
+  ],
+  "backwardDeletion": [
+    {
+      "name": "latin: deletes one code point",
+      "text": "ab",
+      "offset": 2,
+      "expected": { "from": 1, "to": 2 }
+    },
+    {
+      "_comment": "TODO: Add a script-specific backward deletion case.",
+      "name": "TODO: script cluster: deletes full cluster on backspace",
+      "text": "REPLACE_ME",
+      "offset": 0,
+      "expected": { "from": 0, "to": 0 }
+    }
+  ],
+  "forwardDeletion": [
+    {
+      "name": "latin: deletes one code point forward",
+      "text": "ab",
+      "offset": 0,
+      "expected": { "from": 0, "to": 1 }
+    },
+    {
+      "_comment": "TODO: Add a script-specific forward deletion case.",
+      "name": "TODO: script cluster: deletes full cluster on Delete",
+      "text": "REPLACE_ME",
+      "offset": 0,
+      "expected": { "from": 0, "to": 0 }
+    }
+  ],
+  "movement": [
+    {
+      "name": "latin: moves forward one code point",
+      "text": "ab",
+      "anchor": 0,
+      "head": 0,
+      "direction": "forward",
+      "extend": false,
+      "expectedAnchor": 1,
+      "expectedHead": 1
+    },
+    {
+      "_comment": "TODO: Add a script-specific movement case.",
+      "name": "TODO: script: moves over one cluster",
+      "text": "REPLACE_ME",
+      "anchor": 0,
+      "head": 0,
+      "direction": "forward",
+      "extend": false,
+      "expectedAnchor": 0,
+      "expectedHead": 0
+    }
+  ],
+  "multiCursorBackwardDeletion": {
+    "_comment": "TODO: Replace with a real multi-cursor deletion test.",
+    "text": "aa",
+    "cursors": [1, 2],
+    "expected": [
+      { "from": 0, "to": 1 },
+      { "from": 1, "to": 2 }
+    ]
+  }
+}

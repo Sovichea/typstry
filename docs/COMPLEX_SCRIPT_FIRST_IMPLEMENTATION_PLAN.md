@@ -652,21 +652,21 @@ Lao is the selected second portability implementation. It validates the contract
 
 ### Task checklist
 
-- [ ] **P9.1 — Create a policy template.** Include a minimal implementation, registration step, ownership constraints, pure tests, and optional composition extension.
-- [ ] **P9.2 — Create a provider template.** Include capabilities, locale and script metadata, range conversion, error isolation, dictionary metadata, and native tests.
-- [ ] **P9.3 — Create fixture templates.** Provide canonical, non-canonical, malformed, mixed-script, non-BMP, completion, suggestion, and performance fixture formats.
-- [ ] **P9.4 — Write the contributor walkthrough.** Document the complete path from language proposal through experimental registration and stable support.
-- [ ] **P9.5 — Add conformance commands.** Run policy and provider suites without launching Tauri and return actionable failures.
-- [ ] **P9.6 — Enforce licensing metadata.** Reject bundled or downloadable dictionaries without source, version, license, and redistribution information.
-- [ ] **P9.7 — Define compatibility policy.** Version provider IDs, capability contracts, installed metadata, and persisted settings migrations.
-- [ ] **P9.8 — Define promotion criteria.** Require named maintainers, passing fixtures, performance gates, documented limitations, and release-platform verification before stable status.
-- [ ] **P9.9 — Add CI enforcement.** Detect duplicate ownership, invalid ranges, unbounded suggestions, missing licenses, generic language-specific regexes, and Khmer regressions.
+- [x] **P9.1 — Create a policy template.** Include a minimal implementation, registration step, ownership constraints, pure tests, and optional composition extension.
+- [x] **P9.2 — Create a provider template.** Include capabilities, locale and script metadata, range conversion, error isolation, dictionary metadata, and native tests.
+- [x] **P9.3 — Create fixture templates.** Provide canonical, non-canonical, malformed, mixed-script, non-BMP, completion, suggestion, and performance fixture formats.
+- [x] **P9.4 — Write the contributor walkthrough.** Document the complete path from language proposal through experimental registration and stable support.
+- [x] **P9.5 — Add conformance commands.** Run policy and provider suites without launching Tauri and return actionable failures.
+- [x] **P9.6 — Enforce licensing metadata.** Reject bundled or downloadable dictionaries without source, version, license, and redistribution information.
+- [x] **P9.7 — Define compatibility policy.** Version provider IDs, capability contracts, installed metadata, and persisted settings migrations.
+- [x] **P9.8 — Define promotion criteria.** Require named maintainers, passing fixtures, performance gates, documented limitations, and release-platform verification before stable status.
+- [x] **P9.9 — Add CI enforcement.** Detect duplicate ownership, invalid ranges, unbounded suggestions, missing licenses, generic language-specific regexes, and Khmer regressions.
 
 ### Acceptance criteria
 
-- [ ] A contributor can implement a provider by following documentation without editing generic CodeMirror integration.
-- [ ] CI detects duplicate script ownership, invalid offsets, unbounded suggestions, missing licenses, and Khmer regressions.
-- [ ] Experimental and stable providers are visibly distinguishable in Settings.
+- [x] A contributor can implement a provider by following documentation without editing generic CodeMirror integration.
+- [x] CI detects duplicate script ownership, invalid offsets, unbounded suggestions, missing licenses, and Khmer regressions.
+- [ ] Experimental and stable providers are visibly distinguishable in Settings. *(requires Settings UI update — deferred)*
 
 ## Release milestones
 
@@ -702,6 +702,7 @@ Run the relevant checks for every phase:
 
 ```text
 bun test
+bun run conform
 bun run build
 cargo fmt --check        (from src-tauri/)
 cargo check --lib        (from src-tauri/)

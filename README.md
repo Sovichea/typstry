@@ -99,32 +99,34 @@ Typstry also treats a document as a project rather than an isolated file. A real
 - CodeMirror editing with Unicode-safe ranges and complex-script font fallback.
 - Script-aware editing-policy registry with deeply tailored Khmer behavior.
 - Khmer spellcheck and word completion through the pinned Khmer segmenter.
+- Lao language support with ICU4X word segmentation and optional `lo_LA` Hunspell dictionary.
 - English spellcheck bundled by default, with optional Hunspell-compatible dictionaries for additional languages.
 - Independent controls for script-aware editing, spellcheck, and typing suggestions.
 - Tinymist diagnostics and managed Typst tooling.
 - Virtualized PDF preview designed for long documents and constrained memory use.
 - Main-document and standalone-preview workflows for multi-file projects.
 - Workspace support for templates, chapters, includes, bibliography files, figures, and external assets.
+- Contributor framework for adding new complex-script languages without modifying core editor code.
 
 ## Language support
 
 Language support is capability-based rather than all-or-nothing:
 
-- **Deep support** can include a script editing policy, reliable segmentation, spellcheck, and word completion. Khmer is the first deep implementation.
-- **Enhanced support** can add a tokenizer or other language-specific boundary logic without requiring custom editor behavior.
-- **Basic support** uses a compatible dictionary where available. This can provide useful spellcheck, but it is not presented as reliable segmentation for languages that require a dedicated tokenizer.
+- **Deep support** includes a script editing policy, reliable segmentation, spellcheck, and word completion. Khmer is the first and reference deep implementation.
+- **Enhanced support** adds a tokenizer or language-specific boundary logic without requiring custom editor behavior. Lao uses ICU4X word segmentation at this level.
+- **Basic support** uses a compatible Hunspell dictionary where available. This can provide useful spellcheck, but it is not presented as reliable segmentation for languages that require a dedicated tokenizer.
 
-The long-term goal is for contributors to add a language through explicit policy and provider modules without modifying generic CodeMirror integration or another language’s implementation.
+Each language entry in Settings shows its support level, stability status, and which capabilities are actually available. The long-term goal is for contributors to add a language through explicit policy and provider modules without modifying generic CodeMirror integration or another language's implementation.
 
 ## Research-document workflow
 
-Typstry is designed around one project identity and one configured main document. Opening an included chapter should keep the full-document preview, scroll context, and source relationships intact instead of treating every active file as a separate document.
+Typstry is designed around one project identity and one configured main document. Opening an included chapter keeps the full-document preview, scroll context, and source relationships intact instead of treating every active file as a separate document.
 
-The planned scalable workflow covers:
+The scalable workflow covers:
 
 - project and main-document identity;
 - included chapters, templates, imports, bibliographies, figures, and data;
-- explicit standalone previews;
+- explicit standalone previews via a `// @standalone-preview` directive;
 - render-on-type and render-on-save policies;
 - revision-safe diagnostics, language analysis, compilation, and source navigation;
 - virtualized preview rendering for long PDFs;
@@ -153,10 +155,34 @@ Typstry downloads and manages Tinymist for preview and diagnostics. A separate T
 - [Language tools providers](./docs/LANGUAGE_TOOLS.md)
 - [Script-aware editor policy guide](./docs/SCRIPT_EDITING_POLICIES.md)
 - [Khmer spellcheck and word completion](./docs/KHMER_SPELLCHECK.md)
+- [Experimental Lao language support](./docs/LAO_LANGUAGE_SUPPORT.md)
+- [Language contributor guide](./docs/LANGUAGE_CONTRIBUTOR_GUIDE.md)
+- [Compatibility and promotion policy](./docs/COMPATIBILITY_POLICY.md)
 - [Preview implementation notes](./docs/PREVIEW_INTERCEPTION.md)
 - [Research-document workflows](./docs/RESEARCH_DOCUMENT_WORKFLOWS.md)
 - [Reliability and performance gates](./docs/PERFORMANCE_GATES.md)
-- [Experimental Lao language support](./docs/LAO_LANGUAGE_SUPPORT.md)
+
+## Contributing a language
+
+Typstry has a documented contributor framework for adding new complex-script languages. A contributor can implement a new language by following the guide without editing any generic CodeMirror integration or Khmer code.
+
+The process at a glance:
+
+1. Choose a support tier (Basic, Enhanced, or Deep) based on available data and segmentation.
+2. Implement a Rust `LanguageSegmenter` using the annotated provider template.
+3. Optionally implement a TypeScript `ScriptEditingPolicy` for script-specific cursor and deletion behavior.
+4. Create reference fixtures for editing, language analysis, mixed-script, and non-BMP text.
+5. Run `bun run conform` and `cargo test --lib segmentation` — no Tauri build required.
+6. Follow the promotion checklist to reach stable status.
+
+Resources:
+- [Language contributor guide](./docs/LANGUAGE_CONTRIBUTOR_GUIDE.md)
+- [Compatibility and promotion policy](./docs/COMPATIBILITY_POLICY.md)
+- [TypeScript policy template](./src/editor/editingPolicies/template/policy.ts)
+- [Rust provider template](./docs/templates/provider_template.rs)
+- [Fixture templates](./tests/fixtures/template/)
+
+CI automatically enforces: no duplicate script ownership, no missing licenses, no Khmer regressions, and passing conformance tests on Windows and Linux.
 
 ## Beta status
 
@@ -179,7 +205,18 @@ bun install --frozen-lockfile
 bun run tauri dev
 ```
 
-See the [development guide](./docs/DEVELOPMENT.md) for validation commands and contributor requirements.
+### Validation commands
+
+```bash
+bun test                  # all frontend tests
+bun run conform           # policy and provider conformance (no Tauri needed)
+bun run build             # TypeScript compilation check
+cargo fmt --check         # from src-tauri/
+cargo check --lib         # from src-tauri/
+cargo test --lib          # from src-tauri/
+```
+
+See the [development guide](./docs/DEVELOPMENT.md) for full contributor requirements and the [skills reference](./docs/SKILLS.md) for the complete architecture guide.
 
 ## License
 

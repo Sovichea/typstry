@@ -1,7 +1,7 @@
 use super::provider::{
     AnalyzeRequest, AnalyzeResponse, CompletionRequest, CompletionResponse, EditorToken,
     LanguageSegmenter, ProviderCapabilities, ProviderFailure, SegmentToken, SuggestionRequest,
-    SuggestionResponse, TextAnalysis, PROVIDER_CAPABILITY_SCHEMA_VERSION,
+    SuggestionResponse, TextAnalysis, PROVIDER_CAPABILITY_SCHEMA_VERSION, validate_license,
 };
 use crate::render_prepare::scanner::{scan_typst_content, ScanState};
 use icu_segmenter::{options::WordBreakInvariantOptions, WordSegmenter, WordSegmenterBorrowed};
@@ -1896,6 +1896,9 @@ impl SegmentationRegistry {
                 providers.push(Arc::new(entry));
             }
         }
+        for provider in &providers {
+            validate_license(provider.id(), provider.license()).map_err(|e| e)?;
+        }
         Ok(providers)
     }
 
@@ -3275,6 +3278,23 @@ This paragraph has a recieve typo.
                     .any(|token| token.source_text == skipped),
                 "{skipped} should not be spellchecked"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod license_tests {
+    use super::*;
+
+    /// Every provider that ships with Typstry must declare a known, redistributable license.
+    /// This test fails fast if a new provider is registered without setting license().
+    #[test]
+    fn all_registered_providers_have_licenses() {
+        let providers = SegmentationRegistry::load_providers(None)
+            .expect("load_providers failed");
+        for provider in &providers {
+            validate_license(provider.id(), provider.license())
+                .unwrap_or_else(|e| panic!("{}", e));
         }
     }
 }

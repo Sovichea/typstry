@@ -2,6 +2,21 @@ use serde::{Deserialize, Serialize};
 
 pub const PROVIDER_CAPABILITY_SCHEMA_VERSION: u32 = 1;
 
+/// Returns `Ok(())` if `license` is a non-empty, non-`"unknown"` string.
+/// Used by the registry to reject providers that have not declared a redistributable
+/// license for their dictionary or segmentation data.
+pub fn validate_license(provider_id: &str, license: &str) -> Result<(), String> {
+    let trimmed = license.trim();
+    if trimmed.is_empty() || trimmed == "unknown" {
+        return Err(format!(
+            "Provider '{}' has an invalid license '{}'. \
+             Set license() to a valid SPDX expression or attribution string.",
+            provider_id, license
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SegmentToken {
@@ -154,6 +169,8 @@ pub trait LanguageSegmenter: Send + Sync {
     fn version(&self) -> &'static str {
         "1.0.0"
     }
+    /// SPDX license expression or attribution string for the dictionary / segmentation data.
+    /// MUST NOT return `"unknown"` or an empty string — the registry rejects providers that do.
     fn license(&self) -> &'static str {
         "unknown"
     }
