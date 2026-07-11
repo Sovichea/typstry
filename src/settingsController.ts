@@ -336,10 +336,7 @@ export class SettingsController {
       const supportBadge = this.createSupportBadge(support.level, support.label, support.description);
       const titleRow = document.createElement("div");
       titleRow.className = "settings-language-provider-title-row";
-      titleRow.append(title, supportBadge);
-      if (providerStabilityLabel(provider.stability) === "Experimental") {
-        titleRow.append(this.createStabilityBadge());
-      }
+      titleRow.append(title, supportBadge, this.createStabilityBadge(provider.stability));
       const details = document.createElement("div");
       details.className = "settings-language-provider-meta";
       details.textContent = [
@@ -405,10 +402,7 @@ export class SettingsController {
     const support = supportLevelPresentation(entry.supportLevel);
     const titleRow = document.createElement("div");
     titleRow.className = "settings-language-provider-title-row";
-    titleRow.append(title, this.createSupportBadge(support.level, support.label, support.description));
-    if (entry.stability === "experimental") {
-      titleRow.append(this.createStabilityBadge());
-    }
+    titleRow.append(title, this.createSupportBadge(support.level, support.label, support.description), this.createStabilityBadge(entry.stability));
 
     const meta = document.createElement("div");
     meta.className = "settings-language-catalog-meta";
@@ -463,11 +457,14 @@ export class SettingsController {
     return badge;
   }
 
-  private createStabilityBadge(): HTMLSpanElement {
+  private createStabilityBadge(stability: string): HTMLSpanElement {
     const badge = document.createElement("span");
-    badge.className = "settings-language-support-badge stability-experimental";
-    badge.textContent = "Experimental";
-    badge.title = "This provider is still being validated and may have known limitations.";
+    const isExperimental = stability === "experimental";
+    badge.className = `settings-language-support-badge stability-${isExperimental ? "experimental" : "stable"}`;
+    badge.textContent = isExperimental ? "Experimental" : "Stable";
+    badge.title = isExperimental
+      ? "This provider is still being validated and may have known limitations."
+      : "This provider is tested and considered reliable.";
     return badge;
   }
 

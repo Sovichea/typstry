@@ -302,7 +302,7 @@ export function createTypstAutocomplete(
             if (word) {
               const line = context.state.doc.lineAt(context.pos);
               if (!allowsLanguageWordCompletionOnLine(line.text, word.from - line.from)) {
-                return null;
+                continue;
               }
               try {
                 const completion = await invoke<LanguageCompletionResponse | null>("complete_language_word", {

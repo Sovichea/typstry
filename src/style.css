@@ -1154,6 +1154,11 @@ body.typstry-resizing #preview-render-pane::after {
   border-color: color-mix(in srgb, var(--editor-bracket-3, #d73a49) 45%, var(--ui-border));
   background: color-mix(in srgb, var(--editor-bracket-3, #d73a49) 10%, var(--ui-bg));
 }
+.settings-language-support-badge.stability-stable {
+  color: var(--editor-bracket-1, #6f42c1);
+  border-color: color-mix(in srgb, var(--editor-bracket-1, #6f42c1) 45%, var(--ui-border));
+  background: color-mix(in srgb, var(--editor-bracket-1, #6f42c1) 10%, var(--ui-bg));
+}
 .settings-language-provider-meta {
   margin-top: 2px;
   color: var(--ui-header-text);
