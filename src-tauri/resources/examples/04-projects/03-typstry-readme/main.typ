@@ -9,6 +9,6 @@
 
 #include "readme.typ"
 #include "chapters/research-workflow.typ"
-#include "chapters/ការស្រាវជ្រាវ.typ"
+#include "chapters/khmer-research.typ"
 
 #bibliography("refs.bib", style: "apa")

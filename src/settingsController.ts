@@ -9,7 +9,6 @@ import {
   parseLanguageCatalog,
   parseLanguageProviderCapabilitiesList,
   providerFeatureLabels,
-  providerStabilityLabel,
   supportLevelPresentation,
   type LanguageCatalogCapabilities,
   type LanguageProviderCapabilities
