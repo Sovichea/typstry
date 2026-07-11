@@ -79,6 +79,7 @@ describe("language support taxonomy", () => {
     expect(providerStabilityLabel("experimental")).toBe("Experimental");
     expect(providerStabilityLabel("stable")).toBe("Stable");
     expect(boundaryModeLabel("custom-segmenter")).toBe("Dedicated segmenter");
+    expect(boundaryModeLabel("icu4x-dictionary")).toBe("ICU4X dictionary tokenizer");
   });
 
   test("validates the versioned Rust capability payload and strips provider internals", () => {
@@ -109,26 +110,29 @@ describe("language support taxonomy", () => {
   test("validates catalog capability metadata independently from provider regexes", () => {
     const [entry] = parseLanguageCatalog([{
       ...serializedProvider,
-      id: "hunspell:th_TH",
-      displayName: "Thai",
-      languageTag: "th-TH",
-      scripts: ["Thai"],
-      supportLevel: "basic",
-      stability: "stable",
-      boundaryMode: "unicode-word",
-      boundaryQuality: "general",
+      id: "hunspell:lo_LA",
+      displayName: "Lao",
+      languageTag: "lo-LA",
+      scripts: ["Laoo"],
+      supportLevel: "enhanced",
+      stability: "experimental",
+      boundaryMode: "icu4x-dictionary",
+      boundaryQuality: "dedicated",
       correctionQuality: "dictionary",
       supportsCorrections: true,
-      supportsCompletion: false,
-      supportsSegmentation: false,
+      supportsCompletion: true,
+      supportsSegmentation: true,
+      providerType: "dictionary-plus-tokenizer",
+      version: "2019.10.01",
+      license: "GPL-3.0",
       hasEditingPolicy: false,
-      locale: "th_TH",
+      locale: "lo_LA",
       installed: false,
       bundled: false,
       source: "LibreOffice dictionaries",
       downloadSize: 1024
     }]);
-    expect(entry.supportLevel).toBe("basic");
-    expect(entry.supportsCompletion).toBe(false);
+    expect(entry.supportLevel).toBe("enhanced");
+    expect(entry.supportsCompletion).toBe(true);
   });
 });

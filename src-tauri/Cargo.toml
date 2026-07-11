@@ -30,6 +30,7 @@ dunce = "1.0"
 ttf-parser = "0.25"
 khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-features = false }
 spellbook = "0.4.2"
+icu_segmenter = { version = "2.2", default-features = false, features = ["compiled_data"] }
 open = "5.3"
 typstry-font-scaler = { path = "../crates/font-scaler" }
 

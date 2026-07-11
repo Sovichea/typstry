@@ -156,6 +156,7 @@ Typstry downloads and manages Tinymist for preview and diagnostics. A separate T
 - [Preview implementation notes](./docs/PREVIEW_INTERCEPTION.md)
 - [Research-document workflows](./docs/RESEARCH_DOCUMENT_WORKFLOWS.md)
 - [Reliability and performance gates](./docs/PERFORMANCE_GATES.md)
+- [Experimental Lao language support](./docs/LAO_LANGUAGE_SUPPORT.md)
 
 ## Beta status
 

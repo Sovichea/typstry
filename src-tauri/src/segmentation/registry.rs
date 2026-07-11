@@ -4,6 +4,7 @@ use super::provider::{
     SuggestionResponse, TextAnalysis, PROVIDER_CAPABILITY_SCHEMA_VERSION,
 };
 use crate::render_prepare::scanner::{scan_typst_content, ScanState};
+use icu_segmenter::{options::WordBreakInvariantOptions, WordSegmenter, WordSegmenterBorrowed};
 use khmer_segmenter::kdict::{KDict, KHypDict};
 use khmer_segmenter::{KhmerSegmenter, SegmenterConfig};
 use serde::Serialize;
@@ -950,6 +951,7 @@ struct GenericHunspellProvider {
     known_stems: HashSet<String>,
     version: &'static str,
     license: &'static str,
+    word_segmenter: Option<WordSegmenterBorrowed<'static>>,
 }
 
 impl GenericHunspellProvider {
@@ -966,11 +968,14 @@ impl GenericHunspellProvider {
         let preprocessed = preprocess_aff(aff);
         let dictionary = spellbook::Dictionary::new(&preprocessed, dic)
             .map_err(|error| format!("Failed to load {locale} dictionary: {error}"))?;
+        let is_lao = language_tag.split('-').next() == Some("lo");
         let mut completion_words: Vec<String> = dic
             .lines()
             .skip(1)
             .filter_map(hunspell_dic_stem)
-            .filter(|word| is_generic_completion_word(word))
+            .filter(|word| {
+                is_generic_completion_word(word) || (is_lao && is_lao_dictionary_word(word))
+            })
             .map(normalize_generic_word)
             .collect();
         completion_words.sort();
@@ -987,6 +992,8 @@ impl GenericHunspellProvider {
             known_stems,
             version: Box::leak(version.to_owned().into_boxed_str()),
             license: Box::leak(license.to_owned().into_boxed_str()),
+            word_segmenter: is_lao
+                .then(|| WordSegmenter::new_dictionary(WordBreakInvariantOptions::default())),
         })
     }
 
@@ -1000,7 +1007,7 @@ impl GenericHunspellProvider {
         tokens: &mut Vec<SegmentToken>,
     ) {
         let word = &text[from_byte..to_byte];
-        if word.chars().count() <= 1
+        if (word.chars().count() <= 1 && self.word_segmenter.is_none())
             || !word
                 .chars()
                 .any(|character| character_matches_language_tag(character, self.language_tag))
@@ -1052,15 +1059,27 @@ impl LanguageSegmenter for GenericHunspellProvider {
     }
 
     fn engine(&self) -> &'static str {
-        "spellbook"
+        if self.word_segmenter.is_some() {
+            "spellbook+icu4x"
+        } else {
+            "spellbook"
+        }
     }
 
     fn support_level(&self) -> &'static str {
-        "basic"
+        if self.word_segmenter.is_some() {
+            "enhanced"
+        } else {
+            "basic"
+        }
     }
 
     fn provider_type(&self) -> &'static str {
-        "dictionary-only"
+        if self.word_segmenter.is_some() {
+            "dictionary-plus-tokenizer"
+        } else {
+            "dictionary-only"
+        }
     }
 
     fn version(&self) -> &'static str {
@@ -1072,7 +1091,35 @@ impl LanguageSegmenter for GenericHunspellProvider {
     }
 
     fn boundary_mode(&self) -> &'static str {
-        "unicode-word"
+        if self.word_segmenter.is_some() {
+            "icu4x-dictionary"
+        } else {
+            "unicode-word"
+        }
+    }
+
+    fn boundary_quality(&self) -> &'static str {
+        if self.word_segmenter.is_some() {
+            "dedicated"
+        } else {
+            "general"
+        }
+    }
+
+    fn stability(&self) -> &'static str {
+        if self.word_segmenter.is_some() {
+            "experimental"
+        } else {
+            "stable"
+        }
+    }
+
+    fn supports_completion(&self) -> bool {
+        self.word_segmenter.is_some()
+    }
+
+    fn supports_segmentation(&self) -> bool {
+        self.word_segmenter.is_some()
     }
 
     fn pattern(&self) -> &'static str {
@@ -1085,6 +1132,28 @@ impl LanguageSegmenter for GenericHunspellProvider {
     }
 
     fn analyze(&self, text: &str) -> Result<TextAnalysis, String> {
+        if let Some(segmenter) = self.word_segmenter {
+            let byte_to_utf16 = byte_to_utf16_offsets(text);
+            let boundaries: Vec<usize> = segmenter.segment_str(text).collect();
+            let mut tokens = Vec::new();
+            for boundary in boundaries.windows(2) {
+                let from_byte = boundary[0];
+                let to_byte = boundary[1];
+                self.push_token(
+                    text,
+                    from_byte,
+                    to_byte,
+                    byte_to_utf16[from_byte],
+                    byte_to_utf16[to_byte],
+                    &mut tokens,
+                );
+            }
+            return Ok(TextAnalysis {
+                provider: self.id(),
+                normalized_changed: false,
+                tokens,
+            });
+        }
         let mut tokens = Vec::new();
         let mut start = None::<(usize, usize)>;
         let mut current_utf16 = 0;
@@ -1429,6 +1498,17 @@ fn is_generic_completion_word(word: &str) -> bool {
         && word.chars().any(char::is_alphabetic)
 }
 
+fn is_lao_dictionary_word(word: &str) -> bool {
+    word.chars().count() >= 2
+        && word.chars().all(|character| {
+            ('\u{0e80}'..='\u{0eff}').contains(&character)
+                || matches!(character, '\'' | '\u{2019}' | '-')
+        })
+        && word
+            .chars()
+            .any(|character| ('\u{0e80}'..='\u{0eff}').contains(&character))
+}
+
 fn is_generic_token_char(character: char) -> bool {
     character.is_alphabetic() || matches!(character, '\'' | '’' | '-')
 }
@@ -1544,6 +1624,7 @@ fn is_hunspell_installed(data_dir: &Path, locale: &str) -> bool {
 }
 
 fn catalog_entry(data_dir: Option<&Path>, spec: &HunspellCatalogSpec) -> HunspellCatalogEntry {
+    let has_dedicated_tokenizer = spec.language_tag.split('-').next() == Some("lo");
     HunspellCatalogEntry {
         schema_version: PROVIDER_CAPABILITY_SCHEMA_VERSION,
         id: format!("hunspell:{}", spec.locale),
@@ -1554,18 +1635,43 @@ fn catalog_entry(data_dir: Option<&Path>, spec: &HunspellCatalogSpec) -> Hunspel
         installed: data_dir.is_some_and(|dir| is_hunspell_installed(dir, spec.locale)),
         bundled: false,
         source: "LibreOffice dictionaries".to_string(),
-        support_level: "basic".to_string(),
-        stability: "stable".to_string(),
-        boundary_mode: "unicode-word".to_string(),
-        boundary_quality: "general".to_string(),
+        support_level: if has_dedicated_tokenizer {
+            "enhanced"
+        } else {
+            "basic"
+        }
+        .to_string(),
+        stability: if has_dedicated_tokenizer {
+            "experimental"
+        } else {
+            "stable"
+        }
+        .to_string(),
+        boundary_mode: if has_dedicated_tokenizer {
+            "icu4x-dictionary"
+        } else {
+            "unicode-word"
+        }
+        .to_string(),
+        boundary_quality: if has_dedicated_tokenizer {
+            "dedicated"
+        } else {
+            "general"
+        }
+        .to_string(),
         correction_quality: "dictionary".to_string(),
         supports_spellcheck: true,
         supports_corrections: true,
-        supports_completion: false,
-        supports_segmentation: false,
+        supports_completion: has_dedicated_tokenizer,
+        supports_segmentation: has_dedicated_tokenizer,
         supports_custom_dictionary: true,
         has_editing_policy: false,
-        provider_type: "dictionary-only".to_string(),
+        provider_type: if has_dedicated_tokenizer {
+            "dictionary-plus-tokenizer"
+        } else {
+            "dictionary-only"
+        }
+        .to_string(),
         download_size: spec.aff_size + spec.dic_size,
         license: spec.license.to_string(),
         version: spec.version.to_string(),
@@ -2266,6 +2372,7 @@ fn complete_with_provider(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::segmentation::provider::AnalyzeChunk;
 
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -2324,6 +2431,116 @@ mod tests {
         let map = utf16_to_byte_boundaries(text);
         let range = utf16_byte_range(&map, from, to, text.len()).expect("valid fixture range");
         text[range].to_string()
+    }
+
+    fn lao_test_provider() -> GenericHunspellProvider {
+        GenericHunspellProvider::new(
+            "lo_LA",
+            "Lao",
+            "lo-LA",
+            "[\\u0E80-\\u0EFF]+",
+            "SET UTF-8\n",
+            "6\nພາສາ\nລາວ\nປະເທດ\nສະບາຍດີ\nການສຶກສາ\nພາສາລາວ\n",
+            "test-1",
+            "GPL-3.0",
+        )
+        .expect("Lao test provider")
+    }
+
+    #[test]
+    fn lao_icu4x_tokenizer_preserves_utf16_ranges() {
+        let provider = lao_test_provider();
+        assert_eq!(provider.provider_type(), "dictionary-plus-tokenizer");
+        assert_eq!(provider.boundary_mode(), "icu4x-dictionary");
+        assert!(provider.supports_segmentation());
+        assert!(provider.supports_completion());
+        let source = "😀ພາສາລາວ";
+        let analysis = provider.analyze(source).expect("Lao analysis");
+        let ranges: Vec<_> = analysis
+            .tokens
+            .iter()
+            .map(|token| (token.text.as_str(), token.from, token.to, token.known))
+            .collect();
+        assert_eq!(ranges, vec![("ພາສາ", 2, 6, true), ("ລາວ", 6, 9, true)]);
+    }
+
+    #[test]
+    fn lao_catalog_publishes_licensed_experimental_tokenizer_support() {
+        let spec = find_hunspell_spec("lo_LA").expect("Lao catalog entry");
+        let entry = catalog_entry(None, spec);
+        assert_eq!(entry.provider_type, "dictionary-plus-tokenizer");
+        assert_eq!(entry.support_level, "enhanced");
+        assert_eq!(entry.stability, "experimental");
+        assert_eq!(entry.boundary_mode, "icu4x-dictionary");
+        assert_eq!(entry.license, "GPL-3.0");
+        assert!(!entry.installed);
+        assert!(!entry.bundled);
+    }
+
+    #[test]
+    fn lao_completion_uses_the_segmented_active_word() {
+        let provider = lao_test_provider();
+        let response = complete_with_provider(
+            &provider,
+            &CompletionRequest {
+                provider: provider.id().to_string(),
+                text: "😀ພາ".to_string(),
+                cursor_utf16: 4,
+                limit: 10,
+            },
+        )
+        .expect("Lao completion")
+        .expect("completion response");
+        assert_eq!((response.from, response.to), (2, 4));
+        assert!(response.options.iter().any(|word| word == "ພາສາ"));
+    }
+
+    #[test]
+    fn lao_provider_registration_does_not_change_khmer_results() {
+        let khmer = Arc::new(KhmerProvider::new().expect("Khmer provider"));
+        let lao = Arc::new(lao_test_provider());
+        let source = "សាលារៀន ພາສາລາວ";
+        let khmer_only = SegmentationRegistry {
+            providers: Arc::new(RwLock::new(vec![khmer.clone()])),
+        }
+        .analyze_ranges(AnalyzeRequest {
+            chunks: vec![AnalyzeChunk {
+                text: source.to_string(),
+                start_utf16: 0,
+            }],
+        })
+        .expect("Khmer-only analysis");
+        let mixed = SegmentationRegistry {
+            providers: Arc::new(RwLock::new(vec![khmer, lao])),
+        }
+        .analyze_ranges(AnalyzeRequest {
+            chunks: vec![AnalyzeChunk {
+                text: source.to_string(),
+                start_utf16: 0,
+            }],
+        })
+        .expect("mixed analysis");
+        let khmer_tokens = |response: &AnalyzeResponse| {
+            response
+                .tokens
+                .iter()
+                .filter(|token| token.provider == "khmer-segmenter")
+                .map(|token| {
+                    (
+                        token.source_from_utf16,
+                        token.source_to_utf16,
+                        token.normalized_text.clone(),
+                        token.known,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(khmer_tokens(&khmer_only), khmer_tokens(&mixed));
+        assert!(mixed
+            .tokens
+            .iter()
+            .any(|token| token.provider == "hunspell:lo_LA"));
+        assert_eq!(source, "សាលារៀន ພາສາລາວ");
     }
 
     #[test]

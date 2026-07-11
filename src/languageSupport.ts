@@ -103,6 +103,8 @@ export function boundaryModeLabel(value: string | undefined): string | null {
       return "Dedicated segmenter";
     case "unicode-word":
       return "General word boundaries";
+    case "icu4x-dictionary":
+      return "ICU4X dictionary tokenizer";
     case "whitespace":
       return "Whitespace boundaries";
     default:

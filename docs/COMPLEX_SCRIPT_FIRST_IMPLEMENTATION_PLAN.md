@@ -617,25 +617,27 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ## Phase 8: Prove portability with a second complex script
 
-The second deep implementation should validate the contracts rather than copy Khmer behavior. Thai, Lao, Myanmar, or a Brahmic script would be suitable, provided a contributor or maintainer can supply real linguistic fixtures.
+Lao is the selected second portability implementation. It validates the contracts without copying Khmer behavior: Unicode grapheme handling remains the editing baseline, while ICU4X supplies dictionary word boundaries and the optional licensed `lo_LA` Hunspell provider supplies spelling data.
 
 ### Task checklist
 
 - [ ] **P8.1 — Select the validation language.** Confirm a maintainer, reliable linguistic fixtures, dictionary licensing, and tokenizer or segmenter availability.
-- [ ] **P8.2 — Add Unicode fixtures.** Cover movement, deletion, selection, composition, malformed text, mixed scripts, and non-BMP neighbors.
-- [ ] **P8.3 — Evaluate the Unicode baseline.** Register a script policy only where fixtures prove default grapheme behavior is insufficient. Depends on `P8.2`.
-- [ ] **P8.4 — Add fallback spellcheck.** Install and label a Hunspell-compatible provider where licensing and dictionary quality permit.
-- [ ] **P8.5 — Integrate tokenization.** Add a tokenizer or segmenter behind the provider contract with exact UTF-16 source mappings.
-- [ ] **P8.6 — Add completion.** Enable it only after segmented active-word and replacement-range fixtures pass. Depends on `P8.5`.
-- [ ] **P8.7 — Run cross-language regressions.** Compare all locked Khmer results before and after the new registrations.
-- [ ] **P8.8 — Publish support limits.** Document unsupported behavior, support level, provider sources, and experimental status.
+- [x] **P8.2 — Add Unicode fixtures.** Cover movement, deletion, selection, composition, malformed text, mixed scripts, and non-BMP neighbors.
+- [x] **P8.3 — Evaluate the Unicode baseline.** Register a script policy only where fixtures prove default grapheme behavior is insufficient. Depends on `P8.2`.
+- [x] **P8.4 — Add fallback spellcheck.** Install and label a Hunspell-compatible provider where licensing and dictionary quality permit.
+- [x] **P8.5 — Integrate tokenization.** Add a tokenizer or segmenter behind the provider contract with exact UTF-16 source mappings.
+- [x] **P8.6 — Add completion.** Enable it only after segmented active-word and replacement-range fixtures pass. Depends on `P8.5`.
+- [x] **P8.7 — Run cross-language regressions.** Compare all locked Khmer results before and after the new registrations.
+- [x] **P8.8 — Publish support limits.** Document unsupported behavior, support level, provider sources, and experimental status.
+
+`P8.1` remains open for promotion: Lao was selected and its Unicode, ICU4X, dictionary, version, and license sources are confirmed, but Typstry still needs a fluent Lao maintainer or reviewer. The provider therefore remains experimental enhanced support rather than deep/stable support.
 
 ### Acceptance criteria
 
-- [ ] The new language is added without modifying Khmer policy or Khmer provider logic.
-- [ ] Generic editor controllers contain no new language-specific regular expressions.
-- [ ] Mixed Khmer and second-script content retains independent navigation and language results.
-- [ ] Removing the new provider restores fallback behavior without changing saved documents.
+- [x] The new language is added without modifying Khmer policy or Khmer provider logic.
+- [x] Generic editor controllers contain no new language-specific regular expressions.
+- [x] Mixed Khmer and second-script content retains independent navigation and language results.
+- [x] Removing the new provider restores fallback behavior without changing saved documents.
 
 ## Phase 9: Contributor experience and governance
 

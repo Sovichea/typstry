@@ -1,0 +1,25 @@
+{
+  "fixtureVersion": 1,
+  "unicodeVersion": "17.0",
+  "sources": [
+    "Unicode Standard Annex #29",
+    "ICU4X WordSegmenter 2.2 compiled data"
+  ],
+  "graphemes": [
+    {
+      "name": "base with tone and following vowel",
+      "text": "ກ່າ",
+      "ranges": [[0, 2], [2, 3]]
+    },
+    {
+      "name": "malformed isolated tone",
+      "text": "່",
+      "ranges": [[0, 1]]
+    },
+    {
+      "name": "mixed non-BMP Lao and Latin",
+      "text": "😀ກ່າ A",
+      "ranges": [[0, 2], [2, 4], [4, 5], [5, 6], [6, 7]]
+    }
+  ]
+}
