@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "bun test",
+    "test:khmer": "bun test tests/khmerReference.test.ts tests/grapheme.test.ts tests/editingPolicies.test.ts tests/autocomplete.test.ts tests/spellcheck.test.ts",
     "tauri": "tauri"
   },
   "dependencies": {

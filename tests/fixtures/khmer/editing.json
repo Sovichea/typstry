@@ -1,0 +1,129 @@
+{
+  "contractVersion": 1,
+  "boundaries": [
+    {
+      "name": "dependent vowel",
+      "text": "កា",
+      "expected": [{ "from": 0, "to": 2 }]
+    },
+    {
+      "name": "register and dependent vowel",
+      "text": "ក៉ា",
+      "expected": [{ "from": 0, "to": 3 }]
+    },
+    {
+      "name": "single COENG sequence",
+      "text": "ក្រ",
+      "expected": [{ "from": 0, "to": 3 }]
+    },
+    {
+      "name": "multiple COENG sequence",
+      "text": "ក្ត្រ",
+      "expected": [{ "from": 0, "to": 5 }]
+    },
+    {
+      "name": "separate readable Khmer clusters",
+      "text": "សម្បត្តិ",
+      "expected": [
+        { "from": 0, "to": 1 },
+        { "from": 1, "to": 4 },
+        { "from": 4, "to": 8 }
+      ]
+    },
+    {
+      "name": "malformed trailing COENG",
+      "text": "ក្",
+      "expected": [{ "from": 0, "to": 2 }]
+    },
+    {
+      "name": "mixed Latin emoji punctuation ZWSP and ZWNJ",
+      "text": "A😀 សម្បត្តិ។​ខ្មែរ‌",
+      "expected": [
+        { "from": 0, "to": 1 },
+        { "from": 1, "to": 3 },
+        { "from": 3, "to": 4 },
+        { "from": 4, "to": 5 },
+        { "from": 5, "to": 8 },
+        { "from": 8, "to": 12 },
+        { "from": 12, "to": 13 },
+        { "from": 13, "to": 14 },
+        { "from": 14, "to": 18 },
+        { "from": 18, "to": 20 }
+      ]
+    }
+  ],
+  "backwardDeletion": [
+    {
+      "name": "dependent vowel deletes as one code point",
+      "text": "កា",
+      "offset": 2,
+      "expected": { "from": 1, "to": 2 }
+    },
+    {
+      "name": "COENG and consonant delete together",
+      "text": "ក្ក",
+      "offset": 3,
+      "expected": { "from": 1, "to": 3 }
+    },
+    {
+      "name": "final dependent vowel deletes without removing its cluster",
+      "text": "សម្បត្តិ",
+      "offset": 8,
+      "expected": { "from": 7, "to": 8 }
+    }
+  ],
+  "forwardDeletion": [
+    {
+      "name": "dependent-vowel cluster",
+      "text": "កា",
+      "offset": 0,
+      "expected": { "from": 0, "to": 2 }
+    },
+    {
+      "name": "middle Khmer cluster",
+      "text": "សម្បត្តិ",
+      "offset": 1,
+      "expected": { "from": 1, "to": 4 }
+    }
+  ],
+  "movement": [
+    {
+      "name": "forward movement to first cluster boundary",
+      "text": "សម្បត្តិ",
+      "anchor": 0,
+      "head": 0,
+      "direction": "forward",
+      "extend": false,
+      "expectedAnchor": 1,
+      "expectedHead": 1
+    },
+    {
+      "name": "shift selection extends by the next readable cluster",
+      "text": "សម្បត្តិ",
+      "anchor": 0,
+      "head": 1,
+      "direction": "forward",
+      "extend": true,
+      "expectedAnchor": 0,
+      "expectedHead": 4
+    },
+    {
+      "name": "backward movement skips the final cluster",
+      "text": "សម្បត្តិ",
+      "anchor": 8,
+      "head": 8,
+      "direction": "backward",
+      "extend": false,
+      "expectedAnchor": 4,
+      "expectedHead": 4
+    }
+  ],
+  "multiCursorBackwardDeletion": {
+    "text": "ក្ក ក្ក",
+    "cursors": [3, 7],
+    "expected": [
+      { "from": 1, "to": 3 },
+      { "from": 5, "to": 7 }
+    ]
+  }
+}

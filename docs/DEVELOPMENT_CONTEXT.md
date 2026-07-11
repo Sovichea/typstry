@@ -4,7 +4,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 
 ---
 
-## Current Implementation Notes (2026-07-04)
+## Current Implementation Notes (2026-07-11)
 
 - The local `main` branch has been fast-forwarded to `origin/main`; current local work is replayed on top without unresolved merge conflicts.
 - Khmer render preparation is experimental and defaults to off. Its Settings row is visible only in dev builds; production users should prefer normal Typst justification/tracking limits unless they intentionally edit settings JSON.
@@ -13,6 +13,7 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - Language support depth uses **Basic**, **Enhanced**, and **Deep**; stability is separately **Stable** or **Experimental**. Khmer is Deep · Experimental, bundled English is Enhanced · Stable, and downloaded Hunspell-compatible dictionaries are Basic · Stable. The source of truth is `PRODUCT_DIRECTION.md`.
 - Language provider capabilities use runtime-validated schema version 1. Mixed-language analysis runs every matching provider, resolves overlaps by support depth and boundary quality, and returns structured per-provider failures without discarding successful results.
 - Script editing policies use contract version 1 with declarative ISO 15924 ownership and half-open Unicode code-point ranges. All movement, shift-selection, deletion, and cursor snapping route through the registry; overlapping ownership is rejected before a policy is installed.
+- Khmer reference fixtures live under `tests/fixtures/khmer/` and lock editing boundaries, deletion, selection, provider tokens, upstream byte spans, CodeMirror UTF-16 ranges, and completion replacements to submodule commit `cb7f972843d60bfec767f38802ecb89c40c1c49f`. Run `bun run test:khmer` plus the native `khmer_reference_provider_fixtures_are_locked` test after any related change.
 - English (US) language tools are bundled by default as provider `hunspell:en_US`. The resource files live under `src-tauri/resources/dictionaries/hunspell/en_US/` and use Hunspell-format `en_US.aff`/`en_US.dic` from LibreOffice/SCOWL. Typstry reads them with the pure-Rust `spellbook` engine and builds its own prefix index for typing word suggestions.
 - Typst formatting is available from **Edit → Format Document** / `Ctrl+Shift+F`; **Editor → Format on save** is default off and uses Tinymist `textDocument/formatting`.
 - Global app shortcuts use physical `KeyboardEvent.code` values instead of localized `event.key`, so Ctrl/Alt shortcuts continue to work under Khmer and other non-Latin keyboard layouts.

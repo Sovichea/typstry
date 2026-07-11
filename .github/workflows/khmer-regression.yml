@@ -1,0 +1,81 @@
+name: Khmer Reference Regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/editor/editingPolicies/**"
+      - "src/editor/grapheme.ts"
+      - "src/editor/autocomplete.ts"
+      - "src/editor/spellcheck.ts"
+      - "src-tauri/src/segmentation/**"
+      - "third_party/khmer_segmenter"
+      - "third_party/khmer_segmenter/**"
+      - "tests/fixtures/khmer/**"
+      - "tests/khmerReference.test.ts"
+      - "tests/grapheme.test.ts"
+      - "tests/editingPolicies.test.ts"
+      - "tests/autocomplete.test.ts"
+      - "tests/spellcheck.test.ts"
+      - "package.json"
+      - "bun.lock"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+  pull_request:
+    paths:
+      - "src/editor/editingPolicies/**"
+      - "src/editor/grapheme.ts"
+      - "src/editor/autocomplete.ts"
+      - "src/editor/spellcheck.ts"
+      - "src-tauri/src/segmentation/**"
+      - "third_party/khmer_segmenter"
+      - "third_party/khmer_segmenter/**"
+      - "tests/fixtures/khmer/**"
+      - "tests/khmerReference.test.ts"
+      - "tests/grapheme.test.ts"
+      - "tests/editingPolicies.test.ts"
+      - "tests/autocomplete.test.ts"
+      - "tests/spellcheck.test.ts"
+      - "package.json"
+      - "bun.lock"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+
+jobs:
+  reference-fixtures:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository and pinned segmenter
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> src-tauri/target"
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run frontend Khmer reference suite
+        run: bun run test:khmer
+
+      - name: Run native Khmer provider fixture
+        working-directory: src-tauri
+        run: cargo test --lib khmer_reference_provider_fixtures_are_locked

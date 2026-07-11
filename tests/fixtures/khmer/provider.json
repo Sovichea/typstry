@@ -1,0 +1,113 @@
+{
+  "fixtureVersion": 1,
+  "upstreamCommit": "cb7f972843d60bfec767f38802ecb89c40c1c49f",
+  "segmentation": [
+    {
+      "name": "formal sentence",
+      "input": "ក្រុមហ៊ុនទទួលបានប្រាក់ចំណូល",
+      "tokens": [
+        { "normalized": "ក្រុមហ៊ុន", "source": "ក្រុមហ៊ុន", "from": 0, "to": 9, "known": true },
+        { "normalized": "ទទួល", "source": "ទទួល", "from": 9, "to": 13, "known": true },
+        { "normalized": "បាន", "source": "បាន", "from": 13, "to": 16, "known": true },
+        { "normalized": "ប្រាក់ចំណូល", "source": "ប្រាក់ចំណូល", "from": 16, "to": 27, "known": true }
+      ]
+    },
+    {
+      "name": "known school word",
+      "input": "សាលារៀន",
+      "tokens": [
+        { "normalized": "សាលារៀន", "source": "សាលារៀន", "from": 0, "to": 7, "known": true }
+      ]
+    },
+    {
+      "name": "unknown but completable prefix",
+      "input": "ខ្មេ",
+      "tokens": [
+        { "normalized": "ខ្មេ", "source": "ខ្មេ", "from": 0, "to": 4, "known": false, "knownPrefix": true }
+      ]
+    }
+  ],
+  "normalization": [
+    {
+      "name": "reordered vowel and nikahit after emoji",
+      "input": "😀កំា",
+      "normalized": "កាំ",
+      "source": "កំា",
+      "byteFrom": 4,
+      "byteTo": 13,
+      "from": 2,
+      "to": 5,
+      "normalizedChanged": true
+    },
+    {
+      "name": "composed Khmer vowel after emoji",
+      "input": "😀កេី",
+      "normalized": "កើ",
+      "source": "កេី",
+      "byteFrom": 4,
+      "byteTo": 13,
+      "from": 2,
+      "to": 5,
+      "normalizedChanged": true
+    },
+    {
+      "name": "ZWSP source mapping",
+      "input": "😀ក​ា",
+      "normalized": "កា",
+      "source": "ក​ា",
+      "byteFrom": 4,
+      "byteTo": 13,
+      "from": 2,
+      "to": 5,
+      "normalizedChanged": false
+    },
+    {
+      "name": "ZWNJ source mapping",
+      "input": "😀ក‌ា",
+      "normalized": "កា",
+      "source": "ក‌ា",
+      "byteFrom": 4,
+      "byteTo": 13,
+      "from": 2,
+      "to": 5,
+      "normalizedChanged": false
+    },
+    {
+      "name": "ZWJ source mapping",
+      "input": "😀ក‍ា",
+      "normalized": "កា",
+      "source": "ក‍ា",
+      "byteFrom": 4,
+      "byteTo": 13,
+      "from": 2,
+      "to": 5,
+      "normalizedChanged": false
+    }
+  ],
+  "completion": [
+    {
+      "name": "known current word remains first",
+      "input": "ការងារ",
+      "cursor": 6,
+      "from": 0,
+      "to": 6,
+      "first": "ការងារ"
+    },
+    {
+      "name": "compound continuation uses the complete prefix",
+      "input": "សាលារ",
+      "cursor": 5,
+      "from": 0,
+      "to": 5,
+      "first": "សាលារៀន"
+    },
+    {
+      "name": "non-BMP text before completion keeps UTF-16 range",
+      "input": "😀សាលារ",
+      "cursor": 7,
+      "from": 2,
+      "to": 7,
+      "first": "សាលារៀន"
+    }
+  ]
+}

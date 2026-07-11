@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const SOURCE_MAP_VERSION: u32 = 3;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MappingKind {
@@ -28,7 +30,7 @@ pub struct SourceMap {
 impl SourceMap {
     pub fn new(source_file: String, generated_file: String) -> Self {
         Self {
-            version: 1,
+            version: SOURCE_MAP_VERSION,
             source_file,
             generated_file,
             mappings: Vec::new(),

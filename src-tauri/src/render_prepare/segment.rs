@@ -11,6 +11,97 @@ pub struct KhmerTextSegmenter {
     pub hyphenation: KHypDict,
 }
 
+const INVERSE_SYNC_BOUNDARY: &str = "#[]";
+
+fn contains_khmer(text: &str) -> bool {
+    text.chars().any(is_khmer_character)
+}
+
+fn is_khmer_character(character: char) -> bool {
+    ('\u{1780}'..='\u{17ff}').contains(&character)
+}
+
+fn append_original_run(
+    output: &mut String,
+    text: &str,
+    source_start: usize,
+    current_gen_offset: &mut usize,
+    sourcemap: &mut SourceMap,
+    add_inverse_sync_boundaries: bool,
+) {
+    let mut chunk_start = 0;
+    for (index, character) in text.char_indices() {
+        let chunk_end = index + character.len_utf8();
+        let is_between_khmer = text[..index]
+            .chars()
+            .next_back()
+            .is_some_and(is_khmer_character)
+            && text[chunk_end..]
+                .chars()
+                .next()
+                .is_some_and(is_khmer_character);
+        if !add_inverse_sync_boundaries || character != ' ' || !is_between_khmer {
+            continue;
+        }
+        let chunk = &text[chunk_start..chunk_end];
+        output.push_str(chunk);
+        sourcemap.add_mapping(
+            *current_gen_offset,
+            *current_gen_offset + chunk.len(),
+            source_start + chunk_start,
+            source_start + chunk_end,
+            MappingKind::Original,
+        );
+        *current_gen_offset += chunk.len();
+
+        output.push_str(INVERSE_SYNC_BOUNDARY);
+        sourcemap.add_mapping(
+            *current_gen_offset,
+            *current_gen_offset + INVERSE_SYNC_BOUNDARY.len(),
+            source_start + chunk_end,
+            source_start + chunk_end,
+            MappingKind::GeneratedWrapper,
+        );
+        *current_gen_offset += INVERSE_SYNC_BOUNDARY.len();
+        chunk_start = chunk_end;
+    }
+
+    if chunk_start < text.len() {
+        let chunk = &text[chunk_start..];
+        output.push_str(chunk);
+        sourcemap.add_mapping(
+            *current_gen_offset,
+            *current_gen_offset + chunk.len(),
+            source_start + chunk_start,
+            source_start + text.len(),
+            MappingKind::Original,
+        );
+        *current_gen_offset += chunk.len();
+    }
+}
+
+/// Splits Khmer markup at visible spaces into separate Typst source spans.
+/// `#[]` has no layout output, but avoids an upstream inverse-sync failure
+/// where glyphs after the first space resolve to the end of the whole line.
+pub fn prepare_markup_for_inverse_sync(
+    input: &str,
+    source_offset: usize,
+    generated_offset_start: usize,
+    sourcemap: &mut SourceMap,
+) -> String {
+    let mut output = String::new();
+    let mut generated_offset = generated_offset_start;
+    append_original_run(
+        &mut output,
+        input,
+        source_offset,
+        &mut generated_offset,
+        sourcemap,
+        contains_khmer(input),
+    );
+    output
+}
+
 impl KhmerTextSegmenter {
     pub fn new() -> Result<Self, String> {
         let mut config = SegmenterConfig::default();
@@ -70,6 +161,7 @@ pub fn prepare_khmer_text_for_rendering(
 ) -> String {
     let mut output = String::new();
     let mut current_gen_offset = generated_offset_start;
+    let add_inverse_sync_boundaries = contains_khmer(input);
 
     let mut chars = input.char_indices().peekable();
 
@@ -176,16 +268,14 @@ pub fn prepare_khmer_text_for_rendering(
                 current_gen_offset += gen_len;
             }
         } else {
-            let gen_len = run_text.len();
-            output.push_str(run_text);
-            sourcemap.add_mapping(
-                current_gen_offset,
-                current_gen_offset + gen_len,
+            append_original_run(
+                &mut output,
+                run_text,
                 run_source_start,
-                run_source_end,
-                MappingKind::Original,
+                &mut current_gen_offset,
+                sourcemap,
+                add_inverse_sync_boundaries,
             );
-            current_gen_offset += gen_len;
         }
     }
 
@@ -316,5 +406,49 @@ mod tests {
 
         assert_eq!(output, source);
         assert!(!output.contains('\u{200b}'));
+    }
+
+    #[test]
+    fn test_inverse_sync_boundaries_split_khmer_markup_without_source_text() {
+        let source = "\u{1781}\u{17d2}\u{1798}\u{17c2}\u{179a} \u{1782}\u{17ba}\u{1787}\u{17b6}";
+        let mut map = SourceMap::new("src.typ".into(), "dest.typ".into());
+        let output = prepare_markup_for_inverse_sync(source, 0, 0, &mut map);
+
+        assert_eq!(output.replace(INVERSE_SYNC_BOUNDARY, ""), source);
+        assert!(output.contains(&format!(" {}", INVERSE_SYNC_BOUNDARY)));
+
+        let second_word_source = source.find('\u{1782}').unwrap();
+        let second_word_generated = output.find('\u{1782}').unwrap();
+        assert_eq!(
+            map.generated_to_source(second_word_generated),
+            Some(second_word_source)
+        );
+        assert_eq!(
+            map.source_to_generated(second_word_source),
+            Some(second_word_generated)
+        );
+    }
+
+    #[test]
+    fn test_inverse_sync_boundaries_leave_non_khmer_markup_unchanged() {
+        let source = "Latin text remains unchanged.";
+        let mut map = SourceMap::new("src.typ".into(), "dest.typ".into());
+        let output = prepare_markup_for_inverse_sync(source, 0, 0, &mut map);
+
+        assert_eq!(output, source);
+        assert!(!output.contains(INVERSE_SYNC_BOUNDARY));
+    }
+
+    #[test]
+    fn test_inverse_sync_boundaries_never_enter_typst_code_or_heading_prefixes() {
+        let source = "#set par(justify: true)\n= \u{1781}\u{17d2}\u{1798}\u{17c2}\u{179a}\n\u{1781}\u{17d2}\u{1798}\u{17c2}\u{179a} \u{1782}\u{17ba}\u{1787}\u{17b6}";
+        let mut map = SourceMap::new("src.typ".into(), "dest.typ".into());
+        let output = prepare_markup_for_inverse_sync(source, 0, 0, &mut map);
+
+        assert!(output.starts_with("#set par(justify: true)\n= \u{1781}"));
+        assert!(output.ends_with(
+            "\u{1781}\u{17d2}\u{1798}\u{17c2}\u{179a} #[]\u{1782}\u{17ba}\u{1787}\u{17b6}"
+        ));
+        assert_eq!(output.matches(INVERSE_SYNC_BOUNDARY).count(), 1);
     }
 }

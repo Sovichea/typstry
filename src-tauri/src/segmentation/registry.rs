@@ -1859,6 +1859,170 @@ fn complete_with_provider(
 mod tests {
     use super::*;
 
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct KhmerReferenceFixture {
+        fixture_version: u32,
+        upstream_commit: String,
+        segmentation: Vec<KhmerSegmentationFixture>,
+        normalization: Vec<KhmerNormalizationFixture>,
+        completion: Vec<KhmerCompletionFixture>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct KhmerSegmentationFixture {
+        name: String,
+        input: String,
+        tokens: Vec<KhmerTokenFixture>,
+    }
+
+    #[derive(Debug, PartialEq, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct KhmerTokenFixture {
+        normalized: String,
+        source: String,
+        from: usize,
+        to: usize,
+        known: bool,
+        #[serde(default)]
+        known_prefix: Option<bool>,
+    }
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct KhmerNormalizationFixture {
+        name: String,
+        input: String,
+        normalized: String,
+        source: String,
+        byte_from: usize,
+        byte_to: usize,
+        from: usize,
+        to: usize,
+        normalized_changed: bool,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct KhmerCompletionFixture {
+        name: String,
+        input: String,
+        cursor: usize,
+        from: usize,
+        to: usize,
+        first: String,
+    }
+
+    fn source_slice_utf16(text: &str, from: usize, to: usize) -> String {
+        let map = utf16_to_byte_boundaries(text);
+        let range = utf16_byte_range(&map, from, to, text.len()).expect("valid fixture range");
+        text[range].to_string()
+    }
+
+    #[test]
+    fn khmer_reference_provider_fixtures_are_locked() {
+        const PINNED_UPSTREAM: &str = "cb7f972843d60bfec767f38802ecb89c40c1c49f";
+        let fixture: KhmerReferenceFixture =
+            serde_json::from_str(include_str!("../../../tests/fixtures/khmer/provider.json"))
+                .expect("Khmer provider reference fixture");
+        assert_eq!(fixture.fixture_version, 1);
+        assert_eq!(fixture.upstream_commit, PINNED_UPSTREAM);
+
+        let provider = KhmerProvider::new().expect("Khmer provider");
+        for example in fixture.segmentation {
+            let analysis = provider
+                .analyze(&example.input)
+                .unwrap_or_else(|error| panic!("{}: {error}", example.name));
+            let actual: Vec<KhmerTokenFixture> = analysis
+                .tokens
+                .iter()
+                .filter(|token| {
+                    token
+                        .text
+                        .chars()
+                        .any(|character| ('\u{1780}'..='\u{17d3}').contains(&character))
+                })
+                .map(|token| KhmerTokenFixture {
+                    normalized: token.text.clone(),
+                    source: source_slice_utf16(&example.input, token.from, token.to),
+                    from: token.from,
+                    to: token.to,
+                    known: token.known,
+                    known_prefix: example
+                        .tokens
+                        .iter()
+                        .find(|expected| expected.from == token.from && expected.to == token.to)
+                        .and_then(|expected| expected.known_prefix)
+                        .map(|_| token.known_prefix),
+                })
+                .collect();
+            assert_eq!(actual, example.tokens, "{}", example.name);
+        }
+
+        for example in fixture.normalization {
+            let upstream = provider
+                .segmenter
+                .segment_detailed(&example.input)
+                .unwrap_or_else(|error| panic!("{} upstream: {error}", example.name));
+            let mapped = upstream
+                .mapped_segments()
+                .iter()
+                .find(|segment| {
+                    &upstream.normalized()[segment.normalized_range.clone()]
+                        == example.normalized.as_str()
+                })
+                .unwrap_or_else(|| panic!("{}: upstream mapped segment not found", example.name));
+            assert_eq!(
+                mapped.source_range.start, example.byte_from,
+                "{}",
+                example.name
+            );
+            assert_eq!(mapped.source_range.end, example.byte_to, "{}", example.name);
+
+            let analysis = provider
+                .analyze(&example.input)
+                .unwrap_or_else(|error| panic!("{}: {error}", example.name));
+            assert_eq!(
+                analysis.normalized_changed, example.normalized_changed,
+                "{}",
+                example.name
+            );
+            let token = analysis
+                .tokens
+                .iter()
+                .find(|token| token.from == example.from && token.to == example.to)
+                .unwrap_or_else(|| panic!("{}: mapped token not found", example.name));
+            assert_eq!(token.text, example.normalized, "{}", example.name);
+            assert_eq!(
+                source_slice_utf16(&example.input, token.from, token.to),
+                example.source,
+                "{}",
+                example.name
+            );
+        }
+
+        for example in fixture.completion {
+            let response = complete_with_provider(
+                &provider,
+                &CompletionRequest {
+                    provider: provider.id().to_string(),
+                    text: example.input,
+                    cursor_utf16: example.cursor,
+                    limit: 10,
+                },
+            )
+            .unwrap_or_else(|error| panic!("{}: {error}", example.name))
+            .unwrap_or_else(|| panic!("{}: completion missing", example.name));
+            assert_eq!(response.from, example.from, "{}", example.name);
+            assert_eq!(response.to, example.to, "{}", example.name);
+            assert_eq!(
+                response.options.first().map(String::as_str),
+                Some(example.first.as_str()),
+                "{}",
+                example.name
+            );
+        }
+    }
+
     #[test]
     fn refreshes_and_ranks_school_completion_for_each_prefix() {
         let provider = KhmerProvider::new().unwrap();

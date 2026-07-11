@@ -3,8 +3,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::scanner::{scan_typst_content, ScanState};
-use super::segment::{prepare_khmer_text_for_rendering, KhmerTextSegmenter};
-use super::sourcemap::{MappingKind, SourceMap};
+use super::segment::{
+    prepare_khmer_text_for_rendering, prepare_markup_for_inverse_sync, KhmerTextSegmenter,
+};
+use super::sourcemap::{MappingKind, SourceMap, SOURCE_MAP_VERSION};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -220,6 +222,14 @@ pub fn prepare_single_in_memory_file(
                 scope,
             );
             generated_content.push_str(&prepared);
+        } else if options.generate_source_map && state == ScanState::MarkupText {
+            let prepared = prepare_markup_for_inverse_sync(
+                chunk_text,
+                start,
+                generated_content.len(),
+                &mut sourcemap,
+            );
+            generated_content.push_str(&prepared);
         } else {
             let gen_start = generated_content.len();
             generated_content.push_str(chunk_text);
@@ -345,18 +355,21 @@ fn process_typ_file(
         if let (Ok(src_meta), Ok(dest_meta)) = (fs::metadata(src), fs::metadata(dest)) {
             if let (Ok(src_mod), Ok(dest_mod)) = (src_meta.modified(), dest_meta.modified()) {
                 if src_mod <= dest_mod {
-                    let map_exists = if options.generate_source_map {
+                    let map_is_current = if options.generate_source_map {
                         let mut map_rel = rel_path.to_path_buf();
                         let ext = map_rel
                             .extension()
                             .and_then(|s| s.to_str())
                             .unwrap_or("typ");
                         map_rel.set_extension(format!("{}.map.json", ext));
-                        maps_dir.join(map_rel).exists()
+                        fs::read_to_string(maps_dir.join(map_rel))
+                            .ok()
+                            .and_then(|content| serde_json::from_str::<SourceMap>(&content).ok())
+                            .is_some_and(|map| map.version == SOURCE_MAP_VERSION)
                     } else {
                         true
                     };
-                    if map_exists {
+                    if map_is_current {
                         return Ok(false);
                     }
                 }
@@ -387,6 +400,14 @@ fn process_typ_file(
                 generated_content.len(),
                 &mut sourcemap,
                 scope,
+            );
+            generated_content.push_str(&prepared);
+        } else if options.generate_source_map && state == ScanState::MarkupText {
+            let prepared = prepare_markup_for_inverse_sync(
+                chunk_text,
+                start,
+                generated_content.len(),
+                &mut sourcemap,
             );
             generated_content.push_str(&prepared);
         } else {

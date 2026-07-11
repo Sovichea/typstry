@@ -2438,8 +2438,11 @@ export class TypstryWorkspaceController {
     }
     const position = point.documentPosition;
     const client = this.lspClient;
-    const rootPath = this.previewRootPath;
-    const taskId = this.previewTaskId;
+    // The displayed PDF may have been compiled from the prepared render cache.
+    // Its physical coordinates are only meaningful to the source-map session
+    // for that exact generated entry file, not the original workspace preview.
+    const rootPath = this.pdfPreviewSourceMapRootPath ?? this.previewRootPath;
+    const taskId = this.pdfPreviewSourceMapTaskId ?? this.previewTaskId;
     if (!position || !client || !rootPath || !taskId || !this.lspReady) {
       this.appendDeveloperLog({
         kind: "warning",
@@ -2462,7 +2465,7 @@ export class TypstryWorkspaceController {
     this.appendDeveloperLog({
       kind: "info",
       source: "inverse sync",
-      message: `Sending compiler inverse position: page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}.`
+      message: `Sending compiler inverse position: page=${position.page_no}, x=${position.x.toFixed(2)}, y=${position.y.toFixed(2)}, root=${rootPath}.`
     });
     sourceMapSession.socket.send(`src-point ${JSON.stringify(position)}`);
   }

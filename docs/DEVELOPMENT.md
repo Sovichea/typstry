@@ -39,6 +39,13 @@ cargo check --manifest-path src-tauri/Cargo.toml --lib
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
+Changes to Khmer editing policies, Unicode utilities, spellcheck, completion, native segmentation, dictionaries, or the pinned segmenter must also keep the focused reference suite passing:
+
+```bash
+bun run test:khmer
+cargo test --manifest-path src-tauri/Cargo.toml --lib khmer_reference_provider_fixtures_are_locked
+```
+
 ## Architecture notes
 
 - Tauri handles native windows, filesystem access, dialogs, settings persistence, and the LSP lifecycle.
@@ -47,6 +54,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib
 - Language analysis is handled by the Rust provider registry. Bundled providers include custom Khmer support and English Hunspell support.
 - Public positioning, feature names, and Basic/Enhanced/Deep language-support criteria are defined in [PRODUCT_DIRECTION.md](./PRODUCT_DIRECTION.md).
 - Script-aware cursor movement and deletion use the frontend policy registry documented in [SCRIPT_EDITING_POLICIES.md](./SCRIPT_EDITING_POLICIES.md).
+- Khmer is the locked reference implementation documented in [KHMER_SPELLCHECK.md](./KHMER_SPELLCHECK.md); its fixtures record the pinned upstream commit and exact editing, normalization, segmentation, and completion behavior.
 - Settings are stored in a versioned `settings.json` in the platform application-config directory.
 
 ## Preview behavior

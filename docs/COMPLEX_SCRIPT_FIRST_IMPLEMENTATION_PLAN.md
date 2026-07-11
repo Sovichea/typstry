@@ -461,21 +461,21 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ### Task checklist
 
-- [ ] **P3.1 — Inventory Khmer behavior.** Record every Khmer-specific editor rule, provider behavior, setting, native command, test fixture, and known limitation.
-- [ ] **P3.2 — Consolidate editing fixtures.** Create table-driven movement, selection, deletion, multi-cursor, malformed-input, and temporary-boundary tests.
-- [ ] **P3.3 — Consolidate provider fixtures.** Add canonical, non-canonical, mixed-script, emoji, ZWSP, ZWNJ, known-word, unknown-word, and completion range cases.
-- [ ] **P3.4 — Lock reproducible segmentation.** Record the pinned upstream commit and expected token output for reference fixtures; reject undocumented heuristic post-processing.
-- [ ] **P3.5 — Verify normalization mapping.** Assert exact source byte and UTF-16 ranges for reordered or combined Khmer sequences and non-BMP text before Khmer.
-- [ ] **P3.6 — Document correction limitations.** Keep correction capability disabled and add a tracked condition for enabling it only after reliable intended-word spans exist.
-- [ ] **P3.7 — Publish the reference architecture.** Add the frontend-policy versus Rust-provider diagram and an end-to-end request example to the Khmer documentation.
-- [ ] **P3.8 — Add a permanent regression suite.** Run the locked Khmer fixtures whenever a policy, provider, completion controller, or Unicode utility changes.
+- [x] **P3.1 — Inventory Khmer behavior.** Record every Khmer-specific editor rule, provider behavior, setting, native command, test fixture, and known limitation.
+- [x] **P3.2 — Consolidate editing fixtures.** Create table-driven movement, selection, deletion, multi-cursor, malformed-input, and temporary-boundary tests.
+- [x] **P3.3 — Consolidate provider fixtures.** Add canonical, non-canonical, mixed-script, emoji, ZWSP, ZWNJ, known-word, unknown-word, and completion range cases.
+- [x] **P3.4 — Lock reproducible segmentation.** Record the pinned upstream commit and expected token output for reference fixtures; reject undocumented heuristic post-processing.
+- [x] **P3.5 — Verify normalization mapping.** Assert exact source byte and UTF-16 ranges for reordered or combined Khmer sequences and non-BMP text before Khmer.
+- [x] **P3.6 — Document correction limitations.** Keep correction capability disabled and add a tracked condition for enabling it only after reliable intended-word spans exist.
+- [x] **P3.7 — Publish the reference architecture.** Add the frontend-policy versus Rust-provider diagram and an end-to-end request example to the Khmer documentation.
+- [x] **P3.8 — Add a permanent regression suite.** Run the locked Khmer fixtures whenever a policy, provider, completion controller, or Unicode utility changes.
 
 ### Acceptance criteria
 
-- [ ] Khmer navigation and deletion tests remain unchanged when other policies are registered.
-- [ ] No editor-only boundary marker enters the saved document, LSP input, preview input, or clipboard.
-- [ ] Spellcheck issues and completion replacements retain exact source ranges after normalization.
-- [ ] Known segmentation limitations are visible in developer documentation.
+- [x] Khmer navigation and deletion tests remain unchanged when other policies are registered.
+- [x] No editor-only boundary marker enters the saved document, LSP input, preview input, or clipboard.
+- [x] Spellcheck issues and completion replacements retain exact source ranges after normalization.
+- [x] Known segmentation limitations are visible in developer documentation.
 
 ## Phase 4: Build honest language onboarding
 
