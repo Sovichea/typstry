@@ -4,11 +4,19 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use unicode_normalization::UnicodeNormalization;
 use zip::write::FileOptions;
 
 pub const PROJECT_FORMAT: &str = "com.typstry.project";
 pub const PROJECT_SCHEMA_VERSION: u32 = 1;
 pub const PROJECT_MANIFEST_PATH: &str = ".typstry/project.json";
+const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES: usize = 20_000;
+const MAX_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
+const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+const MAX_PATH_BYTES: usize = 512;
+const MAX_COMPRESSION_RATIO: u64 = 200;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,6 +109,37 @@ pub struct ProjectExport<'a> {
     pub tinymist_version: &'a str,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveInspection {
+    pub manifest: ProjectManifest,
+    pub manifest_sha256: String,
+    pub entry_count: usize,
+    pub total_uncompressed_bytes: u64,
+    pub suggested_folder_name: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedProject {
+    pub workspace_path: String,
+    pub main_file_path: String,
+    pub manifest: ProjectManifest,
+}
+
+#[derive(Clone, Debug)]
+struct ValidatedArchiveEntry {
+    index: usize,
+    path: String,
+    is_directory: bool,
+    size: u64,
+}
+
+struct ValidatedArchive {
+    inspection: ArchiveInspection,
+    entries: Vec<ValidatedArchiveEntry>,
+}
+
 pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(), String> {
     if manifest.format != PROJECT_FORMAT {
         return Err(format!(
@@ -121,6 +160,7 @@ pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(),
     if manifest.project.name.trim().is_empty() {
         return Err("The project name is empty.".to_string());
     }
+    validate_portable_component(&manifest.project.name)?;
     validate_archive_path(&manifest.project.main)?;
     if !manifest.project.main.ends_with(".typ") {
         return Err("The project main file must be a .typ file.".to_string());
@@ -154,6 +194,184 @@ pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(),
         }
     }
     Ok(())
+}
+
+pub fn inspect_typstry_project(archive_path: &Path) -> Result<ArchiveInspection, String> {
+    let file = open_archive_file(archive_path)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|error| format!("The selected file is not a valid ZIP archive: {error}"))?;
+    Ok(validate_open_archive(&mut archive)?.inspection)
+}
+
+pub fn import_typstry_project(
+    archive_path: &Path,
+    destination_path: &Path,
+    expected_manifest_sha256: &str,
+) -> Result<ImportedProject, String> {
+    let file = open_archive_file(archive_path)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|error| format!("The selected file is not a valid ZIP archive: {error}"))?;
+    let validated = validate_open_archive(&mut archive)?;
+    if validated.inspection.manifest_sha256 != expected_manifest_sha256 {
+        return Err(
+            "The project archive changed after inspection. Select the archive again.".to_string(),
+        );
+    }
+
+    let parent_input = destination_path.parent().ok_or_else(|| {
+        format!(
+            "The import destination '{}' has no parent directory.",
+            destination_path.display()
+        )
+    })?;
+    let destination_name = destination_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "The import destination name is not valid Unicode.".to_string())?;
+    validate_portable_component(destination_name)?;
+    let parent = std::fs::canonicalize(parent_input).map_err(|error| {
+        format!(
+            "Failed to resolve import destination '{}': {error}",
+            parent_input.display()
+        )
+    })?;
+    if !parent.is_dir() {
+        return Err("The import destination parent is not a directory.".to_string());
+    }
+    let destination = parent.join(destination_name);
+    if destination.exists() {
+        return Err(format!(
+            "The import destination already exists: '{}'. Choose another location.",
+            destination.display()
+        ));
+    }
+
+    let staging = tempfile::Builder::new()
+        .prefix(".typstry-import-")
+        .tempdir_in(&parent)
+        .map_err(|error| format!("Failed to create import staging directory: {error}"))?;
+    let mut extracted_files = HashSet::new();
+    for metadata in &validated.entries {
+        let target = join_archive_path(staging.path(), &metadata.path);
+        if metadata.is_directory {
+            std::fs::create_dir_all(&target).map_err(|error| {
+                format!(
+                    "Failed to create imported directory '{}': {error}",
+                    target.display()
+                )
+            })?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "Failed to create imported directory '{}': {error}",
+                    parent.display()
+                )
+            })?;
+        }
+        let mut entry = archive.by_index(metadata.index).map_err(|error| {
+            format!(
+                "Failed to reopen archive entry '{}': {error}",
+                metadata.path
+            )
+        })?;
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map_err(|error| {
+                format!(
+                    "Failed to create imported file '{}': {error}",
+                    target.display()
+                )
+            })?;
+        let mut hasher = Sha256::new();
+        let mut written = 0_u64;
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let count = entry.read(&mut buffer).map_err(|error| {
+                format!("Failed to read archive entry '{}': {error}", metadata.path)
+            })?;
+            if count == 0 {
+                break;
+            }
+            written = written
+                .checked_add(count as u64)
+                .ok_or_else(|| format!("Archive entry '{}' is too large.", metadata.path))?;
+            if written > metadata.size || written > MAX_ENTRY_BYTES {
+                return Err(format!(
+                    "Archive entry '{}' expanded beyond its declared size.",
+                    metadata.path
+                ));
+            }
+            hasher.update(&buffer[..count]);
+            output.write_all(&buffer[..count]).map_err(|error| {
+                format!(
+                    "Failed to write imported file '{}': {error}",
+                    target.display()
+                )
+            })?;
+        }
+        if written != metadata.size {
+            return Err(format!(
+                "Archive entry '{}' did not match its declared size.",
+                metadata.path
+            ));
+        }
+        if metadata.path != PROJECT_MANIFEST_PATH {
+            let expected = validated
+                .inspection
+                .manifest
+                .integrity
+                .files
+                .get(&metadata.path)
+                .ok_or_else(|| {
+                    format!(
+                        "Archive entry '{}' is not declared by the manifest.",
+                        metadata.path
+                    )
+                })?;
+            let actual = format!("{:x}", hasher.finalize());
+            if &actual != expected {
+                return Err(format!(
+                    "Integrity verification failed for '{}'. The project was not imported.",
+                    metadata.path
+                ));
+            }
+            extracted_files.insert(metadata.path.clone());
+        }
+    }
+    let declared_files = validated
+        .inspection
+        .manifest
+        .integrity
+        .files
+        .keys()
+        .cloned()
+        .collect::<HashSet<_>>();
+    if extracted_files != declared_files {
+        return Err("The archive contents do not match the integrity manifest.".to_string());
+    }
+
+    let staged_path = staging.keep();
+    if let Err(error) = std::fs::rename(&staged_path, &destination) {
+        let _ = std::fs::remove_dir_all(&staged_path);
+        return Err(format!(
+            "Failed to activate imported project '{}': {error}",
+            destination.display()
+        ));
+    }
+    let display_destination = dunce::simplified(&destination).to_path_buf();
+    let main_file = join_archive_path(
+        &display_destination,
+        &validated.inspection.manifest.project.main,
+    );
+    Ok(ImportedProject {
+        workspace_path: display_destination.to_string_lossy().to_string(),
+        main_file_path: main_file.to_string_lossy().to_string(),
+        manifest: validated.inspection.manifest,
+    })
 }
 
 pub fn export_source_zip(workspace_root: &Path, archive_path: &Path) -> Result<(), String> {
@@ -230,6 +448,229 @@ pub fn export_typstry_project(options: ProjectExport<'_>) -> Result<ProjectManif
         write_snapshots(writer, &files)
     })?;
     Ok(manifest)
+}
+
+fn open_archive_file(path: &Path) -> Result<File, String> {
+    require_extension(path, "typstry")?;
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        format!(
+            "Failed to inspect project archive '{}': {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err("The selected project archive is not a file.".to_string());
+    }
+    if metadata.len() > MAX_ARCHIVE_BYTES {
+        return Err(format!(
+            "The project archive is larger than the {} MiB limit.",
+            MAX_ARCHIVE_BYTES / 1024 / 1024
+        ));
+    }
+    File::open(path).map_err(|error| {
+        format!(
+            "Failed to open project archive '{}': {error}",
+            path.display()
+        )
+    })
+}
+
+fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedArchive, String> {
+    if file.len() == 0 || file.len() > MAX_ARCHIVE_ENTRIES {
+        return Err(format!(
+            "The project archive must contain between 1 and {MAX_ARCHIVE_ENTRIES} entries."
+        ));
+    }
+    let mut entries = Vec::with_capacity(file.len());
+    let mut normalized_paths = HashSet::new();
+    let mut manifest_index = None;
+    let mut total_uncompressed = 0_u64;
+
+    for index in 0..file.len() {
+        let entry = file
+            .by_index(index)
+            .map_err(|error| format!("Failed to inspect archive entry {index}: {error}"))?;
+        if entry.encrypted() {
+            return Err(format!(
+                "Encrypted archive entries are not supported: '{}'.",
+                entry.name()
+            ));
+        }
+        let raw_name = std::str::from_utf8(entry.name_raw()).map_err(|_| {
+            "The project archive contains a filename that is not UTF-8.".to_string()
+        })?;
+        let is_directory = entry.is_dir();
+        let path = if is_directory {
+            raw_name.trim_end_matches('/')
+        } else {
+            raw_name
+        };
+        validate_archive_path(path)?;
+        validate_portable_archive_path(path)?;
+        if path.as_bytes().len() > MAX_PATH_BYTES {
+            return Err(format!(
+                "Archive path exceeds {MAX_PATH_BYTES} bytes: '{path}'."
+            ));
+        }
+        let normalized = normalized_archive_key(path);
+        if !normalized_paths.insert(normalized) {
+            return Err(format!(
+                "The archive contains duplicate or cross-platform-colliding paths: '{path}'."
+            ));
+        }
+        let size = entry.size();
+        let compressed_size = entry.compressed_size();
+        if size > MAX_ENTRY_BYTES {
+            return Err(format!(
+                "Archive entry '{}' exceeds the {} MiB per-file limit.",
+                path,
+                MAX_ENTRY_BYTES / 1024 / 1024
+            ));
+        }
+        total_uncompressed = total_uncompressed
+            .checked_add(size)
+            .ok_or_else(|| "The archive's uncompressed size overflowed.".to_string())?;
+        if total_uncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES {
+            return Err(format!(
+                "The archive exceeds the {} MiB uncompressed-size limit.",
+                MAX_TOTAL_UNCOMPRESSED_BYTES / 1024 / 1024
+            ));
+        }
+        if size > 1024 * 1024
+            && (compressed_size == 0 || size / compressed_size.max(1) > MAX_COMPRESSION_RATIO)
+        {
+            return Err(format!(
+                "Archive entry '{}' has an unsafe compression ratio.",
+                path
+            ));
+        }
+        validate_unix_entry_type(entry.unix_mode(), is_directory, path)?;
+        if path == PROJECT_MANIFEST_PATH {
+            if is_directory || manifest_index.replace(index).is_some() {
+                return Err(
+                    "The archive must contain exactly one project manifest file.".to_string(),
+                );
+            }
+            if size > MAX_MANIFEST_BYTES {
+                return Err("The project manifest is larger than 1 MiB.".to_string());
+            }
+        }
+        entries.push(ValidatedArchiveEntry {
+            index,
+            path: path.to_string(),
+            is_directory,
+            size,
+        });
+    }
+
+    let manifest_index = manifest_index
+        .ok_or_else(|| format!("The archive does not contain '{PROJECT_MANIFEST_PATH}'."))?;
+    let mut manifest_entry = file
+        .by_index(manifest_index)
+        .map_err(|error| format!("Failed to read project manifest: {error}"))?;
+    let mut manifest_bytes = Vec::with_capacity(manifest_entry.size() as usize);
+    manifest_entry
+        .read_to_end(&mut manifest_bytes)
+        .map_err(|error| format!("Failed to read project manifest: {error}"))?;
+    if manifest_bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err("The project manifest is larger than 1 MiB.".to_string());
+    }
+    let manifest: ProjectManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("The project manifest is invalid JSON: {error}"))?;
+    validate_manifest_compatibility(&manifest)?;
+
+    let archive_files = entries
+        .iter()
+        .filter(|entry| !entry.is_directory && entry.path != PROJECT_MANIFEST_PATH)
+        .map(|entry| entry.path.as_str())
+        .collect::<HashSet<_>>();
+    let declared_files = manifest
+        .integrity
+        .files
+        .keys()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    if archive_files != declared_files {
+        return Err(
+            "The archive file list does not exactly match integrity.files in the manifest."
+                .to_string(),
+        );
+    }
+
+    Ok(ValidatedArchive {
+        inspection: ArchiveInspection {
+            manifest_sha256: sha256_hex(&manifest_bytes),
+            entry_count: entries.len(),
+            total_uncompressed_bytes: total_uncompressed,
+            suggested_folder_name: manifest.project.name.clone(),
+            manifest,
+        },
+        entries,
+    })
+}
+
+fn normalized_archive_key(path: &str) -> String {
+    path.nfc().collect::<String>().to_lowercase()
+}
+
+fn validate_unix_entry_type(
+    mode: Option<u32>,
+    is_directory: bool,
+    path: &str,
+) -> Result<(), String> {
+    if let Some(mode) = mode {
+        let kind = mode & 0o170000;
+        let expected = if is_directory { 0o040000 } else { 0o100000 };
+        if kind != 0 && kind != expected {
+            return Err(format!(
+                "Archive entry '{}' is a symbolic link or unsupported special file.",
+                path
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_portable_archive_path(path: &str) -> Result<(), String> {
+    for component in path.split('/') {
+        validate_portable_component(component)?;
+    }
+    Ok(())
+}
+
+fn validate_portable_component(component: &str) -> Result<(), String> {
+    if component.trim().is_empty()
+        || component.ends_with(' ')
+        || component.ends_with('.')
+        || component.chars().any(|value| value.is_control())
+        || component.contains(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
+    {
+        return Err(format!("Path component is not portable: '{component}'."));
+    }
+    let stem = component
+        .split('.')
+        .next()
+        .unwrap_or(component)
+        .to_ascii_uppercase();
+    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit()
+            && stem.as_bytes()[3] != b'0');
+    if reserved {
+        return Err(format!(
+            "Path component uses a reserved Windows name: '{component}'."
+        ));
+    }
+    Ok(())
+}
+
+fn join_archive_path(root: &Path, path: &str) -> PathBuf {
+    let mut result = root.to_path_buf();
+    for component in path.split('/') {
+        result.push(component);
+    }
+    result
 }
 
 fn canonical_workspace_root(workspace_root: &Path) -> Result<PathBuf, String> {
@@ -510,6 +951,20 @@ mod tests {
         .unwrap()
     }
 
+    fn write_custom_archive(path: &Path, entries: &[(&str, &[u8], Option<u32>)]) {
+        let file = File::create(path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        for (name, bytes, permissions) in entries {
+            let mut options = deterministic_file_options();
+            if let Some(permissions) = permissions {
+                options = options.unix_permissions(*permissions);
+            }
+            writer.start_file(*name, options).unwrap();
+            writer.write_all(bytes).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+
     #[test]
     fn project_manifest_round_trips_and_validates() {
         let workspace = create_workspace();
@@ -617,6 +1072,150 @@ mod tests {
         let error = write_archive(&archive, |writer| write_snapshots(writer, &files)).unwrap_err();
         assert!(error.contains("changed during export"));
         assert!(!archive.exists());
+    }
+
+    #[test]
+    fn preflight_and_transactional_import_succeed() {
+        let workspace = create_workspace();
+        let output = tempfile::tempdir().unwrap();
+        let archive = output.path().join("valid.typstry");
+        export_project(workspace.path(), &archive);
+        let inspection = inspect_typstry_project(&archive).unwrap();
+        let destination = output.path().join("imported-project");
+        let imported =
+            import_typstry_project(&archive, &destination, &inspection.manifest_sha256).unwrap();
+        assert_eq!(Path::new(&imported.workspace_path), destination);
+        assert!(destination.join("main.typ").is_file());
+        assert!(destination.join("chapters").join("ខ្មែរ.typ").is_file());
+        assert!(!destination.join(".typstry").join("cache.txt").exists());
+        assert!(destination.join(PROJECT_MANIFEST_PATH).is_file());
+    }
+
+    #[test]
+    fn preflight_rejects_traversal_collisions_and_symlinks() {
+        let output = tempfile::tempdir().unwrap();
+
+        let traversal = output.path().join("traversal.typstry");
+        write_custom_archive(&traversal, &[("../outside.typ", b"bad", None)]);
+        assert!(inspect_typstry_project(&traversal)
+            .unwrap_err()
+            .contains("Invalid project archive path"));
+
+        let collision = output.path().join("collision.typstry");
+        write_custom_archive(
+            &collision,
+            &[("Main.typ", b"one", None), ("main.typ", b"two", None)],
+        );
+        assert!(inspect_typstry_project(&collision)
+            .unwrap_err()
+            .contains("colliding paths"));
+
+        assert!(validate_unix_entry_type(Some(0o120777), false, "link.typ")
+            .unwrap_err()
+            .contains("symbolic link"));
+
+        let unicode_collision = output.path().join("unicode-collision.typstry");
+        write_custom_archive(
+            &unicode_collision,
+            &[("é.typ", b"one", None), ("e\u{301}.typ", b"two", None)],
+        );
+        assert!(inspect_typstry_project(&unicode_collision)
+            .unwrap_err()
+            .contains("colliding paths"));
+
+        let reserved = output.path().join("reserved.typstry");
+        write_custom_archive(&reserved, &[("CON.typ", b"bad", None)]);
+        assert!(inspect_typstry_project(&reserved)
+            .unwrap_err()
+            .contains("reserved Windows name"));
+    }
+
+    #[test]
+    fn preflight_rejects_zip_bomb_compression_ratio() {
+        let output = tempfile::tempdir().unwrap();
+        let archive = output.path().join("ratio.typstry");
+        let zeros = vec![0_u8; 2 * 1024 * 1024];
+        write_custom_archive(&archive, &[("large.bin", &zeros, None)]);
+        assert!(inspect_typstry_project(&archive)
+            .unwrap_err()
+            .contains("unsafe compression ratio"));
+    }
+
+    #[test]
+    fn failed_integrity_leaves_no_destination() {
+        let output = tempfile::tempdir().unwrap();
+        let archive = output.path().join("bad-hash.typstry");
+        let mut files = BTreeMap::new();
+        files.insert("main.typ".to_string(), sha256_hex(b"expected"));
+        let manifest = ProjectManifest {
+            format: PROJECT_FORMAT.to_string(),
+            schema_version: PROJECT_SCHEMA_VERSION,
+            created_by: CreatedBy {
+                application: "Typstry".to_string(),
+                version: "1.0.0".to_string(),
+            },
+            project: ProjectIdentity {
+                name: "imported-project".to_string(),
+                main: "main.typ".to_string(),
+            },
+            toolchain: ProjectToolchain {
+                typst_version: "0.13.1".to_string(),
+                tinymist_version: "0.13.10".to_string(),
+                compatibility: ToolchainCompatibility::Exact,
+            },
+            render_environment: RenderEnvironment {
+                fonts_packaged: false,
+            },
+            fonts: vec![],
+            integrity: ProjectIntegrity {
+                algorithm: "sha256".to_string(),
+                files,
+            },
+        };
+        let manifest_bytes = serde_json::to_vec_pretty(&manifest).unwrap();
+        write_custom_archive(
+            &archive,
+            &[
+                (PROJECT_MANIFEST_PATH, &manifest_bytes, None),
+                ("main.typ", b"tampered", None),
+            ],
+        );
+        let inspection = inspect_typstry_project(&archive).unwrap();
+        let destination = output.path().join("imported-project");
+        let error = import_typstry_project(&archive, &destination, &inspection.manifest_sha256)
+            .unwrap_err();
+        assert!(error.contains("Integrity verification failed"));
+        assert!(!destination.exists());
+        assert!(!output
+            .path()
+            .read_dir()
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".typstry-import-")));
+    }
+
+    #[test]
+    fn changed_archive_and_existing_destination_are_rejected() {
+        let workspace = create_workspace();
+        let output = tempfile::tempdir().unwrap();
+        let archive = output.path().join("checked.typstry");
+        export_project(workspace.path(), &archive);
+        let inspection = inspect_typstry_project(&archive).unwrap();
+        let destination = output.path().join("existing");
+        std::fs::create_dir(&destination).unwrap();
+        assert!(
+            import_typstry_project(&archive, &destination, &inspection.manifest_sha256,)
+                .unwrap_err()
+                .contains("already exists")
+        );
+        assert!(
+            import_typstry_project(&archive, &output.path().join("other"), "0")
+                .unwrap_err()
+                .contains("changed after inspection")
+        );
     }
 
     #[cfg(unix)]

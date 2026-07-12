@@ -2,7 +2,7 @@
 
 ## Status
 
-Schema version 1 is introduced by `V1-I.1` through `V1-I.5`. It currently binds source to exact Typst/Tinymist versions and provides deterministic source integrity. `renderEnvironment.fontsPackaged` remains `false` until `V1-I.18` through `V1-I.24` implement verified font packaging. An archive with `fontsPackaged: false` must not be described as hermetically render-reproducible.
+Schema version 1 is implemented through `V1-I.10`. It binds source to exact Typst/Tinymist versions, provides deterministic source integrity, supports secure preflight and transactional import, and presents an explicit compatibility decision. `renderEnvironment.fontsPackaged` remains `false` until `V1-I.18` through `V1-I.24` implement verified font packaging. An archive with `fontsPackaged: false` must not be described as hermetically render-reproducible.
 
 ## Container
 
@@ -69,6 +69,32 @@ The locked frontend fixture is [`tests/fixtures/projectArchive/manifest-v1.json`
 4. `fontsPackaged: false` means source/toolchain integrity is available but font equivalence is not guaranteed.
 5. A path is invalid when it is absolute, contains `..`, uses backslashes, contains an empty component, or is not valid Unicode.
 6. Every file must match its recorded digest before an import can be promoted successfully.
+
+## Import preflight limits
+
+Preflight reads the ZIP central directory and manifest only. Nothing is extracted at this stage.
+
+- Maximum archive file size: 512 MiB.
+- Maximum entries: 20,000.
+- Maximum entry size: 256 MiB.
+- Maximum total uncompressed size: 1 GiB.
+- Maximum manifest size: 1 MiB.
+- Maximum UTF-8 archive path: 512 bytes.
+- Maximum compression ratio for entries larger than 1 MiB: 200:1.
+- Encrypted entries, symbolic links, special files, non-UTF-8 names, unsafe relative paths, Windows reserved names, trailing dots/spaces, control characters, normalized Unicode collisions, and case-folded collisions are rejected.
+- The non-directory archive entries must match `integrity.files` exactly, except for `.typstry/project.json` itself.
+
+Import repeats preflight immediately before extraction and compares the manifest SHA-256 with the value shown to the user. Files are written into a hidden staging directory beside the destination, hashed while streaming, and promoted by directory rename only after every declared file verifies. Existing destination folders are never overwritten.
+
+## Toolchain decision
+
+The importer classifies the recorded toolchain as:
+
+- `exact-active`: recorded Tinymist and embedded Typst are active;
+- `exact-installed`: the exact pair is installed and can be selected;
+- `download-required`: the recorded Tinymist must be downloaded and its reported embedded Typst version verified.
+
+The user may deliberately import with the current toolchain after a separate warning, but Typstry displays that rendering compatibility is not guaranteed. A downloaded executable whose embedded Typst version differs from the manifest is rejected before extraction.
 
 ## Deterministic export
 

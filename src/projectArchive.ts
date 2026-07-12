@@ -43,6 +43,25 @@ export type TypstryProjectFont = {
   };
 };
 
+export type ProjectToolchainState = "exact-active" | "exact-installed" | "download-required";
+
+export type TypstryProjectPreflight = {
+  manifest: TypstryProjectManifest;
+  manifestSha256: string;
+  entryCount: number;
+  totalUncompressedBytes: number;
+  suggestedFolderName: string;
+  toolchainState: ProjectToolchainState;
+  activeTypstVersion: string | null;
+  activeTinymistVersion: string | null;
+};
+
+export type ImportedTypstryProject = {
+  workspacePath: string;
+  mainFilePath: string;
+  manifest: TypstryProjectManifest;
+};
+
 function objectValue(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object.`);

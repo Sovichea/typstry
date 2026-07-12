@@ -43,6 +43,7 @@ import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchain
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { typographyEdit, type DocumentTypography } from "./editor/documentTypography";
 import { SpellcheckController, type SpellingIssue } from "./editor/spellcheck";
+import type { ImportedTypstryProject, TypstryProjectPreflight } from "./projectArchive";
 
 import {
   ensureTypographyTemplateApplication,
@@ -3671,6 +3672,197 @@ export class TypstryWorkspaceController {
     await this.explorer.loadWorkspace(selected);
   }
 
+  private async importTypstryProject(archivePath?: string): Promise<void> {
+    const selected = archivePath ?? await open({
+      directory: false,
+      multiple: false,
+      filters: [{ name: "Typstry Project", extensions: ["typstry"] }]
+    });
+    if (typeof selected !== "string") return;
+
+    try {
+      this.setLspStatus({ kind: "starting", message: "Inspecting Typstry project..." });
+      let inspection = await invoke<TypstryProjectPreflight>("inspect_typstry_project", {
+        archivePath: selected
+      });
+      const requiredTinymist = inspection.manifest.toolchain.tinymistVersion;
+      const requiredTypst = inspection.manifest.toolchain.typstVersion;
+      let allowIncompatibleToolchain = false;
+
+      if (inspection.toolchainState === "exact-installed") {
+        const useInstalled = await confirm(
+          `This project requires Tinymist ${requiredTinymist} with Typst ${requiredTypst}. ` +
+          "The compatible version is installed but not active. Use it for this import?",
+          {
+            title: "Compatible Toolchain Available",
+            kind: "info",
+            okLabel: "Use Compatible Version",
+            cancelLabel: "Other Options"
+          }
+        );
+        if (useInstalled) {
+          const status = await invoke<ToolchainStatus>("select_project_toolchain", {
+            tinymistVersion: requiredTinymist,
+            typstVersion: requiredTypst
+          });
+          this.settingsController.update(settings => {
+            settings.toolchain.tinymistVersion = requiredTinymist;
+          });
+          await this.handleToolchainChanged(status);
+          inspection = await invoke<TypstryProjectPreflight>("inspect_typstry_project", {
+            archivePath: selected
+          });
+        } else {
+          allowIncompatibleToolchain = await this.confirmIncompatibleProjectImport(inspection);
+          if (!allowIncompatibleToolchain) return;
+        }
+      } else if (inspection.toolchainState === "download-required") {
+        const downloadCompatible = await confirm(
+          `This project was exported with Tinymist ${requiredTinymist}, which embeds Typst ${requiredTypst}. ` +
+          "Download and activate that compatible version before importing?",
+          {
+            title: "Compatible Toolchain Required",
+            kind: "info",
+            okLabel: "Download Compatible Version",
+            cancelLabel: "Other Options"
+          }
+        );
+        if (downloadCompatible) {
+          try {
+            this.setLspStatus({
+              kind: "starting",
+              message: `Downloading Tinymist ${requiredTinymist} for imported project...`
+            });
+            const status = await invoke<ToolchainStatus>("install_tinymist_toolchain", {
+              version: requiredTinymist
+            });
+            const exact = status.tinymistVersion === requiredTinymist
+              && status.typstVersion === requiredTypst;
+            await this.handleToolchainChanged(status);
+            if (!exact) {
+              inspection = {
+                ...inspection,
+                activeTinymistVersion: status.tinymistVersion,
+                activeTypstVersion: status.typstVersion
+              };
+              const useMismatch = await confirm(
+                `Downloaded Tinymist ${status.tinymistVersion ?? "unknown"} reports Typst ` +
+                `${status.typstVersion ?? "unknown"}, but the project requires Typst ${requiredTypst}.\n\n` +
+                "Import with this incompatible version anyway?",
+                {
+                  title: "Downloaded Toolchain Is Incompatible",
+                  kind: "warning",
+                  okLabel: "Import Anyway",
+                  cancelLabel: "Cancel"
+                }
+              );
+              if (!useMismatch) return;
+              allowIncompatibleToolchain = true;
+            } else {
+              this.settingsController.update(settings => {
+                settings.toolchain.tinymistVersion = requiredTinymist;
+              });
+              inspection = await invoke<TypstryProjectPreflight>("inspect_typstry_project", {
+                archivePath: selected
+              });
+            }
+          } catch (downloadError) {
+            const recovered = await invoke<ToolchainStatus>("get_toolchain_status").catch(() => null);
+            if (recovered) {
+              await this.handleToolchainChanged(recovered);
+              inspection = {
+                ...inspection,
+                activeTinymistVersion: recovered.tinymistVersion,
+                activeTypstVersion: recovered.typstVersion
+              };
+            }
+            const importAfterFailure = await confirm(
+              `The compatible toolchain could not be downloaded or verified.\n\n${String(downloadError)}\n\n` +
+              "Import with the current environment without a compatibility guarantee?",
+              {
+                title: "Compatible Toolchain Unavailable",
+                kind: "warning",
+                okLabel: "Import Anyway",
+                cancelLabel: "Cancel"
+              }
+            );
+            if (!importAfterFailure) return;
+            allowIncompatibleToolchain = true;
+          }
+        } else {
+          allowIncompatibleToolchain = await this.confirmIncompatibleProjectImport(inspection);
+          if (!allowIncompatibleToolchain) return;
+        }
+      }
+
+      if (!allowIncompatibleToolchain && inspection.toolchainState !== "exact-active") {
+        throw new Error("The required project toolchain could not be activated.");
+      }
+      const destinationParent = await open({
+        directory: true,
+        multiple: false,
+        title: "Choose where to import the project"
+      });
+      if (typeof destinationParent !== "string") return;
+      const destinationPath = await join(destinationParent, inspection.suggestedFolderName);
+      const sizeMiB = (inspection.totalUncompressedBytes / 1024 / 1024).toFixed(1);
+      const fontNotice = inspection.manifest.renderEnvironment.fontsPackaged
+        ? ""
+        : "\n\nThis archive does not contain a verified render-font package; font equivalence is not guaranteed.";
+      const confirmed = await confirm(
+        `Import “${inspection.manifest.project.name}” to:\n${destinationPath}\n\n` +
+        `${inspection.entryCount} archive entries, ${sizeMiB} MiB uncompressed.${fontNotice}`,
+        {
+          title: "Import Typstry Project",
+          kind: "info",
+          okLabel: "Import Project",
+          cancelLabel: "Cancel"
+        }
+      );
+      if (!confirmed) return;
+
+      this.setLspStatus({ kind: "starting", message: "Verifying and importing project..." });
+      const imported = await invoke<ImportedTypstryProject>("import_typstry_project", {
+        archivePath: selected,
+        destinationPath,
+        expectedManifestSha256: inspection.manifestSha256,
+        allowIncompatibleToolchain
+      });
+      await this.openWorkspace(imported.workspacePath);
+      if (this.workspaceRootPath && filePathKey(this.workspaceRootPath) === filePathKey(imported.workspacePath)) {
+        await this.loadFile(imported.mainFilePath, { temporary: false });
+        this.setLspStatus({ kind: "preview-ready", message: `Imported ${imported.manifest.project.name}` });
+      } else {
+        await message(`The project was imported to:\n\n${imported.workspacePath}`, {
+          title: "Project Imported",
+          kind: "info"
+        });
+      }
+    } catch (error) {
+      this.setLspStatus({ kind: "error", message: `Project import failed: ${error}` });
+      await message(String(error), { title: "Typstry Project Import Failed", kind: "error" });
+    }
+  }
+
+  private async confirmIncompatibleProjectImport(
+    inspection: TypstryProjectPreflight
+  ): Promise<boolean> {
+    const active = inspection.activeTinymistVersion && inspection.activeTypstVersion
+      ? `Current: Tinymist ${inspection.activeTinymistVersion}, Typst ${inspection.activeTypstVersion}.`
+      : "No validated toolchain is currently active.";
+    return confirm(
+      `The project requires Tinymist ${inspection.manifest.toolchain.tinymistVersion} with ` +
+      `Typst ${inspection.manifest.toolchain.typstVersion}. ${active}\n\n` +
+      "Importing with the current environment is allowed, but rendering compatibility is not guaranteed.",
+      {
+        title: "Import Without Compatibility Guarantee?",
+        kind: "warning",
+        okLabel: "Import Anyway",
+        cancelLabel: "Cancel"
+      }
+    );
+  }
+
   private async closeOtherTabs(pathToKeep: string) {
     const tabsToClose = this.openTabs.filter(tab => tab.path !== pathToKeep);
     for (const tab of tabsToClose) {
@@ -3960,16 +4152,7 @@ export class TypstryWorkspaceController {
     });
 
     document.getElementById("action-import-project")?.addEventListener("click", async () => {
-      const selected = await open({
-        directory: false,
-        multiple: false,
-        filters: [{ name: "Typstry Project", extensions: ["typstry"] }]
-      });
-      if (typeof selected !== "string") return;
-      await message(
-        `Secure project import is not available in this implementation phase. Nothing was extracted from:\n\n${selected}`,
-        { title: "Import Typstry Project", kind: "info" }
-      );
+      await this.importTypstryProject();
     });
     
     document.getElementById("action-restart-workspace")?.addEventListener("click", () => {

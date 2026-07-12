@@ -91,6 +91,19 @@ struct SettingsFilePayload {
     settings: Option<serde_json::Value>,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectImportPreflight {
+    manifest: project_archive::ProjectManifest,
+    manifest_sha256: String,
+    entry_count: usize,
+    total_uncompressed_bytes: u64,
+    suggested_folder_name: String,
+    toolchain_state: toolchain::ProjectToolchainState,
+    active_typst_version: Option<String>,
+    active_tinymist_version: Option<String>,
+}
+
 fn settings_file_path(app_handle: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app_handle
         .path()
@@ -1756,6 +1769,94 @@ async fn export_typstry_project(
     .map_err(|error| format!("Typstry project export task failed: {error}"))?
 }
 
+#[tauri::command]
+async fn inspect_typstry_project(
+    app_handle: tauri::AppHandle,
+    archive_path: String,
+) -> Result<ProjectImportPreflight, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get data dir: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let inspection = project_archive::inspect_typstry_project(Path::new(&archive_path))?;
+        let active = toolchain::status(&data_dir);
+        let toolchain_state = toolchain::project_toolchain_state(
+            &data_dir,
+            &inspection.manifest.toolchain.tinymist_version,
+            &inspection.manifest.toolchain.typst_version,
+        );
+        Ok(ProjectImportPreflight {
+            manifest: inspection.manifest,
+            manifest_sha256: inspection.manifest_sha256,
+            entry_count: inspection.entry_count,
+            total_uncompressed_bytes: inspection.total_uncompressed_bytes,
+            suggested_folder_name: inspection.suggested_folder_name,
+            toolchain_state,
+            active_typst_version: active.typst_version,
+            active_tinymist_version: active.tinymist_version,
+        })
+    })
+    .await
+    .map_err(|error| format!("Project inspection task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn import_typstry_project(
+    app_handle: tauri::AppHandle,
+    archive_path: String,
+    destination_path: String,
+    expected_manifest_sha256: String,
+    allow_incompatible_toolchain: bool,
+) -> Result<project_archive::ImportedProject, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get data dir: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let inspection = project_archive::inspect_typstry_project(Path::new(&archive_path))?;
+        let state = toolchain::project_toolchain_state(
+            &data_dir,
+            &inspection.manifest.toolchain.tinymist_version,
+            &inspection.manifest.toolchain.typst_version,
+        );
+        if !allow_incompatible_toolchain
+            && !matches!(state, toolchain::ProjectToolchainState::ExactActive)
+        {
+            return Err(
+                "The compatible project toolchain is not active. Select or download it before importing."
+                    .to_string(),
+            );
+        }
+        project_archive::import_typstry_project(
+            Path::new(&archive_path),
+            Path::new(&destination_path),
+            &expected_manifest_sha256,
+        )
+    })
+    .await
+    .map_err(|error| format!("Project import task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn select_project_toolchain(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, LspState>,
+    tinymist_version: String,
+    typst_version: String,
+) -> Result<toolchain::ToolchainStatus, String> {
+    stop_lsp_process(&state).await;
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to get data dir: {error}"))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        toolchain::select_project_toolchain(&data_dir, &tinymist_version, &typst_version)
+    })
+    .await
+    .map_err(|error| format!("Toolchain selection task failed: {error}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let native_start = Instant::now();
@@ -1821,6 +1922,9 @@ pub fn run() {
             cleanup_workspace_preview_files,
             export_source_zip,
             export_typstry_project,
+            inspect_typstry_project,
+            import_typstry_project,
+            select_project_toolchain,
             save_workspace_file,
             create_workspace_dir,
             rename_workspace_file,

@@ -199,11 +199,11 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 - [x] **V1-I.3 Record the effective compiler.** Read the active managed Tinymist and its embedded Typst version at export time; fail clearly when no validated toolchain is active.
 - [x] **V1-I.4 Add deterministic manifest generation.** Normalize archive paths, sort entries, calculate SHA-256 hashes, and use a stable schema encoding.
 - [x] **V1-I.5 Harden archive writing.** Exclude generated/private directories, handle Unicode filenames, preserve empty directories only when necessary, and reject files that change during export.
-- [ ] **V1-I.6 Add preflight inspection.** Read and validate the manifest before extraction; impose entry-count, per-file, total-uncompressed-size, path-length, and compression-ratio limits.
-- [ ] **V1-I.7 Prevent unsafe extraction.** Reject absolute paths, `..`, symlinks/reparse points, duplicate normalized paths, reserved Windows device names, and case-folding collisions.
-- [ ] **V1-I.8 Add transactional import.** Extract to a staging directory, verify every hash, clean up failed imports, and never overwrite a non-empty destination.
-- [ ] **V1-I.9 Resolve compatible toolchains.** Match the exact embedded Typst version, prefer the recorded Tinymist version, and only offer releases whose embedded compiler metadata has been verified.
-- [ ] **V1-I.10 Add the compatibility dialog.** Explain exact match, alternative build, unavailable version, offline state, and the consequences of overriding the pin.
+- [x] **V1-I.6 Add preflight inspection.** Read and validate the manifest before extraction; impose entry-count, per-file, total-uncompressed-size, path-length, and compression-ratio limits.
+- [x] **V1-I.7 Prevent unsafe extraction.** Reject absolute paths, `..`, symlinks/reparse points, duplicate normalized paths, reserved Windows device names, and case-folding collisions.
+- [x] **V1-I.8 Add transactional import.** Extract to a staging directory, verify every hash, clean up failed imports, and never overwrite a non-empty destination.
+- [x] **V1-I.9 Resolve compatible toolchains.** Match the exact embedded Typst version, prefer the recorded Tinymist version, and only offer releases whose embedded compiler metadata has been verified.
+- [x] **V1-I.10 Add the compatibility dialog.** Explain exact match, alternative build, unavailable version, offline state, and the consequences of overriding the pin.
 - [ ] **V1-I.11 Add per-workspace toolchain binding.** Store the recommended and selected versions separately; restarting Typstry must restore the workspace selection without unexpectedly changing other projects.
 - [ ] **V1-I.12 Add menus and progress UI.** File menu actions: **Import Typstry Project**, **Export Typstry Project**, and **Export Source ZIP**. Use the `*.typstry` filter for version-bound projects. Downloads, validation, extraction, and cleanup must be cancellable where safe.
 - [ ] **V1-I.13 Add migration behavior.** Continue opening normal folders and legacy ZIP exports without inventing a compatibility guarantee; document how to re-export them in the new format.

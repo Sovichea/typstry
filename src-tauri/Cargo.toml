@@ -23,6 +23,7 @@ futures-util = "0.3"
 trash = "5.2.6"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 semver = "1.0"
+unicode-normalization = "0.1"
 zip = { version = "4.6", default-features = false, features = ["deflate"] }
 base64 = "0.22"
 fontdb = "0.23"

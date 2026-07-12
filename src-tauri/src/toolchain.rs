@@ -45,6 +45,14 @@ struct InstalledToolchain {
     typst_version: Version,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectToolchainState {
+    ExactActive,
+    ExactInstalled,
+    DownloadRequired,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TinymistReleaseInfo {
@@ -152,6 +160,77 @@ fn installed_toolchains(data_dir: &Path) -> Vec<InstalledToolchain> {
 
 pub fn active_version(data_dir: &Path) -> Option<String> {
     active_toolchain(data_dir).map(|toolchain| toolchain.directory)
+}
+
+pub fn project_toolchain_state(
+    data_dir: &Path,
+    required_tinymist: &str,
+    required_typst: &str,
+) -> ProjectToolchainState {
+    let required_tinymist = Version::parse(required_tinymist).ok();
+    let required_typst = Version::parse(required_typst).ok();
+    let installed = installed_toolchains(data_dir);
+    let active = active_toolchain(data_dir);
+    classify_project_toolchain(
+        active.as_ref(),
+        &installed,
+        required_tinymist.as_ref(),
+        required_typst.as_ref(),
+    )
+}
+
+fn classify_project_toolchain(
+    active: Option<&InstalledToolchain>,
+    installed: &[InstalledToolchain],
+    required_tinymist: Option<&Version>,
+    required_typst: Option<&Version>,
+) -> ProjectToolchainState {
+    let matches = |toolchain: &InstalledToolchain| {
+        required_tinymist == Some(&toolchain.tinymist_version)
+            && required_typst == Some(&toolchain.typst_version)
+    };
+    if active.is_some_and(matches) {
+        return ProjectToolchainState::ExactActive;
+    }
+    if installed.iter().any(matches) {
+        ProjectToolchainState::ExactInstalled
+    } else {
+        ProjectToolchainState::DownloadRequired
+    }
+}
+
+pub fn select_project_toolchain(
+    data_dir: &Path,
+    required_tinymist: &str,
+    required_typst: &str,
+) -> Result<ToolchainStatus, String> {
+    let required_tinymist = Version::parse(required_tinymist)
+        .map_err(|_| format!("Invalid Tinymist version: {required_tinymist}"))?;
+    let required_typst = Version::parse(required_typst)
+        .map_err(|_| format!("Invalid Typst version: {required_typst}"))?;
+    let installed = installed_toolchains(data_dir)
+        .into_iter()
+        .find(|toolchain| {
+            toolchain.tinymist_version == required_tinymist
+                && toolchain.typst_version == required_typst
+        })
+        .ok_or_else(|| {
+            format!(
+                "Tinymist {required_tinymist} with embedded Typst {required_typst} is not installed."
+            )
+        })?;
+    let active_file = data_dir.join("toolchain").join("active-version");
+    if let Some(parent) = active_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create toolchain directory: {error}"))?;
+    }
+    std::fs::write(&active_file, &installed.directory).map_err(|error| {
+        format!(
+            "Failed to select Tinymist {}: {error}",
+            installed.tinymist_version
+        )
+    })?;
+    Ok(status(data_dir))
 }
 
 fn active_toolchain(data_dir: &Path) -> Option<InstalledToolchain> {
@@ -465,6 +544,49 @@ mod tests {
         assert!(stable_release(release("v0.15.1", false)).is_none());
         assert!(stable_release(release("v0.15.2-rc.1", false)).is_none());
         assert!(stable_release(release("v0.15.2", true)).is_none());
+    }
+
+    #[test]
+    fn project_toolchain_matching_distinguishes_active_installed_and_missing() {
+        let required_tinymist = Version::parse("0.13.10").unwrap();
+        let required_typst = Version::parse("0.13.1").unwrap();
+        let compatible = InstalledToolchain {
+            directory: "0.13.10".to_string(),
+            tinymist_version: required_tinymist.clone(),
+            typst_version: required_typst.clone(),
+        };
+        let other = InstalledToolchain {
+            directory: "0.14.0".to_string(),
+            tinymist_version: Version::parse("0.14.0").unwrap(),
+            typst_version: Version::parse("0.13.0").unwrap(),
+        };
+        assert!(matches!(
+            classify_project_toolchain(
+                Some(&compatible),
+                &[compatible.clone()],
+                Some(&required_tinymist),
+                Some(&required_typst)
+            ),
+            ProjectToolchainState::ExactActive
+        ));
+        assert!(matches!(
+            classify_project_toolchain(
+                Some(&other),
+                &[other.clone(), compatible],
+                Some(&required_tinymist),
+                Some(&required_typst)
+            ),
+            ProjectToolchainState::ExactInstalled
+        ));
+        assert!(matches!(
+            classify_project_toolchain(
+                Some(&other),
+                &[other.clone()],
+                Some(&required_tinymist),
+                Some(&required_typst)
+            ),
+            ProjectToolchainState::DownloadRequired
+        ));
     }
 
     #[test]
