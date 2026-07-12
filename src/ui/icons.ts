@@ -20,6 +20,7 @@ import {
   FileImage,
   FileText,
   Folder,
+  FolderArchive,
   Highlighter,
   Image,
   Info,
@@ -78,6 +79,7 @@ const iconNodes = {
   fileImage: FileImage,
   fileText: FileText,
   folder: Folder,
+  folderArchive: FolderArchive,
   highlighter: Highlighter,
   image: Image,
   info: Info,
@@ -193,6 +195,7 @@ export function initializeLucideIcons(): void {
   replaceContents("#editor-tabs-previous", "chevronLeft", 16);
   replaceContents("#editor-tabs-next", "chevronRight", 16);
   replaceContents("#welcome-open-project .welcome-item-icon", "folder", 18);
+  replaceContents("#welcome-import-project .welcome-item-icon", "folderArchive", 18);
   replaceContents("#welcome-open-examples .welcome-item-icon", "bookOpen", 18);
   replaceContents("#document-outline-toggle .sidebar-section-chevron", "chevronDown", 14);
   replaceContents("#status-error-icon", "circleX", 13);
