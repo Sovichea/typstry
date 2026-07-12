@@ -271,7 +271,9 @@ export class TypstellaWorkspaceController {
     getPreviewRootPath: () => this.previewRootPath,
     getPreviewTaskId: () => this.previewTaskId,
     isReady: () => this.lspReady,
-    isEnabled: () => this.settingsController.value.preview.cursorSync,
+    // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
+    // isEnabled: () => this.settingsController.value.preview.cursorSync,
+    isEnabled: () => false,
     handleForwardPosition: (path, cursor) => this.handlePdfForwardSync(path, cursor),
     mapForwardPosition: async () => null
   });

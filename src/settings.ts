@@ -76,7 +76,9 @@ export const defaultAppSettings: AppSettings = {
   },
   preview: {
     renderMode: "on-type",
-    cursorSync: true,
+    // TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability
+    // cursorSync: true,
+    cursorSync: false,
     syncDebounceMs: 120,
     highlightDurationMs: 2200,
     khmerRenderPreparation: false
