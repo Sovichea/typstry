@@ -1,8 +1,8 @@
-# Typstry v1.x Implementation Plan
+# Typstella v1.x Implementation Plan
 
 ## Objective
 
-Evolve Typstry after v1.0 through stability-first, backward-compatible releases. The v1.x series introduces bounded AI writing assistance, reproducible research computation, Git workflows, and a renewed Khmer workflow/render-preparation evaluation without weakening v1.0 project portability or data-safety guarantees.
+Evolve Typstella after v1.0 through stability-first, backward-compatible releases. The v1.x series introduces bounded AI writing assistance, reproducible research computation, Git workflows, and a renewed Khmer workflow/render-preparation evaluation without weakening v1.0 project portability or data-safety guarantees.
 
 This document begins only after the [v1.0 release plan](./V1_RELEASE_IMPLEMENTATION_PLAN.md) passes its release gate. The [v2 implementation plan](./V2_IMPLEMENTATION_PLAN.md) owns real-time AI language diagnostics and other major interaction changes.
 
@@ -97,7 +97,7 @@ Run Python and MATLAB/Octave workflows in an explicit, isolated environment and 
 - [ ] **V1X-C.4 Add GNU Octave and an optional external MATLAB adapter.**
 - [ ] **V1X-C.5 Add stale-result detection and explicit rerun controls.**
 - [ ] **V1X-C.6 Add examples for plots, tables, simulation output, and algorithm benchmarks.**
-- [ ] **V1X-C.7 Define `.typstry` package policy for scripts, environments, generated results, and trust state.** Trust is never exported as granted.
+- [ ] **V1X-C.7 Define `.typstella` package policy for scripts, environments, generated results, and trust state.** Trust is never exported as granted.
 
 Continue improving AI assistance with better explicit long-document context, reusable prompts, clearer diffs, local-model adapters where practical, and multilingual evaluation while retaining every `V1X-A` boundary.
 
@@ -125,7 +125,7 @@ Git-aware AI may summarize a user-selected diff or draft text, but it cannot sta
 
 ## Cross-cutting v1.x workstream: Khmer workflow and render-preparation reassessment
 
-Khmer remains Typstry's proof-of-depth. Revisit the complete research-writing workflow and experimental render preparation without assuming the feature should become production-default.
+Khmer remains Typstella's proof-of-depth. Revisit the complete research-writing workflow and experimental render preparation without assuming the feature should become production-default.
 
 Canonical source remains unchanged. Preparation occurs only in a revision-bound preview/export snapshot and never silently inserts generated ZWSP into source.
 
@@ -164,7 +164,7 @@ Canonical source remains unchanged. Preparation occurs only in a revision-bound 
 - [ ] Disabling preparation returns exactly to ordinary Typst behavior with no residue.
 - [ ] Settings state tested limits and experimental/stable status honestly.
 
-The technical transformation contract remains in the [Khmer render-preparation plan](./TYPSTRY_KHMER_RENDER_PREPARATION_IMPLEMENTATION_PLAN.md).
+The technical transformation contract remains in the [Khmer render-preparation plan](./TYPSTELLA_KHMER_RENDER_PREPARATION_IMPLEMENTATION_PLAN.md).
 
 ---
 

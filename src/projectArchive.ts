@@ -1,12 +1,12 @@
-export const TYPSTRY_PROJECT_FORMAT = "com.typstry.project" as const;
-export const TYPSTRY_PROJECT_SCHEMA_VERSION = 1 as const;
-export const TYPSTRY_PROJECT_EXTENSION = "typstry" as const;
+export const TYPSTELLA_PROJECT_FORMAT = "com.typstella.project" as const;
+export const TYPSTELLA_PROJECT_SCHEMA_VERSION = 1 as const;
+export const TYPSTELLA_PROJECT_EXTENSION = "typstella" as const;
 
-export type TypstryProjectManifest = {
-  format: typeof TYPSTRY_PROJECT_FORMAT;
-  schemaVersion: typeof TYPSTRY_PROJECT_SCHEMA_VERSION;
+export type TypstellaProjectManifest = {
+  format: typeof TYPSTELLA_PROJECT_FORMAT;
+  schemaVersion: typeof TYPSTELLA_PROJECT_SCHEMA_VERSION;
   createdBy: {
-    application: "Typstry";
+    application: "Typstella";
     version: string;
   };
   project: {
@@ -21,14 +21,14 @@ export type TypstryProjectManifest = {
   renderEnvironment: {
     fontsPackaged: boolean;
   };
-  fonts: TypstryProjectFont[];
+  fonts: TypstellaProjectFont[];
   integrity: {
     algorithm: "sha256";
     files: Record<string, string>;
   };
 };
 
-export type TypstryProjectFont = {
+export type TypstellaProjectFont = {
   id: string;
   family: string;
   postscriptName: string;
@@ -50,8 +50,8 @@ export type TypstryProjectFont = {
 
 export type ProjectToolchainState = "exact-active" | "exact-installed" | "download-required";
 
-export type TypstryProjectPreflight = {
-  manifest: TypstryProjectManifest;
+export type TypstellaProjectPreflight = {
+  manifest: TypstellaProjectManifest;
   manifestSha256: string;
   entryCount: number;
   totalUncompressedBytes: number;
@@ -61,10 +61,10 @@ export type TypstryProjectPreflight = {
   activeTinymistVersion: string | null;
 };
 
-export type ImportedTypstryProject = {
+export type ImportedTypstellaProject = {
   workspacePath: string;
   mainFilePath: string;
-  manifest: TypstryProjectManifest;
+  manifest: TypstellaProjectManifest;
 };
 
 function objectValue(value: unknown, label: string): Record<string, unknown> {
@@ -110,7 +110,7 @@ function semanticVersion(value: unknown, label: string): string {
   return version;
 }
 
-function parseFont(value: unknown, index: number): TypstryProjectFont {
+function parseFont(value: unknown, index: number): TypstellaProjectFont {
   const font = objectValue(value, `fonts[${index}]`);
   const license = objectValue(font.license, `fonts[${index}].license`);
   const weight = font.weight;
@@ -145,15 +145,15 @@ function parseFont(value: unknown, index: number): TypstryProjectFont {
   };
 }
 
-export function parseTypstryProjectManifest(value: unknown): TypstryProjectManifest {
+export function parseTypstellaProjectManifest(value: unknown): TypstellaProjectManifest {
   const root = objectValue(value, "project manifest");
-  if (root.format !== TYPSTRY_PROJECT_FORMAT) {
+  if (root.format !== TYPSTELLA_PROJECT_FORMAT) {
     throw new Error(`Unsupported project format '${String(root.format)}'.`);
   }
-  if (root.schemaVersion !== TYPSTRY_PROJECT_SCHEMA_VERSION) {
+  if (root.schemaVersion !== TYPSTELLA_PROJECT_SCHEMA_VERSION) {
     throw new Error(
-      `Unsupported Typstry project schema version '${String(root.schemaVersion)}'. ` +
-      `This build supports version ${TYPSTRY_PROJECT_SCHEMA_VERSION}.`
+      `Unsupported Typstella project schema version '${String(root.schemaVersion)}'. ` +
+      `This build supports version ${TYPSTELLA_PROJECT_SCHEMA_VERSION}.`
     );
   }
   const createdBy = objectValue(root.createdBy, "createdBy");
@@ -163,7 +163,7 @@ export function parseTypstryProjectManifest(value: unknown): TypstryProjectManif
   const integrity = objectValue(root.integrity, "integrity");
   const files = objectValue(integrity.files, "integrity.files");
   const main = validArchivePath(project.main, "project.main");
-  if (createdBy.application !== "Typstry") {
+  if (createdBy.application !== "Typstella") {
     throw new Error(`Unsupported project creator '${String(createdBy.application)}'.`);
   }
   if (!main.endsWith(".typ")) throw new Error("project.main must be a .typ file.");
@@ -187,10 +187,10 @@ export function parseTypstryProjectManifest(value: unknown): TypstryProjectManif
   }
   if (!Array.isArray(root.fonts)) throw new Error("fonts must be an array.");
   return {
-    format: TYPSTRY_PROJECT_FORMAT,
-    schemaVersion: TYPSTRY_PROJECT_SCHEMA_VERSION,
+    format: TYPSTELLA_PROJECT_FORMAT,
+    schemaVersion: TYPSTELLA_PROJECT_SCHEMA_VERSION,
     createdBy: {
-      application: "Typstry",
+      application: "Typstella",
       version: stringValue(createdBy.version, "createdBy.version")
     },
     project: {

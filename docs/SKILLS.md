@@ -1,6 +1,6 @@
-# Typstry - Developer & AI Skills Reference
+# Typstella - Developer & AI Skills Reference
 
-This document serves as the core knowledge base and skill reference for the Typstry repository. AI agents and developers should read this file to understand the framework, technology stack, architecture boundaries, and best practices.
+This document serves as the core knowledge base and skill reference for the Typstella repository. AI agents and developers should read this file to understand the framework, technology stack, architecture boundaries, and best practices.
 
 ## 1. Technology Stack
 - **Package Manager:** Bun (`bun install`, `bun run tauri dev`)
@@ -21,7 +21,7 @@ The application operates across distinct processes and contexts:
 - **Security:** `tauri.conf.json` allows loopback HTTP, WebSocket, and frame ports because each Tinymist preview task owns a random local data-plane port.
 
 ### 2.2 Webview Frontend Layer (`src/`)
-- **Entry Point (`main.ts`):** A minimal composition entry that starts `TypstryWorkspaceController` after `DOMContentLoaded`.
+- **Entry Point (`main.ts`):** A minimal composition entry that starts `TypstellaWorkspaceController` after `DOMContentLoaded`.
 - **Orchestrator (`appController.ts`):** Owns cross-feature state such as the active workspace/file/tab and coordinates editor, preview, diagnostics, and native menu events. Feature behavior should live in dedicated controllers rather than growing this file.
 - **Feature Controllers:** Settings, toolbar, context menu, diagnostics console, fonts, layout, preview frame/sync, recent projects, workspace persistence, and WYSIWYM conversion live in their corresponding `src/` subdirectories.
 - **File Explorer (`components/explorer.ts`):** A custom DOM tree renderer that loads only the workspace root initially and reads child directories on first expansion. Do not restore eager recursive scanning.

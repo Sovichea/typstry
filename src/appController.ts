@@ -43,7 +43,7 @@ import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchain
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
 import { parseTypographyBlock, typographyEdit, type DocumentTypography } from "./editor/documentTypography";
 import { SpellcheckController, type SpellingIssue } from "./editor/spellcheck";
-import type { ImportedTypstryProject, TypstryProjectPreflight } from "./projectArchive";
+import type { ImportedTypstellaProject, TypstellaProjectPreflight } from "./projectArchive";
 
 import {
   ensureTypographyTemplateApplication,
@@ -137,11 +137,11 @@ function isScrollbarPointerEvent(element: HTMLElement, event: PointerEvent): boo
 }
 
 function ensureEditorCaretRippleStyle(): void {
-  if (document.getElementById("typstry-editor-caret-ripple-style")) return;
+  if (document.getElementById("typstella-editor-caret-ripple-style")) return;
   const style = document.createElement("style");
-  style.id = "typstry-editor-caret-ripple-style";
+  style.id = "typstella-editor-caret-ripple-style";
   style.textContent = `
-    @keyframes typstry-editor-caret-ripple {
+    @keyframes typstella-editor-caret-ripple {
       0% { opacity: 0; transform: scale(.55); box-shadow: 0 0 0 0 rgba(61,180,137,.38); }
       12% { opacity: 1; }
       100% { opacity: 0; transform: scale(3.1); box-shadow: 0 0 0 14px rgba(61,180,137,0); }
@@ -150,7 +150,7 @@ function ensureEditorCaretRippleStyle(): void {
   document.head.appendChild(style);
 }
 
-export class TypstryWorkspaceController {
+export class TypstellaWorkspaceController {
   private readonly startupStart = performance.now();
   private readonly startupTimings: StartupTimingEntry[] = [];
   private readonly loggedNativeStartupTimings = new Set<string>();
@@ -1499,7 +1499,7 @@ export class TypstryWorkspaceController {
   private async loadFile(path: string, options: LoadFileOptions = {}) {
     if (!isSupportedInAppPath(path)) {
       const shouldOpenExternally = await confirm(
-        `${fileNameFromPath(path)} cannot be opened in Typstry. Would you like to open it with your system application?`,
+        `${fileNameFromPath(path)} cannot be opened in Typstella. Would you like to open it with your system application?`,
         {
           title: "Unsupported File Format",
           kind: "warning",
@@ -1767,11 +1767,11 @@ export class TypstryWorkspaceController {
       }
 
       const activeText = this.editorInstance.state.doc.toString();
-      const hasExistingBlock = activeText.includes("// typstry:typography:start");
+      const hasExistingBlock = activeText.includes("// typstella:typography:start");
       const detectedTemplateFunc = findTemplateFunctionName(activeText);
 
       if (hasExistingBlock || detectedTemplateFunc) {
-        const funcName = detectedTemplateFunc || "typstry-typography";
+        const funcName = detectedTemplateFunc || "typstella-typography";
         const edit = templateTypographyEdit(activeText, funcName, config);
         if (edit) {
           const editor = this.editorInstance;
@@ -1819,11 +1819,11 @@ export class TypstryWorkspaceController {
 
       if (!updatedLocalTemplate) {
         const mainDirectory = await dirname(mainPath);
-        const templatePath = await join(mainDirectory, "typstry-template.typ");
+        const templatePath = await join(mainDirectory, "typstella-template.typ");
         const exists = await invoke<boolean>("workspace_path_exists", { path: templatePath });
         let templateText = exists ? await this.workspaceText(templatePath) : newTypographyTemplate(config);
         if (exists) {
-          const edit = templateTypographyEdit(templateText, "typstry-typography", config);
+          const edit = templateTypographyEdit(templateText, "typstella-typography", config);
           templateText = edit ? this.applyEdit(templateText, edit) : newTypographyTemplate(config);
         }
         await this.writeWorkspaceText(templatePath, templateText);
@@ -1982,7 +1982,7 @@ export class TypstryWorkspaceController {
       );
       const previewPath = await join(
         this.workspaceRootPath,
-        `.${fileNameFromPath(activePath)}.${identity.taskId}.typstry-preview.typ`
+        `.${fileNameFromPath(activePath)}.${identity.taskId}.typstella-preview.typ`
       );
       const previewSource = templatePreviewSource(application, templateRootPath, chapterRootPath, activeContents);
       const existingSource = await invoke<string>("read_workspace_file", { path: previewPath }).catch(() => null);
@@ -2337,7 +2337,7 @@ export class TypstryWorkspaceController {
       this.appendDeveloperLog({
         kind: "warning",
         source: "inverse sync",
-        message: "Ignored inverse sync because it did not originate from Typstry's docked DOM-intercepted preview."
+        message: "Ignored inverse sync because it did not originate from Typstella's docked DOM-intercepted preview."
       });
       return { handled: true };
     }
@@ -2430,9 +2430,9 @@ export class TypstryWorkspaceController {
   private showEditorCaretRipple(editor: EditorView, cursor: number): boolean {
     const coords = editor.coordsAtPos(cursor);
     if (!coords) return false;
-    document.querySelectorAll(".typstry-editor-caret-ripple").forEach(element => element.remove());
+    document.querySelectorAll(".typstella-editor-caret-ripple").forEach(element => element.remove());
     const ripple = document.createElement("div");
-    ripple.className = "typstry-editor-caret-ripple";
+    ripple.className = "typstella-editor-caret-ripple";
     Object.assign(ripple.style, {
       position: "fixed",
       left: `${coords.left}px`,
@@ -2446,7 +2446,7 @@ export class TypstryWorkspaceController {
       boxShadow: "0 0 0 0 rgba(61,180,137,.34)",
       pointerEvents: "none",
       zIndex: "2147483647",
-      animation: "typstry-editor-caret-ripple 900ms ease-out forwards"
+      animation: "typstella-editor-caret-ripple 900ms ease-out forwards"
     });
     ensureEditorCaretRippleStyle();
     document.body.appendChild(ripple);
@@ -3301,13 +3301,13 @@ export class TypstryWorkspaceController {
     const workspaceRoot = this.workspaceRootPath;
     if (!workspaceRoot || filePathKey(change.rootPath) !== filePathKey(workspaceRoot)) return;
 
-    // Ignore changes that are only inside the cache (.typstry) directory to prevent infinite loops and race conditions
+    // Ignore changes that are only inside the cache (.typstella) directory to prevent infinite loops and race conditions
     const hasExternalChanges = change.paths.some(path => {
       const relPath = path.startsWith(workspaceRoot)
         ? path.substring(workspaceRoot.length)
         : path;
       const cleanRel = relPath.replace(/^[/\\]+/, "").replace(/\\/g, "/");
-      return !cleanRel.startsWith(".typstry");
+      return !cleanRel.startsWith(".typstella");
     });
     
     if (!hasExternalChanges) return;
@@ -3355,7 +3355,7 @@ export class TypstryWorkspaceController {
       const exists = await invoke<boolean>("workspace_path_exists", { path: tab.path });
       if (!exists) {
         if (tab.isDirty) {
-          this.reportExternalConflict(tab.path, "was removed outside Typstry");
+          this.reportExternalConflict(tab.path, "was removed outside Typstella");
         } else {
           this.externalConflictPaths.delete(pathKey);
           await this.closeEditorTab(tab.path, true);
@@ -3385,7 +3385,7 @@ export class TypstryWorkspaceController {
         continue;
       }
       if (tab.isDirty) {
-        this.reportExternalConflict(tab.path, "changed outside Typstry");
+        this.reportExternalConflict(tab.path, "changed outside Typstella");
         continue;
       }
 
@@ -3545,7 +3545,7 @@ export class TypstryWorkspaceController {
     };
     img.onerror = () => this.previewFrame.setError(
       "Image preview unavailable",
-      "Typstry could not decode this image."
+      "Typstella could not decode this image."
     );
     img.src = src;
 
@@ -3725,17 +3725,17 @@ export class TypstryWorkspaceController {
     }
   }
 
-  private async importTypstryProject(archivePath?: string): Promise<void> {
+  private async importTypstellaProject(archivePath?: string): Promise<void> {
     const selected = archivePath ?? await open({
       directory: false,
       multiple: false,
-      filters: [{ name: "Typstry Project", extensions: ["typstry"] }]
+      filters: [{ name: "Typstella Project", extensions: ["typstella"] }]
     });
     if (typeof selected !== "string") return;
 
     try {
-      this.setLspStatus({ kind: "starting", message: "Inspecting Typstry project..." });
-      let inspection = await invoke<TypstryProjectPreflight>("inspect_typstry_project", {
+      this.setLspStatus({ kind: "starting", message: "Inspecting Typstella project..." });
+      let inspection = await invoke<TypstellaProjectPreflight>("inspect_typstella_project", {
         archivePath: selected
       });
       const requiredTinymist = inspection.manifest.toolchain.tinymistVersion;
@@ -3762,7 +3762,7 @@ export class TypstryWorkspaceController {
             settings.toolchain.tinymistVersion = requiredTinymist;
           });
           await this.handleToolchainChanged(status);
-          inspection = await invoke<TypstryProjectPreflight>("inspect_typstry_project", {
+          inspection = await invoke<TypstellaProjectPreflight>("inspect_typstella_project", {
             archivePath: selected
           });
         } else {
@@ -3815,7 +3815,7 @@ export class TypstryWorkspaceController {
               this.settingsController.update(settings => {
                 settings.toolchain.tinymistVersion = requiredTinymist;
               });
-              inspection = await invoke<TypstryProjectPreflight>("inspect_typstry_project", {
+              inspection = await invoke<TypstellaProjectPreflight>("inspect_typstella_project", {
                 archivePath: selected
               });
             }
@@ -3866,7 +3866,7 @@ export class TypstryWorkspaceController {
         `Import “${inspection.manifest.project.name}” to:\n${destinationPath}\n\n` +
         `${inspection.entryCount} archive entries, ${sizeMiB} MiB uncompressed.${fontNotice}`,
         {
-          title: "Import Typstry Project",
+          title: "Import Typstella Project",
           kind: "info",
           okLabel: "Import Project",
           cancelLabel: "Cancel"
@@ -3902,7 +3902,7 @@ export class TypstryWorkspaceController {
       }
     } catch (error) {
       this.setLspStatus({ kind: "error", message: `Project import failed: ${error}` });
-      await message(String(error), { title: "Typstry Project Import Failed", kind: "error" });
+      await message(String(error), { title: "Typstella Project Import Failed", kind: "error" });
     }
   }
 
@@ -3911,25 +3911,25 @@ export class TypstryWorkspaceController {
     destinationPath: string;
     expectedManifestSha256: string;
     allowIncompatibleToolchain: boolean;
-  }): Promise<ImportedTypstryProject> {
+  }): Promise<ImportedTypstellaProject> {
     const operationId = crypto.randomUUID();
     const progress = document.createElement("div");
     progress.setAttribute("role", "status");
     progress.style.cssText = "position:fixed;right:20px;bottom:20px;z-index:10000;display:flex;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--ui-hover);border-radius:8px;background:var(--ui-bg);color:var(--ui-text);box-shadow:0 8px 24px rgba(0,0,0,.3)";
     const label = document.createElement("span");
-    label.textContent = "Verifying and extracting Typstry project…";
+    label.textContent = "Verifying and extracting Typstella project…";
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.textContent = "Cancel";
     cancel.addEventListener("click", () => {
       cancel.disabled = true;
       label.textContent = "Cancelling import safely…";
-      void invoke("cancel_typstry_project_import", { operationId });
+      void invoke("cancel_typstella_project_import", { operationId });
     });
     progress.append(label, cancel);
     document.body.appendChild(progress);
     try {
-      return await invoke<ImportedTypstryProject>("import_typstry_project", {
+      return await invoke<ImportedTypstellaProject>("import_typstella_project", {
         ...args,
         operationId
       });
@@ -3939,7 +3939,7 @@ export class TypstryWorkspaceController {
   }
 
   private async confirmIncompatibleProjectImport(
-    inspection: TypstryProjectPreflight
+    inspection: TypstellaProjectPreflight
   ): Promise<boolean> {
     const active = inspection.activeTinymistVersion && inspection.activeTypstVersion
       ? `Current: Tinymist ${inspection.activeTinymistVersion}, Typst ${inspection.activeTypstVersion}.`
@@ -4112,7 +4112,7 @@ export class TypstryWorkspaceController {
       });
     }).catch(err => console.error("Error setting up Tauri preview event listeners", err));
 
-    void listen("typstry-project-open-requested", () => {
+    void listen("typstella-project-open-requested", () => {
       void this.drainPendingProjectImports();
     });
 
@@ -4257,7 +4257,7 @@ export class TypstryWorkspaceController {
     });
 
     document.getElementById("action-import-project")?.addEventListener("click", async () => {
-      await this.importTypstryProject();
+      await this.importTypstellaProject();
     });
     
     document.getElementById("action-restart-workspace")?.addEventListener("click", () => {
@@ -4391,14 +4391,14 @@ export class TypstryWorkspaceController {
         const folderName = this.workspaceRootPath.split(/[/\\]/).pop() || "workspace";
         const selected = await save({
           filters: [{
-            name: "Typstry Project",
-            extensions: ["typstry"]
+            name: "Typstella Project",
+            extensions: ["typstella"]
           }],
-          defaultPath: `${folderName}.typstry`
+          defaultPath: `${folderName}.typstella`
         });
 
         if (selected) {
-          this.setLspStatus({ kind: "running", message: "Exporting Typstry project..." });
+          this.setLspStatus({ kind: "running", message: "Exporting Typstella project..." });
           const mainSource = filePathKey(mainFilePath) === filePathKey(this.activeFilePath ?? "")
             ? this.editorInstance.state.doc.toString()
             : await invoke<string>("read_workspace_file", { path: mainFilePath });
@@ -4406,7 +4406,7 @@ export class TypstryWorkspaceController {
           const declaredFontFamilies = typography
             ? [typography.latinFont, typography.complexFont].filter((font): font is string => !!font)
             : [];
-          const manifest = await invoke<{ renderEnvironment: { fontsPackaged: boolean } }>("export_typstry_project", {
+          const manifest = await invoke<{ renderEnvironment: { fontsPackaged: boolean } }>("export_typstella_project", {
             workspacePath: this.workspaceRootPath,
             archivePath: selected,
             mainFilePath,
@@ -4415,11 +4415,11 @@ export class TypstryWorkspaceController {
           const fontStatus = manifest.renderEnvironment.fontsPackaged
             ? " Exact render fonts were audited and packaged."
             : " No render fonts were discovered; reproducibility could not be established.";
-          this.setLspStatus({ kind: "preview-ready", message: `Typstry project exported to ${selected}.${fontStatus}` });
+          this.setLspStatus({ kind: "preview-ready", message: `Typstella project exported to ${selected}.${fontStatus}` });
         }
       } catch (error) {
         this.setLspStatus({ kind: "error", message: `Project export failed: ${error}` });
-        await message(String(error), { title: "Typstry Project Export Failed", kind: "error" });
+        await message(String(error), { title: "Typstella Project Export Failed", kind: "error" });
       }
     });
 
@@ -4506,8 +4506,8 @@ export class TypstryWorkspaceController {
       }
     });
 
-    document.getElementById("action-docs-typstry")?.addEventListener("click", () => {
-      openUrl("https://github.com/sovichea/typstry");
+    document.getElementById("action-docs-typstella")?.addEventListener("click", () => {
+      openUrl("https://github.com/sovichea/typstella");
     });
 
     document.getElementById("action-docs-typst")?.addEventListener("click", () => {
@@ -4581,7 +4581,7 @@ export class TypstryWorkspaceController {
       if (hasUnsaved) {
         event.preventDefault();
         const confirmed = await confirm(
-          "You have unsaved changes. Are you sure you want to close Typstry?",
+          "You have unsaved changes. Are you sure you want to close Typstella?",
           { title: "Unsaved Changes", kind: "warning" }
         );
         if (confirmed) {
@@ -4650,13 +4650,13 @@ export class TypstryWorkspaceController {
 
   private async drainPendingProjectImports(): Promise<void> {
     const paths = await invoke<string[]>("take_pending_project_imports").catch(error => {
-      console.error("Failed to read pending Typstry project imports:", error);
+      console.error("Failed to read pending Typstella project imports:", error);
       return [];
     });
     for (const path of paths) {
       this.projectImportQueue = this.projectImportQueue
-        .then(() => this.importTypstryProject(path))
-        .catch(error => console.error("Queued Typstry project import failed:", error));
+        .then(() => this.importTypstellaProject(path))
+        .catch(error => console.error("Queued Typstella project import failed:", error));
     }
     await this.projectImportQueue;
   }
@@ -4695,14 +4695,14 @@ export class TypstryWorkspaceController {
 
   private getCacheRootPath(): string | null {
     if (!this.workspaceRootPath) return null;
-    return `${this.workspaceRootPath}/.typstry/cache`.replace(/\\/g, "/");
+    return `${this.workspaceRootPath}/.typstella/cache`.replace(/\\/g, "/");
   }
 
   private mapToOriginalPath(cachePath: string): string {
     if (!this.workspaceRootPath) {
       return cachePath;
     }
-    const prefix = `${this.workspaceRootPath}/.typstry/cache/render/`.replace(/\\/g, "/").toLowerCase();
+    const prefix = `${this.workspaceRootPath}/.typstella/cache/render/`.replace(/\\/g, "/").toLowerCase();
     const cleanCache = cachePath.replace(/\\/g, "/").toLowerCase();
     if (cleanCache.startsWith(prefix)) {
       const relPath = cachePath.substring(prefix.length);
@@ -4713,7 +4713,7 @@ export class TypstryWorkspaceController {
 
   private isRenderCachePath(path: string): boolean {
     if (!this.workspaceRootPath) return false;
-    const prefix = `${this.workspaceRootPath}/.typstry/cache/render/`.replace(/\\/g, "/").toLowerCase();
+    const prefix = `${this.workspaceRootPath}/.typstella/cache/render/`.replace(/\\/g, "/").toLowerCase();
     return path.replace(/\\/g, "/").toLowerCase().startsWith(prefix);
   }
 

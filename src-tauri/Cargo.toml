@@ -1,10 +1,10 @@
 [package]
-name = "typstry"
+name = "typstella"
 version = "0.4.0"
 edition = "2021"
 
 [lib]
-name = "typstry_lib"
+name = "typstella_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
@@ -35,7 +35,7 @@ khmer_segmenter = { path = "../third_party/khmer_segmenter/port/rust", default-f
 spellbook = "0.4.2"
 icu_segmenter = { version = "2.2", default-features = false, features = ["compiled_data"] }
 open = "5.3"
-typstry-font-scaler = { path = "../crates/font-scaler" }
+typstella-font-scaler = { path = "../crates/font-scaler" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

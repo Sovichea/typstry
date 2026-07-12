@@ -2,7 +2,7 @@
 
 #set document(
   title: "រឿងព្រេងនិទានខ្មែរ",
-  author: "Typstry Examples",
+  author: "Typstella Examples",
 )
 
 #show: khmer_folklore_book
@@ -12,7 +12,7 @@
   #text(size: 20pt, weight: "bold", fill: rgb("#800020"))[រឿងព្រេងនិទានខ្មែរ]
 
   #v(1.5cm)
-  #text(size: 10pt, style: "italic", fill: luma(100))[រក្សាសិទ្ធិដោយ Typstry Examples]
+  #text(size: 10pt, style: "italic", fill: luma(100))[រក្សាសិទ្ធិដោយ Typstella Examples]
 ]
 
 #pagebreak()

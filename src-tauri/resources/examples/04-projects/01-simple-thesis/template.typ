@@ -1,7 +1,7 @@
 #let thesis(title: "Untitled Thesis", author: "Anonymous", body) = {
-  // typstry:typography:start
+  // typstella:typography:start
   set text(font: "MiSans Latin", size: 11pt)
-  // typstry:typography:end
+  // typstella:typography:end
   set page(margin: 28mm, numbering: "1")
   set par(justify: true, leading: 0.7em)
   set heading(numbering: "1.1")

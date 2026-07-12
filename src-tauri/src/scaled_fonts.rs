@@ -76,7 +76,7 @@ pub fn prepare_scaled_workspace_font(
         return Err("The workspace root does not exist.".into());
     }
 
-    let fonts_dir = workspace_root.join(".typstry").join("fonts");
+    let fonts_dir = workspace_root.join(".typstella").join("fonts");
     let generated_dir = fonts_dir.join("generated");
     if generated_dir.exists() {
         fs::remove_dir_all(&generated_dir)
@@ -120,7 +120,7 @@ pub fn prepare_scaled_workspace_font(
                     "{family:?} is stored in a font collection. Select an individual TTF or OTF face for scaling."
                 ));
             }
-            let scaled = typstry_font_scaler::scale_font_uniform(&bytes, scale)
+            let scaled = typstella_font_scaler::scale_font_uniform(&bytes, scale)
                 .map_err(|error| format!("Failed to scale {family:?}: {error}"))?;
             let extension = source_path
                 .and_then(Path::extension)
@@ -172,7 +172,7 @@ pub fn clear_scaled_workspace_fonts(workspace_root: &Path) -> Result<(), String>
         return Err("The workspace root does not exist.".into());
     }
     let generated_dir = workspace_root
-        .join(".typstry")
+        .join(".typstella")
         .join("fonts")
         .join("generated");
     if generated_dir.exists() {

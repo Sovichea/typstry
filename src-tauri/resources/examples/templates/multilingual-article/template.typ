@@ -4,9 +4,9 @@
   date: datetime.today(),
   body,
 ) = {
-  // typstry:typography:start
+  // typstella:typography:start
   set text(font: ("MiSans Latin", "MiSans Khmer"), size: 11pt)
-  // typstry:typography:end
+  // typstella:typography:end
   set document(title: title, author: author)
   set page(
     margin: (x: 24mm, y: 22mm),

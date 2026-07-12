@@ -2,13 +2,13 @@
 
 #set document(
   title: "បច្ចេកទេសរចនាតម្រងសកម្ម",
-  author: "Typstry Examples",
+  author: "Typstella Examples",
 )
 
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: "MiSans Latin", size: 11pt)
 #set text(font: ("MiSans Latin", "MiSans Khmer"))
-// typstry:typography:end
+// typstella:typography:end
 
 #let draw-line = cetz.draw.line
 #let draw-rect = cetz.draw.rect

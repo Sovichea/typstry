@@ -1,8 +1,8 @@
 #set document(title: "Bidirectional Text")
 #set page(margin: 22mm)
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: "MiSans Latin", size: 12pt)
-// typstry:typography:end
+// typstella:typography:end
 
 = Bidirectional Text
 
@@ -17,7 +17,7 @@ Right-to-left passages can contain left-to-right names, times, numbers, and link
   text(lang: "ar", dir: rtl)[
     مرحبًا بالعالم. يبدأ الاجتماع الساعة #text(dir: ltr)[10:30 AM] في Studio B.
 
-    رقم الإصدار هو #text(dir: ltr)[Typstry 0.2.0]، ورقم الصفحة هو 42.
+    رقم الإصدار هو #text(dir: ltr)[Typstella 0.2.0]، ورقم الصفحة هو 42.
   ],
 )
 
@@ -30,7 +30,7 @@ Right-to-left passages can contain left-to-right names, times, numbers, and link
   text(lang: "he", dir: rtl)[
     שלום עולם. הפגישה מתחילה בשעה #text(dir: ltr)[10:30 AM] בחדר B.
 
-    גרסת היישום היא #text(dir: ltr)[Typstry 0.2.0].
+    גרסת היישום היא #text(dir: ltr)[Typstella 0.2.0].
   ],
 )
 

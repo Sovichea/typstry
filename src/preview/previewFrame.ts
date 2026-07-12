@@ -245,8 +245,8 @@ export class PreviewFrame {
       .pdf-page-canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
       .textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;opacity:1;--scale-factor:1;pointer-events:none;user-select:none}
       .textLayer span,.textLayer br{position:absolute;color:transparent;white-space:pre;transform-origin:0 0}
-      .forward-sync-ripple{position:fixed;z-index:2147483647;box-sizing:border-box;width:18px;height:18px;margin:-9px 0 0 -9px;border:2px solid ${FORWARD_SYNC_GREEN};border-radius:999px;background:rgba(61,180,137,.16);box-shadow:0 0 0 0 rgba(61,180,137,.34);pointer-events:none;animation:typstry-forward-ripple 900ms ease-out forwards}
-      @keyframes typstry-forward-ripple{0%{opacity:0;transform:scale(.55);box-shadow:0 0 0 0 rgba(61,180,137,.38)}12%{opacity:1}100%{opacity:0;transform:scale(3.1);box-shadow:0 0 0 14px rgba(61,180,137,0)}}
+      .forward-sync-ripple{position:fixed;z-index:2147483647;box-sizing:border-box;width:18px;height:18px;margin:-9px 0 0 -9px;border:2px solid ${FORWARD_SYNC_GREEN};border-radius:999px;background:rgba(61,180,137,.16);box-shadow:0 0 0 0 rgba(61,180,137,.34);pointer-events:none;animation:typstella-forward-ripple 900ms ease-out forwards}
+      @keyframes typstella-forward-ripple{0%{opacity:0;transform:scale(.55);box-shadow:0 0 0 0 rgba(61,180,137,.38)}12%{opacity:1}100%{opacity:0;transform:scale(3.1);box-shadow:0 0 0 14px rgba(61,180,137,0)}}
       .annotation-link{position:absolute;display:block}
       ::selection{background:rgba(0,120,215,.35)}
     </style></head><body><div id="viewer-container"></div></body></html>`;
@@ -597,8 +597,8 @@ export class PreviewFrame {
       this.debugInverse("Interaction installation deferred: iframe document unavailable.");
       return;
     }
-    if (doc.documentElement.dataset.typstryInteractions === "true") return;
-    doc.documentElement.dataset.typstryInteractions = "true";
+    if (doc.documentElement.dataset.typstellaInteractions === "true") return;
+    doc.documentElement.dataset.typstellaInteractions = "true";
     this.debugInverse(`Interaction listener installed: readyState=${doc.readyState}, url=${doc.URL || "(empty)"}.`);
     doc.addEventListener("contextmenu", event => event.preventDefault());
     doc.addEventListener("click", event => {

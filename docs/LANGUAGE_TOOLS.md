@@ -1,6 +1,6 @@
 # Language Tools Providers
 
-Typstry's editor spellcheck, correction suggestions, and typing word suggestions are routed through a provider registry in `src-tauri/src/segmentation/registry.rs`.
+Typstella's editor spellcheck, correction suggestions, and typing word suggestions are routed through a provider registry in `src-tauri/src/segmentation/registry.rs`.
 
 Language support uses the Basic, Enhanced, and Deep taxonomy defined in [Product Direction and Terminology](./PRODUCT_DIRECTION.md). Stability is reported separately as Stable or Experimental. The frontend must display only the capabilities explicitly advertised by each provider.
 
@@ -76,17 +76,17 @@ English is bundled by default under `src-tauri/resources/dictionaries/hunspell/e
 
 The dictionary files are Hunspell-format `en_US.aff` and `en_US.dic` from the LibreOffice dictionaries repository, derived from SCOWL. License/source details are retained in `README_en_US.txt` and summarized in `metadata.json`.
 
-Typstry uses the pure-Rust `spellbook` engine to read Hunspell-compatible dictionaries. This avoids requiring a system Hunspell installation or shipping platform-specific native Hunspell libraries.
+Typstella uses the pure-Rust `spellbook` engine to read Hunspell-compatible dictionaries. This avoids requiring a system Hunspell installation or shipping platform-specific native Hunspell libraries.
 
 English support uses:
 
 - Spellcheck and correction suggestions from `spellbook`.
-- A Typstry-built prefix index from `.dic` stems for typing word suggestions.
+- A Typstella-built prefix index from `.dic` stems for typing word suggestions.
 - Conservative editor token filtering to avoid marking obvious Typst commands, identifiers, URLs, email fragments, acronyms, and one-letter fragments.
 
 ## Downloadable Hunspell-compatible languages
 
-Typstry can install additional Hunspell-compatible dictionaries from the Settings **Add language...** catalog. Downloaded dictionaries are stored in app-local data under:
+Typstella can install additional Hunspell-compatible dictionaries from the Settings **Add language...** catalog. Downloaded dictionaries are stored in app-local data under:
 
 ```text
 <app-local-data>/dictionaries/hunspell/<locale>/

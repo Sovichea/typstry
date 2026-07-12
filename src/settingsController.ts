@@ -66,8 +66,8 @@ export class SettingsController {
         shouldPersist = JSON.stringify(payload.settings) !== JSON.stringify(this.settings);
       } else {
         const migrated = cloneDefaultAppSettings();
-        const legacyTheme = localStorage.getItem("typstry-theme");
-        const legacyWordWrap = localStorage.getItem("typstry-word-wrap");
+        const legacyTheme = localStorage.getItem("typstella-theme");
+        const legacyWordWrap = localStorage.getItem("typstella-word-wrap");
         if (legacyTheme) migrated.appearance.theme = legacyTheme as ThemeName;
         if (legacyWordWrap) migrated.editor.wordWrap = legacyWordWrap !== "false";
         this.settings = normalizeAppSettings(migrated);
@@ -128,7 +128,7 @@ export class SettingsController {
       this.populatePanel();
       if (panel) activatePanel(panel);
       overlay.classList.remove("hidden");
-      document.dispatchEvent(new Event("typstry:settings-opened"));
+      document.dispatchEvent(new Event("typstella:settings-opened"));
       (document.querySelector(".settings-nav-item.active") as HTMLButtonElement | null)?.focus();
     };
     const closeSettings = () => overlay.classList.add("hidden");
@@ -143,10 +143,10 @@ export class SettingsController {
     document.querySelectorAll<HTMLElement>("[data-settings-panel]").forEach(item => {
       item.addEventListener("click", () => activatePanel(item.dataset.settingsPanel ?? "appearance"));
     });
-    document.addEventListener("typstry:open-settings", event => {
+    document.addEventListener("typstella:open-settings", event => {
       openSettings((event as CustomEvent<{ panel?: string }>).detail?.panel);
     });
-    document.addEventListener("typstry:system-fonts-changed", () => void this.refreshSystemFonts());
+    document.addEventListener("typstella:system-fonts-changed", () => void this.refreshSystemFonts());
 
     const onChange = (id: string, update: (settings: AppSettings, control: HTMLInputElement | HTMLSelectElement) => void) => {
       const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
@@ -208,8 +208,8 @@ export class SettingsController {
     try {
       this.filePath = await invoke<string>("save_app_settings", { settings: this.settings });
       this.loadError = null;
-      localStorage.removeItem("typstry-theme");
-      localStorage.removeItem("typstry-word-wrap");
+      localStorage.removeItem("typstella-theme");
+      localStorage.removeItem("typstella-word-wrap");
       if (status) status.textContent = "Saved";
       const path = document.getElementById("settings-file-path");
       if (path) path.textContent = this.filePath;
@@ -387,7 +387,7 @@ export class SettingsController {
 
     const header = document.createElement("div");
     header.className = "settings-language-catalog-header";
-    header.textContent = "Downloadable dictionaries provide Basic support unless Typstry has a tested language-specific provider. Basic support does not imply reliable segmentation or word completion.";
+    header.textContent = "Downloadable dictionaries provide Basic support unless Typstella has a tested language-specific provider. Basic support does not imply reliable segmentation or word completion.";
     const list = document.createElement("div");
     list.className = "settings-language-catalog-list";
     list.replaceChildren(...entries.map(entry => this.renderLanguageCatalogRow(entry)));

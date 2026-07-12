@@ -119,7 +119,7 @@ The registry runs every provider that overlaps the submitted ranges and merges n
 
 Extend the owned Khmer segmenter normalization API to preserve source spans. Each emitted normalized scalar or cluster must retain the original byte range that produced it. Segmentation tokens can then expose both normalized ranges and original source ranges.
 
-This is preferable to reconstructing ranges in Typstry because Khmer normalization may reorder marks or combine multiple source code points. A diff performed after normalization is ambiguous and can select the wrong cluster.
+This is preferable to reconstructing ranges in Typstella because Khmer normalization may reorder marks or combine multiple source code points. A diff performed after normalization is ambiguous and can select the wrong cluster.
 
 Required upstream shape:
 
@@ -135,7 +135,7 @@ struct MappedSegment {
 }
 ```
 
-Typstry converts the returned original byte boundaries to UTF-16 once. ZWSP, ZWNJ, and ZWJ removal must preserve boundary mapping rather than forcing a document-wide failure.
+Typstella converts the returned original byte boundaries to UTF-16 once. ZWSP, ZWNJ, and ZWJ removal must preserve boundary mapping rather than forcing a document-wide failure.
 
 ### Checklist
 
@@ -274,7 +274,7 @@ Completion should remain visible while the current token is a dictionary prefix.
 - [x] Correct the second of two identical unknown words.
 - [x] Edit a long chapter while preview and Tinymist LSP are active.
 - [x] Disable and re-enable spellcheck while a request is running.
-- [x] Reload a file modified outside Typstry.
+- [x] Reload a file modified outside Typstella.
 - [x] Verify Windows, Linux, and macOS behavior.
  
 ## Validation Checklist

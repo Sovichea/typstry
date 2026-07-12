@@ -11,8 +11,8 @@
 ## Local development
 
 ```bash
-git clone --recurse-submodules https://github.com/Sovichea/typstry.git
-cd typstry
+git clone --recurse-submodules https://github.com/Sovichea/typstella.git
+cd typstella
 bun install --frozen-lockfile
 bun run tauri dev
 ```
@@ -34,7 +34,7 @@ Run the frontend and Rust checks before submitting changes:
 ```bash
 bun test
 bun run build
-cargo fmt --manifest-path src-tauri/Cargo.toml --package typstry -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml --package typstella -- --check
 cargo check --manifest-path src-tauri/Cargo.toml --lib
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
@@ -61,7 +61,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib khmer_reference_provider_f
 
 Each preview root has a uniquely identified Tinymist task whose iframe is cached across tab switches. Imported files normally preview through the top-level `main.typ` and update on save.
 
-Put `// @standalone-preview` on an imported file's first line to give that chapter an independent preview. The Preview setting selects whether every preview refreshes on type or on save. When `main.typ` applies a local template with `#show: template.with(...)`, Typstry creates a temporary preview entry that applies the same template without modifying the chapter. References to labels outside the chapter appear as explanatory placeholders in this standalone view; open `main.typ` to inspect final numbering and reference output.
+Put `// @standalone-preview` on an imported file's first line to give that chapter an independent preview. The Preview setting selects whether every preview refreshes on type or on save. When `main.typ` applies a local template with `#show: template.with(...)`, Typstella creates a temporary preview entry that applies the same template without modifying the chapter. References to labels outside the chapter appear as explanatory placeholders in this standalone view; open `main.typ` to inspect final numbering and reference output.
 
 PDF preview and source-map synchronization are documented in [PREVIEW_INTERCEPTION.md](./PREVIEW_INTERCEPTION.md).
 

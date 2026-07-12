@@ -34,7 +34,7 @@ use toolchain::active_tinymist;
 
 fn workspace_font_directories(start: &Path) -> Vec<std::path::PathBuf> {
     for ancestor in start.ancestors() {
-        let root = ancestor.join(".typstry").join("fonts");
+        let root = ancestor.join(".typstella").join("fonts");
         let mut candidates = Vec::new();
         if workspace_has_bound_font_package(ancestor) && root.join("package").is_dir() {
             candidates.push(root.join("package"));
@@ -238,7 +238,7 @@ fn cleanup_dir_previews(dir: &std::path::Path) {
             if path.is_dir() {
                 let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 if name != ".git"
-                    && name != ".typstry"
+                    && name != ".typstella"
                     && name != "node_modules"
                     && name != "target"
                 {
@@ -247,7 +247,7 @@ fn cleanup_dir_previews(dir: &std::path::Path) {
             } else if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                     if name.starts_with('.')
-                        && (name.contains("typstry-preview") || name.contains("typstry-check"))
+                        && (name.contains("typstella-preview") || name.contains("typstella-check"))
                     {
                         let _ = std::fs::remove_file(path);
                     }
@@ -330,7 +330,7 @@ struct ProjectImportOperations {
 }
 
 #[tauri::command]
-fn cancel_typstry_project_import(
+fn cancel_typstella_project_import(
     state: tauri::State<'_, ProjectImportOperations>,
     operation_id: String,
 ) {
@@ -354,7 +354,7 @@ impl PendingProjectImports {
         if !candidate
             .extension()
             .and_then(|value| value.to_str())
-            .is_some_and(|value| value.eq_ignore_ascii_case("typstry"))
+            .is_some_and(|value| value.eq_ignore_ascii_case("typstella"))
         {
             return;
         }
@@ -405,21 +405,21 @@ mod project_open_queue_tests {
     use super::PendingProjectImports;
 
     #[test]
-    fn accepts_only_existing_typstry_files_and_deduplicates_canonical_paths() {
+    fn accepts_only_existing_typstella_files_and_deduplicates_canonical_paths() {
         let directory = tempfile::tempdir().unwrap();
-        let archive = directory.path().join("គម្រោង test.typstry");
+        let archive = directory.path().join("គម្រោង test.typstella");
         let source = directory.path().join("main.typ");
         std::fs::write(&archive, b"archive").unwrap();
         std::fs::write(&source, b"source").unwrap();
         let queue = PendingProjectImports::default();
         queue.push(archive.clone());
-        queue.push(directory.path().join(".").join("គម្រោង test.typstry"));
+        queue.push(directory.path().join(".").join("គម្រោង test.typstella"));
         queue.push(source);
-        queue.push(directory.path().join("missing.typstry"));
+        queue.push(directory.path().join("missing.typstella"));
 
         let paths = queue.take();
         assert_eq!(paths.len(), 1);
-        assert!(paths[0].ends_with("គម្រោង test.typstry"));
+        assert!(paths[0].ends_with("គម្រោង test.typstella"));
         assert!(queue.take().is_empty());
     }
 }
@@ -524,8 +524,8 @@ fn read_workspace_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
             let file_name = entry.file_name().to_string_lossy().to_string();
             // Ignore hidden system/editor metadata and temporary build files
             if file_name == ".git"
-                || file_name.contains("typstry-check")
-                || file_name.contains("typstry-preview")
+                || file_name.contains("typstella-check")
+                || file_name.contains("typstella-preview")
                 || file_name.contains(".export.typ")
             {
                 continue;
@@ -706,7 +706,8 @@ fn collect_typst_files(root: &std::path::Path, files: &mut Vec<std::path::PathBu
         let path = entry.path();
         if path.is_dir() {
             let name = entry.file_name();
-            if name != ".git" && name != "target" && name != "node_modules" && name != ".typstry" {
+            if name != ".git" && name != "target" && name != "node_modules" && name != ".typstella"
+            {
                 collect_typst_files(&path, files);
             }
         } else if path.extension().and_then(|value| value.to_str()) == Some("typ") {
@@ -714,7 +715,7 @@ fn collect_typst_files(root: &std::path::Path, files: &mut Vec<std::path::PathBu
                 .file_name()
                 .and_then(|value| value.to_str())
                 .unwrap_or_default();
-            if !name.contains("typstry-preview") {
+            if !name.contains("typstella-preview") {
                 files.push(normalized_existing_path(&path));
             }
         }
@@ -903,9 +904,9 @@ async fn check_typst_document(
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
 
-    let input_path = parent.join(format!(".{}.typstry-check-{}.typ", file_stem, nonce));
+    let input_path = parent.join(format!(".{}.typstella-check-{}.typ", file_stem, nonce));
     let temp_dir = std::env::temp_dir();
-    let output_path = temp_dir.join(format!(".{}.typstry-check-{}.svg", file_stem, nonce));
+    let output_path = temp_dir.join(format!(".{}.typstella-check-{}.svg", file_stem, nonce));
 
     let data_dir = app_handle
         .path()
@@ -1082,7 +1083,7 @@ async fn compile_typst_preview(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    let prefix = format!(".{}.typstry-preview-{}-", file_stem, nonce);
+    let prefix = format!(".{}.typstella-preview-{}-", file_stem, nonce);
     let input_path = parent.join(format!("{}.typ", prefix));
 
     let temp_dir = std::env::temp_dir();
@@ -1094,7 +1095,7 @@ async fn compile_typst_preview(
             let path = entry.path();
             if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with(&format!(".{}.typstry-preview-", file_stem))
+                    if name.starts_with(&format!(".{}.typstella-preview-", file_stem))
                         && name.ends_with(".svg")
                     {
                         let _ = std::fs::remove_file(path);
@@ -1185,7 +1186,7 @@ async fn compile_typst_pdf_preview(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    let prefix = format!(".{}.typstry-preview-pdf-{}-", file_stem, nonce);
+    let prefix = format!(".{}.typstella-preview-pdf-{}-", file_stem, nonce);
     let input_path = parent.join(format!("{}.typ", prefix));
 
     let temp_dir = std::env::temp_dir();
@@ -1197,7 +1198,7 @@ async fn compile_typst_pdf_preview(
             let path = entry.path();
             if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.starts_with(&format!(".{}.typstry-preview-pdf-", file_stem))
+                    if name.starts_with(&format!(".{}.typstella-preview-pdf-", file_stem))
                         && name.ends_with(".pdf")
                     {
                         let _ = std::fs::remove_file(path);
@@ -1247,7 +1248,7 @@ mod preview_main_tests {
     #[test]
     fn cleanup_only_removes_managed_preview_entries() {
         let workspace = tempfile::tempdir().expect("create workspace");
-        let preview = workspace.path().join(".chapter.typ.typstry-preview.typ");
+        let preview = workspace.path().join(".chapter.typ.typstella-preview.typ");
         let document = workspace.path().join("chapter.typ");
         std::fs::write(&preview, "preview").expect("write preview");
         std::fs::write(&document, "chapter").expect("write chapter");
@@ -1384,7 +1385,7 @@ mod preview_main_tests {
             .join("resources")
             .join("examples")
             .join("04-projects")
-            .join("03-typstry-readme");
+            .join("03-typstella-readme");
         let main = root.join("main.typ");
         let khmer = root.join("chapters").join("khmer-research.typ");
         let standalone = root.join("chapters").join("research-workflow.typ");
@@ -1654,7 +1655,7 @@ async fn start_tinymist_lsp(
                     let _ = std::fs::OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .open(std::env::temp_dir().join("typstry_lsp_log.txt"))
+                        .open(std::env::temp_dir().join("typstella_lsp_log.txt"))
                         .and_then(|mut f| {
                             std::io::Write::write_all(
                                 &mut f,
@@ -1675,7 +1676,7 @@ async fn start_tinymist_lsp(
             let _ = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(std::env::temp_dir().join("typstry_lsp_log.txt"))
+                .open(std::env::temp_dir().join("typstella_lsp_log.txt"))
                 .and_then(|mut f| {
                     std::io::Write::write_all(&mut f, format!("TX: {}\n", msg).as_bytes())
                 });
@@ -1892,7 +1893,7 @@ async fn export_source_zip(workspace_path: String, zip_path: String) -> Result<(
 }
 
 #[tauri::command]
-async fn export_typstry_project(
+async fn export_typstella_project(
     app_handle: tauri::AppHandle,
     workspace_path: String,
     archive_path: String,
@@ -1920,7 +1921,7 @@ async fn export_typstry_project(
         let main = Path::new(&main_file_path);
         let audit = tempfile::tempdir().map_err(|e| format!("Failed to stage font audit: {e}"))?;
         let baseline_pdf = audit.path().join("baseline.pdf");
-        let generated = workspace.join(".typstry").join("fonts").join("generated");
+        let generated = workspace.join(".typstella").join("fonts").join("generated");
         project_fonts::compile_for_audit(
             &tinymist_executable, workspace, main, &baseline_pdf,
             generated.is_dir().then_some(generated.as_path()), false,
@@ -1944,7 +1945,7 @@ async fn export_typstry_project(
         let packaged_fonts = serde_json::from_value::<Vec<project_archive::ProjectFont>>(
             serde_json::to_value(font_package.fonts).map_err(|e| e.to_string())?
         ).map_err(|e| format!("Failed to construct project font manifest: {e}"))?;
-        project_archive::export_typstry_project(project_archive::ProjectExport {
+        project_archive::export_typstella_project(project_archive::ProjectExport {
             workspace_root: Path::new(&workspace_path),
             archive_path: Path::new(&archive_path),
             main_file_path: Path::new(&main_file_path),
@@ -1955,11 +1956,11 @@ async fn export_typstry_project(
         })
     })
     .await
-    .map_err(|error| format!("Typstry project export task failed: {error}"))?
+    .map_err(|error| format!("Typstella project export task failed: {error}"))?
 }
 
 #[tauri::command]
-async fn inspect_typstry_project(
+async fn inspect_typstella_project(
     app_handle: tauri::AppHandle,
     archive_path: String,
 ) -> Result<ProjectImportPreflight, String> {
@@ -1968,7 +1969,7 @@ async fn inspect_typstry_project(
         .app_local_data_dir()
         .map_err(|error| format!("Failed to get data dir: {error}"))?;
     tauri::async_runtime::spawn_blocking(move || {
-        let inspection = project_archive::inspect_typstry_project(Path::new(&archive_path))?;
+        let inspection = project_archive::inspect_typstella_project(Path::new(&archive_path))?;
         let active = toolchain::status(&data_dir);
         let toolchain_state = toolchain::project_toolchain_state(
             &data_dir,
@@ -1991,7 +1992,7 @@ async fn inspect_typstry_project(
 }
 
 #[tauri::command]
-async fn import_typstry_project(
+async fn import_typstella_project(
     app_handle: tauri::AppHandle,
     archive_path: String,
     destination_path: String,
@@ -2011,7 +2012,7 @@ async fn import_typstry_project(
         .map_err(|_| "Project import cancellation state is unavailable.".to_string())?
         .insert(operation_id.clone(), cancelled.clone());
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let inspection = project_archive::inspect_typstry_project(Path::new(&archive_path))?;
+        let inspection = project_archive::inspect_typstella_project(Path::new(&archive_path))?;
         let state = toolchain::project_toolchain_state(
             &data_dir,
             &inspection.manifest.toolchain.tinymist_version,
@@ -2025,7 +2026,7 @@ async fn import_typstry_project(
                     .to_string(),
             );
         }
-        project_archive::import_typstry_project_cancellable(
+        project_archive::import_typstella_project_cancellable(
             Path::new(&archive_path),
             Path::new(&destination_path),
             &expected_manifest_sha256,
@@ -2081,7 +2082,7 @@ pub fn run() {
                 for argument in arguments.into_iter().skip(1) {
                     pending.push(PathBuf::from(argument));
                 }
-                let _ = app.emit("typstry-project-open-requested", ());
+                let _ = app.emit("typstella-project-open-requested", ());
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -2139,10 +2140,10 @@ pub fn run() {
             workspace_path_exists,
             cleanup_workspace_preview_files,
             export_source_zip,
-            export_typstry_project,
-            inspect_typstry_project,
-            import_typstry_project,
-            cancel_typstry_project_import,
+            export_typstella_project,
+            inspect_typstella_project,
+            import_typstella_project,
+            cancel_typstella_project_import,
             select_project_toolchain,
             take_pending_project_imports,
             save_workspace_file,

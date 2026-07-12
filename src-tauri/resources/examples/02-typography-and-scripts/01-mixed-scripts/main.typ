@@ -1,13 +1,13 @@
 #set document(title: "Mixed Scripts")
 #set page(margin: 22mm)
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: "MiSans Latin", size: 12pt)
-// typstry:typography:end
+// typstella:typography:end
 #set par(leading: 0.8em)
 
 = Mixed Scripts
 
-This document demonstrates several writing systems in one source file. Typstry can detect missing script coverage and let you choose an installed or downloadable fallback font.
+This document demonstrates several writing systems in one source file. Typstella can detect missing script coverage and let you choose an installed or downloadable fallback font.
 
 #let sample(name, language, content) = block(
   width: 100%,

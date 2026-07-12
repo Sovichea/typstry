@@ -2127,7 +2127,7 @@ pub fn list_hunspell_catalog(
         scripts: vec!["Latn".to_string()],
         installed: true,
         bundled: true,
-        source: "Bundled with Typstry".to_string(),
+        source: "Bundled with Typstella".to_string(),
         support_level: "enhanced".to_string(),
         stability: "stable".to_string(),
         boundary_mode: "unicode-word".to_string(),
@@ -2175,7 +2175,7 @@ pub async fn install_hunspell_dictionary(
     locale: String,
 ) -> Result<Vec<ProviderCapabilities>, String> {
     let spec = find_hunspell_spec(&locale)
-        .ok_or_else(|| format!("{locale} is not in Typstry's Hunspell catalog."))?;
+        .ok_or_else(|| format!("{locale} is not in Typstella's Hunspell catalog."))?;
     let aff_url = format!("{LIBREOFFICE_RAW_BASE}/{}", spec.aff_path);
     let dic_url = format!("{LIBREOFFICE_RAW_BASE}/{}", spec.dic_path);
     let (aff, dic) = tokio::try_join!(
@@ -3286,7 +3286,7 @@ This paragraph has a recieve typo.
 mod license_tests {
     use super::*;
 
-    /// Every provider that ships with Typstry must declare a known, redistributable license.
+    /// Every provider that ships with Typstella must declare a known, redistributable license.
     /// This test fails fast if a new provider is registered without setting license().
     #[test]
     fn all_registered_providers_have_licenses() {

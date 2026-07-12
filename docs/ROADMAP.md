@@ -21,7 +21,7 @@
 
 ## v1.0 priorities
 
-- Version-bound `.typstry` project export with all exact render fonts embedded, secure project import, project-local font loading, and installer-registered double-click import using the Typstry icon.
+- Version-bound `.typstella` project export with all exact render fonts embedded, secure project import, project-local font loading, and installer-registered double-click import using the Typstella icon.
 - Per-workspace managed toolchain selection with an explicit compatibility warning when overridden.
 - A New Project wizard for blank, technical report, IEEE-style research paper, thesis, and book projects.
 - Crash-safe saving, persisted-state migrations, recovery, accessibility, installer verification, and cross-platform release gates.
@@ -50,4 +50,4 @@ The long-term research tasks and gates are in the [v2 implementation plan](./V2_
 
 ## Current release status
 
-Typstry is beta software. The latest public release is v0.4.0.
+Typstella is beta software. The latest public release is v0.4.0.

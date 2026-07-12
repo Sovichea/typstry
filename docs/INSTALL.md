@@ -1,10 +1,10 @@
-# Install Typstry
+# Install Typstella
 
 ## Download a release
 
 Pre-built desktop packages are available from the GitHub releases page:
 
-[Download the latest release](https://github.com/Sovichea/typstry/releases/latest)
+[Download the latest release](https://github.com/Sovichea/typstella/releases/latest)
 
 Available packages:
 
@@ -12,11 +12,11 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental build
 
-Typstry is currently beta software. The latest public release is v0.4.0.
+Typstella is currently beta software. The latest public release is v0.4.0.
 
 ## Build from source
 
-Typstry supports native development on Windows, Linux, and macOS. Node.js and the standalone `typst` CLI are not required. Bun runs the frontend toolchain, while Typstry downloads and manages Tinymist on first launch.
+Typstella supports native development on Windows, Linux, and macOS. Node.js and the standalone `typst` CLI are not required. Bun runs the frontend toolchain, while Typstella downloads and manages Tinymist on first launch.
 
 ### Windows
 
@@ -100,8 +100,8 @@ For other distributions, use the equivalent packages from the [official Tauri pr
 ### Project setup
 
 ```bash
-git clone --recurse-submodules https://github.com/Sovichea/typstry.git
-cd typstry
+git clone --recurse-submodules https://github.com/Sovichea/typstella.git
+cd typstella
 bun install --frozen-lockfile
 ```
 

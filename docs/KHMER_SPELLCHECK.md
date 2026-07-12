@@ -1,10 +1,10 @@
 # Khmer Spellcheck and Word Completion
 
-Typstry provides local Khmer spellcheck and optional word completion through the Rust language-provider registry. The correction implementation remains in the provider but is not currently advertised because segmented unknown fragments do not provide reliable intended-word spans. The editor and IPC contracts remain provider-neutral; Khmer-specific segmentation and comparison rules stay in `src-tauri/src/segmentation/registry.rs` and the pinned `third_party/khmer_segmenter` submodule.
+Typstella provides local Khmer spellcheck and optional word completion through the Rust language-provider registry. The correction implementation remains in the provider but is not currently advertised because segmented unknown fragments do not provide reliable intended-word spans. The editor and IPC contracts remain provider-neutral; Khmer-specific segmentation and comparison rules stay in `src-tauri/src/segmentation/registry.rs` and the pinned `third_party/khmer_segmenter` submodule.
 
 ## Reference implementation identity
 
-Khmer is Typstry's first Deep language implementation and is the regression baseline for adding other complex scripts.
+Khmer is Typstella's first Deep language implementation and is the regression baseline for adding other complex scripts.
 
 ```text
 Provider ID:       khmer-segmenter
@@ -18,7 +18,7 @@ Upstream commit:   cb7f972843d60bfec767f38802ecb89c40c1c49f
 
 The gitlink at `third_party/khmer_segmenter` pins the code, dictionary artifacts, and normalization behavior. `tests/fixtures/khmer/provider.json` records the same commit and exact expected output. Changing the submodule, dictionary, normalization, or post-processing requires an intentional fixture update and an explanation in the change review.
 
-Typstry does not add semantic or LLM-generated boundary repairs after the segmenter. The pinned deterministic output is the lexical baseline even when another compound convention could also be linguistically defensible.
+Typstella does not add semantic or LLM-generated boundary repairs after the segmenter. The pinned deterministic output is the lexical baseline even when another compound convention could also be linguistically defensible.
 
 ## Reference architecture
 
@@ -110,14 +110,14 @@ Script-aware Khmer editing is applied independently from these two user controls
 - **Spellcheck** marks unknown words. Right-click an underlined word to add it to the personal dictionary or ignore it; Khmer replacement suggestions remain disabled until intended-word spans are reliable.
 - **Typing word suggestions** shows dictionary completions while typing. It can be disabled without disabling spellcheck or Typst/Tinymist code completion.
 
-Personal dictionary entries are normalized, deduplicated, and stored in the `editor.userDictionary` array in Typstry's platform-specific `settings.json`. Adding a word triggers fresh analysis immediately. Personal entries affect spellcheck only; they do not modify the bundled Khmer dictionary or completion ranking.
+Personal dictionary entries are normalized, deduplicated, and stored in the `editor.userDictionary` array in Typstella's platform-specific `settings.json`. Adding a word triggers fresh analysis immediately. Personal entries affect spellcheck only; they do not modify the bundled Khmer dictionary or completion ranking.
 
 ## Analysis pipeline
 
 1. CodeMirror invalidates the active document revision immediately after an edit, tab change, close, workspace close, or spellcheck setting change.
 2. After the debounce, the editor sends only the edited text ranges (expanded to containing logical lines/runs for boundary stability) in an `analyze_language_ranges` request.
 3. The Khmer segmenter normalizes and segments the submitted text while retaining original source byte spans.
-4. Typstry maps these byte boundaries to CodeMirror UTF-16 offsets using a single-pass linear lookup vector ($O(N + T)$) built once per chunk.
+4. Typstella maps these byte boundaries to CodeMirror UTF-16 offsets using a single-pass linear lookup vector ($O(N + T)$) built once per chunk.
 5. The frontend applies results only when the document key, revision, and CodeMirror document identity still match.
 6. Every replacement verifies that the current source slice still equals the issue's captured source text.
 
@@ -131,14 +131,14 @@ For completion source `😀សាលារ`, the cursor is at UTF-16 offset `7`.
 
 ## Modern COENG+DA and COENG+TA equivalence
 
-In modern Khmer, COENG+DA (`U+17D2 U+178A`) and COENG+TA (`U+17D2 U+178F`) render identically. Typstry therefore converts COENG+DA to COENG+TA only in the provider's internal comparison key.
+In modern Khmer, COENG+DA (`U+17D2 U+178A`) and COENG+TA (`U+17D2 U+178F`) render identically. Typstella therefore converts COENG+DA to COENG+TA only in the provider's internal comparison key.
 
 Consequences:
 
 - A dictionary entry containing COENG+DA matches source typed with COENG+TA, and vice versa.
 - Correction distance, prefix detection, and word completion use the same modern comparison key.
 - Returned modern suggestions use COENG+TA.
-- Typstry does not silently rewrite the document. Source code points and source ranges remain unchanged.
+- Typstella does not silently rewrite the document. Source code points and source ranges remain unchanged.
 - Historical or Middle Khmer distinctions are not modeled by the current modern-Khmer provider. A future historical provider should use a strict comparison policy instead of this equivalence.
 
 This policy follows the modern encoding model described by [Unicode Technical Note #61](https://www.unicode.org/notes/tn61/tn61-1.html). The note is implementation guidance rather than a Unicode normalization form, so this mapping must not be added to generic NFC/NFD normalization.
@@ -169,7 +169,7 @@ The dictionary word source (`khmer_dictionary_words.txt`) is filtered during the
 
 The frontend refreshes bounded native results after every Khmer character. Accepting a completion replaces only the returned range and does not consume adjacent text.
 
-When the current token is already a known dictionary word, Typstry includes that exact word as the first completion option before longer ranked suggestions. For example, typing `ការងារ` returns `ការងារ` first so Enter can accept the current word instead of forcing the next candidate.
+When the current token is already a known dictionary word, Typstella includes that exact word as the first completion option before longer ranked suggestions. For example, typing `ការងារ` returns `ការងារ` first so Enter can accept the current word instead of forcing the next candidate.
 
 Word completion remains controlled by the **Typing word suggestions** setting. Disabling it removes dictionary completions while leaving spellcheck, script-aware Khmer editing, and Typst/Tinymist code completion available.
 
@@ -177,13 +177,13 @@ Word completion remains controlled by the **Typing word suggestions** setting. D
 
 - The segmenter is a deterministic lexical engine, not a semantic parser. Names, new terminology, slang, and domain-specific words may be returned as unknown.
 - Dictionary compounds follow the pinned dictionary and frequency artifacts. Another valid lexical convention may prefer different boundaries.
-- Typstry does not use an LLM or heuristic sentence reconstruction to override deterministic token output.
+- Typstella does not use an LLM or heuristic sentence reconstruction to override deterministic token output.
 - Correction replacement is disabled because an unknown segment is not necessarily the user's complete intended word.
 - Completion ranking is dictionary/frequency based and does not model sentence meaning.
 - Modern COENG+DA/COENG+TA lookup equivalence is not suitable for historical or Middle Khmer distinctions.
 - The editing policy owns the main Khmer block `[U+1780, U+1800)`; it does not claim unrelated scripts or generic invisible characters.
 - Experimental Khmer render preparation is a separate preview/export transformation and must not be interpreted as spellcheck segmentation.
-- A normalization mapping changes lookup text only. Typstry never silently normalizes or rewrites saved source.
+- A normalization mapping changes lookup text only. Typstella never silently normalizes or rewrites saved source.
 
 ## Validation
 

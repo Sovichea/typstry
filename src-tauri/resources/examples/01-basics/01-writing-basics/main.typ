@@ -1,11 +1,11 @@
 #set document(
   title: "A Small Typst Document",
-  author: "Typstry",
+  author: "Typstella",
 )
 #set page(margin: 24mm)
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: "MiSans Latin", size: 11pt)
-// typstry:typography:end
+// typstella:typography:end
 #set heading(numbering: "1.")
 
 = A Small Typst Document <start>

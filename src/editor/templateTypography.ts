@@ -6,8 +6,8 @@ export type LocalTemplateApplication = {
   showExpression: string;
 };
 
-const blockStart = "// typstry:typography:start";
-const blockEnd = "// typstry:typography:end";
+const blockStart = "// typstella:typography:start";
+const blockEnd = "// typstella:typography:end";
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -117,7 +117,7 @@ export function templateTypographyEdit(
 
 export function newTypographyTemplate(config: DocumentTypography): string {
   return [
-    "#let typstry-typography(body) = {",
+    "#let typstella-typography(body) = {",
     renderTemplateTypographyBlock(config),
     "  body",
     "}",
@@ -126,10 +126,10 @@ export function newTypographyTemplate(config: DocumentTypography): string {
 }
 
 export function ensureTypographyTemplateApplication(mainText: string): TypographyEdit {
-  if (/#import\s+"typstry-template\.typ"\s*:\s*typstry-typography/.test(mainText)) {
+  if (/#import\s+"typstella-template\.typ"\s*:\s*typstella-typography/.test(mainText)) {
     return { from: 0, to: 0, insert: "" };
   }
-  const insert = '#import "typstry-template.typ": typstry-typography\n#show: typstry-typography\n\n';
+  const insert = '#import "typstella-template.typ": typstella-typography\n#show: typstella-typography\n\n';
   const bomOffset = mainText.startsWith("\uFEFF") ? 1 : 0;
   const lineEnd = mainText.indexOf("\n", bomOffset);
   const firstLine = mainText.slice(bomOffset, lineEnd < 0 ? mainText.length : lineEnd).replace(/\r$/, "");

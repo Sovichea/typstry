@@ -1,8 +1,8 @@
 {
-  "format": "com.typstry.project",
+  "format": "com.typstella.project",
   "schemaVersion": 1,
   "createdBy": {
-    "application": "Typstry",
+    "application": "Typstella",
     "version": "1.0.0"
   },
   "project": {

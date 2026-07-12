@@ -2,7 +2,7 @@
 
 ## Product direction
 
-Typstry is a complex-script-first writing environment for Typst, designed for research papers, technical documentation, theses, books, and other long-form documents.
+Typstella is a complex-script-first writing environment for Typst, designed for research papers, technical documentation, theses, books, and other long-form documents.
 
 Khmer is the first language with deep support. It is the reference implementation for script-aware editing and language tooling, but it must not become a special case embedded throughout the editor. New languages must be able to add their own editing policy, tokenizer, dictionary provider, completion behavior, and capabilities without changing or weakening Khmer behavior.
 
@@ -17,22 +17,22 @@ The project should solve the complete authoring workflow:
 
 ## Direction record: context that must be preserved
 
-Typstry must not be reduced to a “Unicode-friendly Typst editor” or presented as “Typst with better Khmer rendering.” Unicode correctness is foundational, but it is not the complete product.
+Typstella must not be reduced to a “Unicode-friendly Typst editor” or presented as “Typst with better Khmer rendering.” Unicode correctness is foundational, but it is not the complete product.
 
 The project exists to address the whole academic and technical writing workflow for languages that traditional technical-writing tools often treat as edge cases. That includes source editing, language-aware interaction, project organization, diagnostics, preview, navigation, and final output.
 
 The intended positioning is:
 
-> Typstry is a complex-script-first Typst writing environment, with Khmer as the first deeply supported language.
+> Typstella is a complex-script-first Typst writing environment, with Khmer as the first deeply supported language.
 
 This positioning has four consequences:
 
 1. **Khmer demonstrates depth, not exclusivity.** Khmer receives tailored editing and language tools, while the underlying contracts must allow other languages to reach the same depth independently.
 2. **Complex scripts are first-class requirements.** Unicode-safe offsets, shaping, grapheme behavior, font fallback, IME input, bidirectional text, and language boundaries must influence architecture from the beginning.
 3. **The document is a project, not one file.** A serious research document may contain a main file, templates, chapters, includes, bibliography databases, figures, data, and files that can also be previewed independently.
-4. **The workflow must scale.** The same design must remain understandable and responsive for a short note, a thesis, a technical proposal, or a long book without making the Typst source dependent on Typstry.
+4. **The workflow must scale.** The same design must remain understandable and responsive for a short note, a thesis, a technical proposal, or a long book without making the Typst source dependent on Typstella.
 
-Typstry’s long-term goal is to make academic and technical writing more accessible for languages that have historically been underserved by documentation and publishing tools. Product and architecture decisions should be evaluated against that goal.
+Typstella’s long-term goal is to make academic and technical writing more accessible for languages that have historically been underserved by documentation and publishing tools. Product and architecture decisions should be evaluated against that goal.
 
 ## Scope
 
@@ -53,13 +53,13 @@ Task dependencies are written as `Depends on`. Tasks without an explicit depende
 3. **Editing policy and language tooling remain separate.** Cursor behavior must not depend on a dictionary or native request. Spellcheck must not alter editor navigation.
 4. **Capabilities are explicit.** The UI only exposes spellcheck, correction, completion, segmentation, or script-aware editing when the selected provider supports it reliably.
 5. **Partial support is labeled honestly.** A fallback dictionary may provide useful spellcheck without claiming reliable tokenization or completion.
-6. **Source remains portable.** Typstry metadata and caches must not contaminate saved Typst source or become required to compile a project elsewhere.
+6. **Source remains portable.** Typstella metadata and caches must not contaminate saved Typst source or become required to compile a project elsewhere.
 7. **Long documents are normal workloads.** Multi-file projects and large PDFs are design targets, not exceptional cases.
 8. **No provider may interfere with another.** Mixed-script documents must route each range to its owning policy or provider and merge independent results safely.
 
 ## Existing foundation
 
-Typstry already has several parts of this architecture:
+Typstella already has several parts of this architecture:
 
 - the script editing policy registry under `src/editor/editingPolicies/`;
 - Khmer-tailored grapheme navigation, deletion, and temporary composition boundaries;
@@ -117,7 +117,7 @@ Tracked by `P6.1`, `P6.2`, `P6.3`, and `P6.8`.
 
 ### Step 2: Classify project files by role
 
-Typstry should recognize that files participate in different parts of the writing workflow:
+Typstella should recognize that files participate in different parts of the writing workflow:
 
 ```text
 main source
@@ -127,10 +127,10 @@ bibliography database
 figure or image
 data file
 standalone Typst document
-generated Typstry cache
+generated Typstella cache
 ```
 
-File roles control navigation and preview behavior, not whether the files remain ordinary portable project files. Typstry metadata must never be required by the Typst compiler.
+File roles control navigation and preview behavior, not whether the files remain ordinary portable project files. Typstella metadata must never be required by the Typst compiler.
 
 The explorer should hide generated cache files, preserve ordinary project organization, and allow navigation from include, import, bibliography, image, and template references.
 
@@ -163,7 +163,7 @@ Tracked by `P2.7`, `P6.5`, `P6.7`, and `P6.8`.
 
 ### Step 4: Build and update a project dependency graph
 
-The main document depends on includes, imports, templates, bibliographies, figures, and data. Typstry should maintain a lightweight dependency graph so a change can invalidate the correct document without rescanning or restarting every open preview.
+The main document depends on includes, imports, templates, bibliographies, figures, and data. Typstella should maintain a lightweight dependency graph so a change can invalidate the correct document without rescanning or restarting every open preview.
 
 The graph should record:
 
@@ -212,7 +212,7 @@ edit committed
   -> replace preview when ready
 ```
 
-Render-on-type may need temporary snapshot files when the compiler cannot consume unsaved memory overlays. Snapshot writes must be atomic, revisioned, isolated under `.typstry`, and invisible to normal workspace navigation.
+Render-on-type may need temporary snapshot files when the compiler cannot consume unsaved memory overlays. Snapshot writes must be atomic, revisioned, isolated under `.typstella`, and invisible to normal workspace navigation.
 
 #### Render on save
 
@@ -366,7 +366,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 - [ ] Included-file navigation preserves the main preview session and scroll state.
 - [ ] Large-document memory is bounded by the virtualized working set, not total page count.
 - [ ] Cached or editor-only data never enters saved Typst source.
-- [ ] A project remains compilable using the standard Typst toolchain outside Typstry.
+- [ ] A project remains compilable using the standard Typst toolchain outside Typstella.
 - [ ] Khmer-specific behavior remains owned by Khmer modules while the workflow remains language-neutral.
 
 ## Phase 1: Align product language and feature taxonomy
@@ -386,7 +386,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 ### Task checklist
 
 - [x] **P1.1 — Define the terminology source of truth.** Add the approved product description, one-line pitch, feature taxonomy, and support-level definitions to the development documentation.
-- [x] **P1.2 — Rewrite public positioning.** Update the README, repository description, About content, and release-document templates to use the complex-script-first description. README, release workflow, and GitHub repository metadata are aligned. Typstry does not currently have an About dialog.
+- [x] **P1.2 — Rewrite public positioning.** Update the README, repository description, About content, and release-document templates to use the complex-script-first description. README, release workflow, and GitHub repository metadata are aligned. Typstella does not currently have an About dialog.
 - [x] **P1.3 — Audit user-facing terminology.** Find Khmer-only or ambiguous generic labels in Settings, onboarding, language downloads, logs, dialogs, and tooltips; replace them with the approved terms.
 - [x] **P1.4 — Define support levels.** Specify the exact capabilities required for `Basic`, `Enhanced`, and `Deep`, including how experimental support is displayed.
 - [x] **P1.5 — Display support metadata.** Add support level and provider-dependent feature labels to installed-language and language-catalog UI entries. Depends on `P1.4`.
@@ -394,7 +394,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ### Acceptance criteria
 
-- [x] The README answers what Typstry is, who it serves, and why Khmer has special depth without implying Khmer-only scope.
+- [x] The README answers what Typstella is, who it serves, and why Khmer has special depth without implying Khmer-only scope.
 - [x] Settings distinguish script-aware editing from spellcheck and typing suggestions.
 - [x] A language entry cannot imply completion or reliable segmentation unless its provider advertises those capabilities.
 
@@ -504,7 +504,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 
 ### Acceptance criteria
 
-- [x] Installing a dictionary refreshes capabilities without restarting Typstry.
+- [x] Installing a dictionary refreshes capabilities without restarting Typstella.
 - [x] Thai or another segmentation-dependent language is labeled as fallback support until a tokenizer exists.
 - [x] Removing a downloaded language cleanly unregisters it without affecting Khmer or English.
 - [x] Provider source and license information remain available offline after installation.
@@ -553,7 +553,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 - Keep main-file, include, import, bibliography, image, and template paths navigable from source.
 - Ensure external file changes update the editor, LSP, and preview through one ordered synchronization path.
 - Keep render-on-type and render-on-save behavior distinct and testable.
-- Hide Typstry caches from the workspace and never require them for external Typst compilation.
+- Hide Typstella caches from the workspace and never require them for external Typst compilation.
 - Preserve tabs, cursor positions, active file, main-file selection, and layout across workspace restoration.
 
 ### Task checklist
@@ -566,7 +566,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 - [x] **P6.6 — Separate render modes.** Add deterministic tests proving render-on-save compiles only after a successful save and render-on-type compiles debounced document revisions.
 - [x] **P6.7 — Add compiler recovery.** Ensure a failed render or LSP restart cannot permanently stop later diagnostics or preview updates.
 - [x] **P6.8 — Harden workspace restoration.** Restore the main file and active tab from an empty-tab state, then restore cursor, scroll, split, and preview state.
-- [x] **P6.9 — Isolate caches.** Hide `.typstry`, clean obsolete cache entries safely, and verify external Typst compilation never depends on cache contents.
+- [x] **P6.9 — Isolate caches.** Hide `.typstella`, clean obsolete cache entries safely, and verify external Typst compilation never depends on cache contents.
 - [x] **P6.10 — Add a research-project fixture.** Maintain a multi-file project containing a template, chapters, bibliography, figures, Khmer, Latin, and standalone-preview content.
 
 ### Acceptance criteria
@@ -575,7 +575,7 @@ Tracked by `P7.1`, `P7.2`, `P7.9`, and `P7.10`.
 - [x] Restarting a workspace can open the configured main file even when no other tab is open.
 - [x] A change in any included source reaches diagnostics and preview exactly once in the correct order.
 - [x] Render-on-save does not compile while typing, and render-on-type recovers after a compiler error.
-- [x] The same source project compiles with the standard Typst toolchain outside Typstry.
+- [x] The same source project compiles with the standard Typst toolchain outside Typstella.
 
 ## Phase 7: Set reliability and performance gates
 
@@ -630,7 +630,7 @@ Lao is the selected second portability implementation. It validates the contract
 - [x] **P8.7 — Run cross-language regressions.** Compare all locked Khmer results before and after the new registrations.
 - [x] **P8.8 — Publish support limits.** Document unsupported behavior, support level, provider sources, and experimental status.
 
-`P8.1` remains open for promotion: Lao was selected and its Unicode, ICU4X, dictionary, version, and license sources are confirmed, but Typstry still needs a fluent Lao maintainer or reviewer. The provider therefore remains experimental enhanced support rather than deep/stable support.
+`P8.1` remains open for promotion: Lao was selected and its Unicode, ICU4X, dictionary, version, and license sources are confirmed, but Typstella still needs a fluent Lao maintainer or reviewer. The provider therefore remains experimental enhanced support rather than deep/stable support.
 
 ### Acceptance criteria
 
@@ -723,6 +723,6 @@ Release validation must additionally cover:
 
 ## Definition of success
 
-This direction is successful when Typstry can add another deeply supported language through explicit policy and provider modules, without changing Khmer behavior or generic editor integration, while remaining reliable for real multi-file research documents.
+This direction is successful when Typstella can add another deeply supported language through explicit policy and provider modules, without changing Khmer behavior or generic editor integration, while remaining reliable for real multi-file research documents.
 
-Khmer should demonstrate the depth of Typstry's language support. It should not define the limit of who Typstry can serve.
+Khmer should demonstrate the depth of Typstella's language support. It should not define the limit of who Typstella can serve.

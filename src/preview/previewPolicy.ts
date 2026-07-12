@@ -56,7 +56,7 @@ export function previewSessionIdentity(
     hash ^= key.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
-  return { key, taskId: `typstry-preview-${(hash >>> 0).toString(16)}` };
+  return { key, taskId: `typstella-preview-${(hash >>> 0).toString(16)}` };
 }
 
 export function tinymistPreviewArguments(

@@ -12,7 +12,7 @@ describe("document typography", () => {
 
   test("renders reliable Typst font rules", () => {
     expect(renderTypographyBlock(config)).toContain('#set text(font: ("Calibri", "MiSans Khmer"), size: 11pt)');
-    expect(renderTypographyBlock(config)).toContain('// typstry:complex-font {"family":"MiSans Khmer","script":"khmer","scale":1.05}');
+    expect(renderTypographyBlock(config)).toContain('// typstella:complex-font {"family":"MiSans Khmer","script":"khmer","scale":1.05}');
     expect(renderTypographyBlock(config)).not.toContain("#show regex(");
     expect(renderTypographyBlock(config)).not.toContain("show raw");
     expect(parseTypographyBlock(renderTypographyBlock(config))).toEqual(config);
@@ -20,10 +20,10 @@ describe("document typography", () => {
 
   test("migrates the former regex size adjustment to a uniform scale", () => {
     const legacy = [
-      "// typstry:typography:start",
+      "// typstella:typography:start",
       '#set text(font: "Calibri", size: 10pt)',
       '#show regex("\\p{Khmer}+"): set text(font: "MiSans Khmer", size: 1em + 0.5pt)',
-      "// typstry:typography:end",
+      "// typstella:typography:end",
       ""
     ].join("\n");
     expect(parseTypographyBlock(legacy)).toEqual({
@@ -64,11 +64,11 @@ describe("document typography", () => {
     const original = "// @standalone-preview\n= Chapter\n";
     const first = typographyEdit(original, config);
     const withBlock = original.slice(0, first.from) + first.insert + original.slice(first.to);
-    expect(withBlock.startsWith("// @standalone-preview\n// typstry:typography:start")).toBe(true);
+    expect(withBlock.startsWith("// @standalone-preview\n// typstella:typography:start")).toBe(true);
 
     const second = typographyEdit(withBlock, { ...config, latinFont: "MiSans Latin" });
     const updated = withBlock.slice(0, second.from) + second.insert + withBlock.slice(second.to);
-    expect(updated.match(/typstry:typography:start/g)?.length).toBe(1);
+    expect(updated.match(/typstella:typography:start/g)?.length).toBe(1);
     expect(updated).toContain('font: ("MiSans Latin", "MiSans Khmer")');
   });
 

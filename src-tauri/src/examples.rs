@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use tauri::Manager;
 
-const EXAMPLES_DIRECTORY_NAME: &str = "Typstry Examples";
+const EXAMPLES_DIRECTORY_NAME: &str = "Typstella Examples";
 const START_FILE_NAME: &str = "START-HERE.typ";
 
 #[derive(Serialize)]
@@ -264,7 +264,7 @@ mod tests {
         let source_parent = tempfile::tempdir().expect("source tempdir");
         let destination_parent = tempfile::tempdir().expect("destination tempdir");
         let source = source_parent.path().join("examples");
-        let destination = destination_parent.path().join("Typstry Examples");
+        let destination = destination_parent.path().join("Typstella Examples");
         let state = destination_parent.path().join("examples-state.json");
         std::fs::create_dir_all(source.join("nested")).expect("source directories");
         std::fs::create_dir_all(destination.join("nested")).expect("destination directories");
@@ -290,7 +290,7 @@ mod tests {
         let source_parent = tempfile::tempdir().expect("source tempdir");
         let destination_parent = tempfile::tempdir().expect("destination tempdir");
         let source = source_parent.path().join("examples");
-        let destination = destination_parent.path().join("Typstry Examples");
+        let destination = destination_parent.path().join("Typstella Examples");
         let state = destination_parent.path().join("examples-state.json");
         std::fs::create_dir_all(&source).expect("source directory");
         std::fs::write(source.join(START_FILE_NAME), "bundled v1").expect("source v1");
@@ -317,7 +317,7 @@ mod tests {
         let source_parent = tempfile::tempdir().expect("source tempdir");
         let destination_parent = tempfile::tempdir().expect("destination tempdir");
         let source = source_parent.path().join("examples");
-        let destination = destination_parent.path().join("Typstry Examples");
+        let destination = destination_parent.path().join("Typstella Examples");
         let state = destination_parent.path().join("examples-state.json");
         std::fs::create_dir_all(source.join("retired")).expect("source directory");
         std::fs::write(source.join(START_FILE_NAME), "start").expect("source start");
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn test_readme_example_exists() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let base_path = manifest_dir.join("resources/examples/04-projects/03-typstry-readme");
+        let base_path = manifest_dir.join("resources/examples/04-projects/03-typstella-readme");
         assert!(base_path.join("main.typ").is_file());
         assert!(base_path.join("template.typ").is_file());
         assert!(base_path.join("import.typ").is_file());
@@ -407,7 +407,7 @@ mod tests {
         assert!(base_path.join("refs.bib").is_file());
         assert!(base_path.join("chapters/research-workflow.typ").is_file());
         assert!(base_path.join("chapters/khmer-research.typ").is_file());
-        assert!(base_path.join("assets/typstry-icon.png").is_file());
-        assert!(base_path.join("assets/typstry-wordmark.png").is_file());
+        assert!(base_path.join("assets/typstella-icon.png").is_file());
+        assert!(base_path.join("assets/typstella-wordmark.png").is_file());
     }
 }

@@ -1,6 +1,6 @@
 # Script-Aware Editor Policies
 
-Typstry separates editor navigation from spellcheck, completion, and document segmentation. Script editing policies run synchronously in CodeMirror and define safe cursor and deletion behavior for a Unicode script. They do not depend on a dictionary or Rust language provider.
+Typstella separates editor navigation from spellcheck, completion, and document segmentation. Script editing policies run synchronously in CodeMirror and define safe cursor and deletion behavior for a Unicode script. They do not depend on a dictionary or Rust language provider.
 
 ## Architecture
 

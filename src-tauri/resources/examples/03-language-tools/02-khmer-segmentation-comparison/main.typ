@@ -2,12 +2,12 @@
 
 #set document(
   title: "Khmer Justification and Segmentation Comparison",
-  author: "Typstry Examples",
+  author: "Typstella Examples",
 )
 
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: ("MiSans Latin", "MiSans Khmer"), size: 10pt)
-// typstry:typography:end
+// typstella:typography:end
 
 #align(center)[
   #text(size: 14pt, weight: "bold", fill: rgb("#1d3557"))[
@@ -17,7 +17,7 @@
 
 #v(0.3em)
 
-This example compares the same Khmer paragraph under three Typst settings. The recommended default is Typst justification with tuned `justification-limits`. Typstry's native Khmer render preparation is experimental and off by default; enable it in Settings only when you want to compare inserted Zero Width Space boundaries.
+This example compares the same Khmer paragraph under three Typst settings. The recommended default is Typst justification with tuned `justification-limits`. Typstella's native Khmer render preparation is experimental and off by default; enable it in Settings only when you want to compare inserted Zero Width Space boundaries.
 
 #v(0.8em)
 
@@ -95,8 +95,8 @@ This example compares the same Khmer paragraph under three Typst settings. The r
   width: 100%,
   [
     #set text(size: 8.5pt)
-    - *Column 1*: `// @disable-render-prep` keeps Typstry from inserting Khmer layout controls, so this shows Typst's original justified output.
-    - *Column 2*: Shows experimental Typstry Zero Width Space insertion only when `Khmer render preparation (experimental)` is enabled in Settings.
+    - *Column 1*: `// @disable-render-prep` keeps Typstella from inserting Khmer layout controls, so this shows Typst's original justified output.
+    - *Column 2*: Shows experimental Typstella Zero Width Space insertion only when `Khmer render preparation (experimental)` is enabled in Settings.
     - *Column 3*: Recommended default: no render preparation, with bounded spacing and slight negative tracking through `justification-limits`.
   ],
 )

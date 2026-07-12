@@ -1,7 +1,7 @@
 #let lao_document(body) = {
-  // typstry:typography:start
+  // typstella:typography:start
   set text(font: ("MiSans Latin", "Noto Sans Lao", "Phetsarath OT"), size: 11pt)
-  // typstry:typography:end
+  // typstella:typography:end
   
   set page(
     margin: 25mm,

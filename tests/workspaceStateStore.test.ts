@@ -29,7 +29,7 @@ describe("workspace state store", () => {
   });
 
   test("rejects malformed persisted state", () => {
-    values.set("typstry-workspace-/work", "not json");
+    values.set("typstella-workspace-/work", "not json");
     expect(new WorkspaceStateStore().load("/work")).toBeNull();
   });
 

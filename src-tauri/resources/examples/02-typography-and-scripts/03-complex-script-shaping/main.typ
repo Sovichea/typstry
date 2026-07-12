@@ -1,7 +1,7 @@
 // Select another compatible family from Document typography if MiSans Khmer is not installed.
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: ("MiSans Latin", "MiSans Khmer"))
-// typstry:typography:end
+// typstella:typography:end
 #set document(title: "Complex Script Shaping")
 #set page(margin: 22mm)
 #set text(size: 12pt)
@@ -34,7 +34,7 @@ Complex scripts rely on correct character shaping, combining marks, and font fal
 
 == Script-specific scaling
 
-Typstry can generate a uniformly scaled workspace-local font for preview while the source keeps a portable fallback stack:
+Typstella can generate a uniformly scaled workspace-local font for preview while the source keeps a portable fallback stack:
 
 ```typ
 #set text(font: ("Your Latin font", "Your preferred Khmer font"))

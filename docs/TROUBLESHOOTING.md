@@ -48,12 +48,12 @@ Verify GitHub access and retry from **Settings → Toolchain**. A system `typst`
 
 ## Preview or inverse sync problems
 
-Preview behavior is handled by Tinymist and Typstry's preview iframe layer. Developer notes are in [PREVIEW_INTERCEPTION.md](./PREVIEW_INTERCEPTION.md).
+Preview behavior is handled by Tinymist and Typstella's preview iframe layer. Developer notes are in [PREVIEW_INTERCEPTION.md](./PREVIEW_INTERCEPTION.md).
 
 When reporting preview issues, include:
 
 - Operating system.
-- Typstry version.
+- Typstella version.
 - Whether the preview is docked or undocked.
 - Whether the file is `main.typ` or an included file.
 - Any visible messages from the developer log console.

@@ -5077,7 +5077,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
-name = "typstry"
+name = "typstella"
 version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
@@ -5106,7 +5106,7 @@ dependencies = [
  "tokio-tungstenite",
  "trash",
  "ttf-parser",
- "typstry-font-scaler",
+ "typstella-font-scaler",
  "unicode-normalization",
  "windows-sys 0.61.2",
  "winreg",
@@ -5114,7 +5114,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "typstry-font-scaler"
+name = "typstella-font-scaler"
 version = "0.1.0"
 
 [[package]]

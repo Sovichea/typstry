@@ -36,7 +36,7 @@ export class ToolchainController {
     document.getElementById("settings-toolchain-refresh")?.addEventListener("click", () => {
       void this.refresh(true);
     });
-    document.addEventListener("typstry:settings-opened", () => void this.refresh(false));
+    document.addEventListener("typstella:settings-opened", () => void this.refresh(false));
     document.querySelector('[data-settings-panel="toolchain"]')?.addEventListener("click", () => {
       void this.refresh(false);
     });

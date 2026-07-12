@@ -1,11 +1,11 @@
-#set document(title: "Typstry Unicode Examples")
+#set document(title: "Typstella Unicode Examples")
 #set page(margin: 24mm)
-// typstry:typography:start
+// typstella:typography:start
 #set text(font: "MiSans Latin", size: 11pt)
-// typstry:typography:end
+// typstella:typography:end
 #set heading(numbering: "1.")
 
-= Typstry Unicode Examples
+= Typstella Unicode Examples
 
 This workspace contains editable examples for learning Typst and testing multilingual documents.
 
@@ -23,7 +23,7 @@ This workspace contains editable examples for learning Typst and testing multili
 
 == 03. Language Tools
 
-Typstry offers interactive language tools such as spellcheck and word completion, controlled from Settings (`Ctrl+,` or `Cmd+,`).
+Typstella offers interactive language tools such as spellcheck and word completion, controlled from Settings (`Ctrl+,` or `Cmd+,`).
 
 - `01-khmer-deep-support`: Khmer language document with Cetz circuit diagrams.
 - `02-khmer-segmentation-comparison`: Khmer justify-only baseline, experimental render preparation, and recommended tracking-tuned justification.
@@ -34,7 +34,7 @@ Typstry offers interactive language tools such as spellcheck and word completion
 
 - `01-simple-thesis`: Three chapters demonstrating labels and cross-chapter references.
 - `02-khmer-folklore-book`: A multi-file Khmer folklore book with five included stories and a table of contents.
-- `03-typstry-readme`: The Typstry project README built as a Typst project.
+- `03-typstella-readme`: The Typstella project README built as a Typst project.
 
 == Templates
 
@@ -42,6 +42,6 @@ Typstry offers interactive language tools such as spellcheck and word completion
 
 Open any `main.typ` file from the explorer. These files are your own writable copies, so you can change them freely.
 
-When Typstry detects a script that needs another font, choose the font you prefer from the notification or Settings.
+When Typstella detects a script that needs another font, choose the font you prefer from the notification or Settings.
 
 Imported template sections start with `// @standalone-preview`, so opening one directly enables its independent preview.

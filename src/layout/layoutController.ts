@@ -98,7 +98,7 @@ export class LayoutController {
         const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
         const win = new WebviewWindow("preview", {
           url: "index.html?mode=preview",
-          title: "Typstry - Live Preview",
+          title: "Typstella - Live Preview",
           width: 800,
           height: 600
         });
@@ -115,14 +115,14 @@ export class LayoutController {
 
   private beginResize(resizer: HTMLElement, cursor: string): void {
     resizer.classList.add("resizing");
-    document.body.classList.add("typstry-resizing");
+    document.body.classList.add("typstella-resizing");
     document.body.style.cursor = cursor;
     document.body.style.userSelect = "none";
   }
 
   private endResize(resizer: HTMLElement): void {
     resizer.classList.remove("resizing");
-    document.body.classList.remove("typstry-resizing");
+    document.body.classList.remove("typstella-resizing");
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
   }

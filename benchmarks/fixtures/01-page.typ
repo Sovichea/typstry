@@ -4,6 +4,6 @@
 
 This fixture measures first preview latency with Latin and Khmer text.
 
-ភាសាខ្មែរគឺជាភាសាផ្លូវការរបស់ប្រទេសកម្ពុជា។ Typstry keeps complex scripts and Latin technical terms in one portable Typst document.
+ភាសាខ្មែរគឺជាភាសាផ្លូវការរបស់ប្រទេសកម្ពុជា។ Typstella keeps complex scripts and Latin technical terms in one portable Typst document.
 
 #lorem(140)

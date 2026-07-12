@@ -1,8 +1,8 @@
 import "./style.css";
-import { TypstryWorkspaceController } from "./appController";
+import { TypstellaWorkspaceController } from "./appController";
 import { initializeLucideIcons } from "./ui/icons";
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeLucideIcons();
-  void new TypstryWorkspaceController().bootstrap();
+  void new TypstellaWorkspaceController().bootstrap();
 });

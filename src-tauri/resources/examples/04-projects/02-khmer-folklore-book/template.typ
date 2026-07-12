@@ -22,9 +22,9 @@
 ]
 
 #let khmer_folklore_book(body) = {
-  // typstry:typography:start
+  // typstella:typography:start
   set text(font: ("MiSans Latin", "MiSans Khmer"), size: 11pt)
-  // typstry:typography:end
+  // typstella:typography:end
 
   set page(
     paper: "a5",

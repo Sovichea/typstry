@@ -50,7 +50,7 @@ The Toolchain panel installs stable Tinymist releases and shows each release's e
 
 ## Fonts and typography
 
-Only MiSans Latin and Fira Mono are bundled. Typstry installs them in the current user's font directory on first launch, avoiding administrator access on Windows, Linux, and macOS.
+Only MiSans Latin and Fira Mono are bundled. Typstella installs them in the current user's font directory on first launch, avoiding administrator access on Windows, Linux, and macOS.
 
 Settings enumerates the operating system's fonts:
 
@@ -58,17 +58,17 @@ Settings enumerates the operating system's fonts:
 - The Unicode fallback selector accepts any installed family.
 - Automatic detection recommends the matching MiSans family when one exists and a script-specific Noto Sans family otherwise.
 
-Typstry never downloads fonts without confirmation and does not repeat a recommendation the user declines. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
+Typstella never downloads fonts without confirmation and does not repeat a recommendation the user declines. MiSans downloads and use are subject to Xiaomi's [MiSans license agreement](https://hyperos.mi.com/font/en/download/); Noto fonts use the [SIL Open Font License](https://openfontlicense.org/).
 
-The selected Unicode fallback is also included in Typstry's own UI font stack for app-rendered text such as search controls, hover popups, and preview status messages.
+The selected Unicode fallback is also included in Typstella's own UI font stack for app-rendered text such as search controls, hover popups, and preview status messages.
 
-The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin family, the complex-script fallback family, or both. **Apply to document** writes a source-preserving fallback stack in a managed `typstry:typography` block. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typstry-template.typ` when no editable local template can be identified.
+The typography toolbar controls the fonts used by the compiled document, separately from the editor font settings. Enable either the Latin family, the complex-script fallback family, or both. **Apply to document** writes a source-preserving fallback stack in a managed `typstella:typography` block. **Apply as template** updates the local function used by the main document's `#show: ...with(...)` rule, or creates `typstella-template.typ` when no editable local template can be identified.
 
-The complex-script scale is uniform in both dimensions. Values other than `1.0` generate a render-only font under `.typstry/fonts/generated` and restart Tinymist with that directory as a project font path. Typstry does not create script-matching regex show rules because they break character-level inverse sync. Raw code keeps Typst's original raw font. See [Document typography](DOCUMENT_TYPOGRAPHY.md).
+The complex-script scale is uniform in both dimensions. Values other than `1.0` generate a render-only font under `.typstella/fonts/generated` and restart Tinymist with that directory as a project font path. Typstella does not create script-matching regex show rules because they break character-level inverse sync. Raw code keeps Typst's original raw font. See [Document typography](DOCUMENT_TYPOGRAPHY.md).
 
 ## Language tools
 
-Script-aware editing, spellcheck, correction suggestions, and typing word suggestions are independent capabilities. Script-aware editing is applied automatically where Typstry has a tested policy; it does not depend on a dictionary or on spellcheck being enabled.
+Script-aware editing, spellcheck, correction suggestions, and typing word suggestions are independent capabilities. Script-aware editing is applied automatically where Typstella has a tested policy; it does not depend on a dictionary or on spellcheck being enabled.
 
 Spellcheck and typing word suggestions can be controlled independently in Editor settings. Corrections are shown only when the active provider advertises reliable correction support.
 

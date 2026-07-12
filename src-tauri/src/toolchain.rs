@@ -275,7 +275,7 @@ pub fn status(data_dir: &Path) -> ToolchainStatus {
         typst_version: Some(typst.clone()),
         typst_source: Some(format!("Embedded in Tinymist {}", tinymist)),
         tinymist_version: Some(tinymist.clone()),
-        tinymist_source: Some("Managed by Typstry".to_string()),
+        tinymist_source: Some("Managed by Typstella".to_string()),
         lsp_available: true,
         message: format!(
             "Tinymist {} with embedded Typst {} is ready.",
@@ -286,7 +286,7 @@ pub fn status(data_dir: &Path) -> ToolchainStatus {
 
 fn github_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent(format!("Typstry/{}", env!("CARGO_PKG_VERSION")))
+        .user_agent(format!("Typstella/{}", env!("CARGO_PKG_VERSION")))
         .default_headers({
             let mut headers = reqwest::header::HeaderMap::new();
             headers.insert(
@@ -302,6 +302,15 @@ fn github_client() -> Result<reqwest::Client, String> {
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|error| format!("Failed to initialize GitHub client: {}", error))
+}
+
+fn github_asset_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent(format!("Typstella/{}", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(10 * 60))
+        .build()
+        .map_err(|error| format!("Failed to initialize toolchain downloader: {}", error))
 }
 
 async fn decode_github_json<T: DeserializeOwned>(
@@ -417,7 +426,7 @@ fn platform_asset_name() -> Result<String, String> {
 }
 
 async fn download(asset: &GithubAsset) -> Result<Vec<u8>, String> {
-    github_client()?
+    github_asset_client()?
         .get(&asset.browser_download_url)
         .send()
         .await

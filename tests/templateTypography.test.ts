@@ -45,9 +45,9 @@ describe("template typography", () => {
   });
 
   test("creates a portable local fallback and preview source", () => {
-    expect(newTypographyTemplate(config)).toContain("#let typstry-typography(body)");
+    expect(newTypographyTemplate(config)).toContain("#let typstella-typography(body)");
     const edit = ensureTypographyTemplateApplication("= Main\n");
-    expect(edit.insert).toContain('#show: typstry-typography');
+    expect(edit.insert).toContain('#show: typstella-typography');
     expect(templatePreviewSource(
       { functionName: "thesis", importPath: "template.typ", showExpression: "thesis.with()" },
       "/template.typ",

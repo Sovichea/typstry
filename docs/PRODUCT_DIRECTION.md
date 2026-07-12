@@ -1,16 +1,16 @@
 # Product Direction and Terminology
 
-This document is the source of truth for Typstry's public positioning, feature names, and language-support labels. README text, Settings labels, release notes, repository metadata, and contributor documentation should follow it.
+This document is the source of truth for Typstella's public positioning, feature names, and language-support labels. README text, Settings labels, release notes, repository metadata, and contributor documentation should follow it.
 
 ## Positioning
 
 ### Product description
 
-Typstry is a complex-script-first writing environment for Typst, designed for research papers, technical documentation, theses, books, and other long-form documents.
+Typstella is a complex-script-first writing environment for Typst, designed for research papers, technical documentation, theses, books, and other long-form documents.
 
-It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typstry focuses on Unicode-safe editing, script-aware interaction, reliable PDF preview, extensible language tools, and scalable multi-file project workflows while keeping Typst source portable.
+It serves writers and researchers whose languages are not always well supported by traditional technical-writing tools. Typstella focuses on Unicode-safe editing, script-aware interaction, reliable PDF preview, extensible language tools, and scalable multi-file project workflows while keeping Typst source portable.
 
-Khmer is the first language with deep support. It demonstrates the depth Typstry aims to provide; it is not the boundary of the project.
+Khmer is the first language with deep support. It demonstrates the depth Typstella aims to provide; it is not the boundary of the project.
 
 ### One-line pitch
 
