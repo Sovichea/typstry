@@ -7,6 +7,7 @@ describe("application settings", () => {
 
     expect(settings.appearance.theme).toBe("nord");
     expect(settings.developerMode).toBe(false);
+    expect(settings.developerLogs).toEqual(defaultAppSettings.developerLogs);
     expect(settings.editor.codeFont).toBe("Fira Mono");
     expect(settings.editor.unicodeFont).toBe("auto");
     expect(settings.editor.wordWrap).toBe(defaultAppSettings.editor.wordWrap);
@@ -53,14 +54,41 @@ describe("application settings", () => {
     expect(normalizeAppSettings({ toolchain: { typstVersion: "0.14.2" } }).toolchain.tinymistVersion).toBe("0.14.2");
   });
 
+  test("keeps developer log category selections independently", () => {
+    const settings = normalizeAppSettings({
+      developerMode: true,
+      developerLogs: {
+        preview: false,
+        inverseSync: true,
+        forwardSync: false,
+        performance: false,
+        memory: true,
+        lsp: false,
+        general: true
+      }
+    });
+
+    expect(settings.developerLogs).toEqual({
+      preview: false,
+      inverseSync: true,
+      forwardSync: false,
+      performance: false,
+      memory: true,
+      lsp: false,
+      general: true
+    });
+  });
+
   test("returns independent default objects", () => {
     const first = cloneDefaultAppSettings();
     const second = cloneDefaultAppSettings();
     first.editor.wordWrap = false;
     first.developerMode = true;
+    first.developerLogs.memory = false;
 
     expect(second.editor.wordWrap).toBe(true);
     expect(second.developerMode).toBe(false);
+    expect(second.developerLogs.memory).toBe(true);
   });
 
   test("keeps the selected preview render mode", () => {

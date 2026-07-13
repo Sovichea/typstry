@@ -173,6 +173,13 @@ export class SettingsController {
     onChange("settings-highlight-duration", (settings, control) => { settings.preview.highlightDurationMs = Number(control.value); });
     onChange("settings-khmer-prep", (settings, control) => { settings.preview.khmerRenderPreparation = (control as HTMLInputElement).checked; });
     onChange("settings-developer-mode", (settings, control) => { settings.developerMode = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-preview", (settings, control) => { settings.developerLogs.preview = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-inverse-sync", (settings, control) => { settings.developerLogs.inverseSync = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-forward-sync", (settings, control) => { settings.developerLogs.forwardSync = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-performance", (settings, control) => { settings.developerLogs.performance = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-memory", (settings, control) => { settings.developerLogs.memory = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-lsp", (settings, control) => { settings.developerLogs.lsp = (control as HTMLInputElement).checked; });
+    onChange("settings-dev-log-general", (settings, control) => { settings.developerLogs.general = (control as HTMLInputElement).checked; });
     document.getElementById("settings-add-language")?.addEventListener("click", () => {
       void this.toggleLanguageCatalog();
     });
@@ -266,6 +273,18 @@ export class SettingsController {
     }
     setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
     setChecked("settings-developer-mode", this.settings.developerMode);
+    setChecked("settings-dev-log-preview", this.settings.developerLogs.preview);
+    setChecked("settings-dev-log-inverse-sync", this.settings.developerLogs.inverseSync);
+    setChecked("settings-dev-log-forward-sync", this.settings.developerLogs.forwardSync);
+    setChecked("settings-dev-log-performance", this.settings.developerLogs.performance);
+    setChecked("settings-dev-log-memory", this.settings.developerLogs.memory);
+    setChecked("settings-dev-log-lsp", this.settings.developerLogs.lsp);
+    setChecked("settings-dev-log-general", this.settings.developerLogs.general);
+    const developerLogFilters = document.getElementById("settings-developer-log-filters");
+    developerLogFilters?.classList.toggle("disabled", !this.settings.developerMode);
+    developerLogFilters?.querySelectorAll<HTMLInputElement>("input").forEach(control => {
+      control.disabled = !this.settings.developerMode;
+    });
     this.populateLanguageProviders();
 
     const path = document.getElementById("settings-file-path");

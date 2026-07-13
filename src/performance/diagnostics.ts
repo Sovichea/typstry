@@ -31,7 +31,8 @@ export const PERFORMANCE_BUDGETS = {
   spellcheckP95Ms: 100,
   suggestionP95Ms: 50,
   maxResidentPdfPages: 7,
-  maxQueuedLanguageRequests: 1
+  maxQueuedLanguageRequests: 1,
+  maxRecordedMetrics: 1_000
 } as const;
 
 export class PerformanceDiagnostics {
@@ -43,6 +44,9 @@ export class PerformanceDiagnostics {
   public record(metric: Omit<PerformanceMetric, "recordedAt">): PerformanceMetric {
     const value = { ...metric, recordedAt: Date.now() };
     this.values.push(value);
+    if (this.values.length > PERFORMANCE_BUDGETS.maxRecordedMetrics) {
+      this.values.splice(0, this.values.length - PERFORMANCE_BUDGETS.maxRecordedMetrics);
+    }
     this.publish?.(value);
     return value;
   }

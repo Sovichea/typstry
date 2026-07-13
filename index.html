@@ -2321,7 +2321,7 @@
                                     ><small
                                         >Run Tinymist's Typst formatter before
                                         saving.</small
-                                    ></span
+                                ></span
                                 ></label
                             >
                         </div>
@@ -2477,6 +2477,51 @@
                                     ></span
                                 ></label
                             >
+                            <div
+                                id="settings-developer-log-filters"
+                                class="settings-developer-log-filters"
+                            >
+                                <h4>Dev Log categories</h4>
+                                <p class="settings-help">
+                                    Only selected instrumentation is collected and
+                                    added to the Dev Log.
+                                </p>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-preview" type="checkbox"
+                                    /><span><strong>Preview and rendering</strong
+                                    ><small>Preview scheduling, compilation, and iframe events.</small></span
+                                ></label>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-inverse-sync" type="checkbox"
+                                    /><span><strong>Inverse sync</strong
+                                    ><small>Preview clicks and source-position resolution.</small></span
+                                ></label>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-forward-sync" type="checkbox"
+                                    /><span><strong>Forward sync</strong
+                                    ><small>Editor cursor requests and preview-position resolution.</small></span
+                                ></label>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-performance" type="checkbox"
+                                    /><span><strong>Performance</strong
+                                    ><small>Startup, editor, and preview timing measurements.</small></span
+                                ></label>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-memory" type="checkbox"
+                                    /><span><strong>Memory diagnostics</strong
+                                    ><small>WebView, backend, compiler, PDF, and canvas samples.</small></span
+                                ></label>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-lsp" type="checkbox"
+                                    /><span><strong>LSP and toolchain</strong
+                                    ><small>Tinymist lifecycle and toolchain instrumentation.</small></span
+                                ></label>
+                                <label class="settings-toggle"
+                                    ><input id="settings-dev-log-general" type="checkbox"
+                                    /><span><strong>Layout and general</strong
+                                    ><small>Editor layout, workspace, typography, and other debug events.</small></span
+                                ></label>
+                            </div>
                         </div>
                     </div>
                 </div>

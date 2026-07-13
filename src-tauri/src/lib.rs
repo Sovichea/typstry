@@ -346,6 +346,106 @@ struct LspState {
     process: Mutex<Option<tokio::process::Child>>,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProcessMemorySample {
+    pid: u32,
+    parent_pid: u32,
+    name: String,
+    working_set_bytes: u64,
+}
+
+#[cfg(windows)]
+fn process_memory_samples() -> Result<Vec<ProcessMemorySample>, String> {
+    use std::collections::HashSet;
+    use std::mem::size_of;
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows_sys::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
+
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err("Unable to enumerate processes.".to_string());
+    }
+
+    let mut entries = Vec::<(u32, u32, String)>::new();
+    let mut entry = unsafe { std::mem::zeroed::<PROCESSENTRY32W>() };
+    entry.dwSize = size_of::<PROCESSENTRY32W>() as u32;
+    let mut available = unsafe { Process32FirstW(snapshot, &mut entry) } != 0;
+    while available {
+        let name_end = entry
+            .szExeFile
+            .iter()
+            .position(|character| *character == 0)
+            .unwrap_or(entry.szExeFile.len());
+        entries.push((
+            entry.th32ProcessID,
+            entry.th32ParentProcessID,
+            String::from_utf16_lossy(&entry.szExeFile[..name_end]),
+        ));
+        available = unsafe { Process32NextW(snapshot, &mut entry) } != 0;
+    }
+    unsafe { CloseHandle(snapshot) };
+
+    let mut related = HashSet::from([std::process::id()]);
+    loop {
+        let previous_len = related.len();
+        for (pid, parent_pid, _) in &entries {
+            if related.contains(parent_pid) {
+                related.insert(*pid);
+            }
+        }
+        if related.len() == previous_len {
+            break;
+        }
+    }
+
+    let mut samples = Vec::new();
+    for (pid, parent_pid, name) in entries {
+        if !related.contains(&pid) {
+            continue;
+        }
+        let process = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid) };
+        if process.is_null() {
+            continue;
+        }
+        let mut counters = unsafe { std::mem::zeroed::<PROCESS_MEMORY_COUNTERS>() };
+        counters.cb = size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+        let read = unsafe {
+            K32GetProcessMemoryInfo(process, &mut counters, counters.cb)
+        } != 0;
+        unsafe { CloseHandle(process) };
+        if read {
+            samples.push(ProcessMemorySample {
+                pid,
+                parent_pid,
+                name,
+                working_set_bytes: counters.WorkingSetSize as u64,
+            });
+        }
+    }
+    samples.sort_by(|left, right| right.working_set_bytes.cmp(&left.working_set_bytes));
+    Ok(samples)
+}
+
+#[cfg(not(windows))]
+fn process_memory_samples() -> Result<Vec<ProcessMemorySample>, String> {
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn get_memory_diagnostics() -> Result<Vec<ProcessMemorySample>, String> {
+    process_memory_samples()
+}
+
 #[derive(Default)]
 struct PendingProjectImports {
     paths: Mutex<Vec<PathBuf>>,
@@ -1683,10 +1783,21 @@ async fn start_tinymist_lsp(
                         .append(true)
                         .open(std::env::temp_dir().join("typstella_lsp_log.txt"))
                         .and_then(|mut f| {
-                            std::io::Write::write_all(
-                                &mut f,
-                                format!("RX: {}\n", json_str).as_bytes(),
-                            )
+                            // PDF export responses can contain multi-megabyte
+                            // Base64 payloads. Duplicating them into a formatted
+                            // debug string on every save inflates the backend's
+                            // allocator working set and produces unusable logs.
+                            if json_str.len() > 64 * 1024 {
+                                let summary = format!(
+                                    "RX: <large payload omitted: {} bytes>\n",
+                                    json_str.len()
+                                );
+                                std::io::Write::write_all(&mut f, summary.as_bytes())
+                            } else {
+                                std::io::Write::write_all(&mut f, b"RX: ")
+                                    .and_then(|_| std::io::Write::write_all(&mut f, json_str.as_bytes()))
+                                    .and_then(|_| std::io::Write::write_all(&mut f, b"\n"))
+                            }
                         });
 
                     let _ = app_clone.emit("lsp-rx", json_str);
@@ -2155,6 +2266,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_startup_timings,
+            get_memory_diagnostics,
             finish_startup_initialization,
             load_app_settings,
             save_app_settings,

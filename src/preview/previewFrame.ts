@@ -9,6 +9,17 @@ export type PreviewInteractionStatus = {
   reason?: string;
 };
 
+export type PreviewMemorySnapshot = {
+  pdfGeneration: number;
+  pdfBytes: number;
+  pdfPages: number;
+  residentCanvases: number;
+  canvasPixels: number;
+  fontFaces: number;
+  activeRenders: number;
+  loading: boolean;
+};
+
 import { PERFORMANCE_BUDGETS, type PerformanceMetric } from "../performance/diagnostics";
 import { pagesToEvict } from "./virtualization";
 
@@ -24,6 +35,8 @@ type ActivePageRender = {
   renderKey: string;
   task: { cancel(): void } | null;
   page: { cleanup(): void } | null;
+  canvas: HTMLCanvasElement | null;
+  canvasCommitted: boolean;
 };
 
 const ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
@@ -44,6 +57,7 @@ export class PreviewFrame {
   private resizeObserver: ResizeObserver | null = null;
   private lastInteractionStatusKey = "";
   private pdfJsPromise: Promise<PdfJsModule> | null = null;
+  private pdfWorker: { destroyed?: boolean; destroy(): void } | null = null;
   private pdfLoadingTask: { destroy(): Promise<void> } | null = null;
   private pendingPdfLoadingTask: { destroy(): Promise<void> } | null = null;
   private pdfDoc: any = null;
@@ -51,6 +65,7 @@ export class PreviewFrame {
   private pageDimensions = new Map<number, PageDimensions>();
   private activeRenders = new Map<number, ActivePageRender>();
   private pdfGeneration = 0;
+  private currentPdfBytes = 0;
   private firstRenderedGeneration = 0;
   private forwardRippleGeneration = 0;
   private zoomStartedAt: number | null = null;
@@ -99,6 +114,24 @@ export class PreviewFrame {
   public zoomIn(): number {
     this.isFitToWidth = false;
     return this.setZoom(ZOOM_LEVELS.find(level => level > this.previewZoomPercent) ?? this.previewZoomPercent);
+  }
+
+  public memorySnapshot(): PreviewMemorySnapshot {
+    const iframeDoc = this.iframe?.contentDocument;
+    const canvases = [...(iframeDoc?.querySelectorAll<HTMLCanvasElement>("canvas") ?? [])];
+    const fontFaces = iframeDoc?.fonts
+      ? [...(iframeDoc.fonts as unknown as Iterable<FontFace>)].length
+      : 0;
+    return {
+      pdfGeneration: this.pdfGeneration,
+      pdfBytes: this.currentPdfBytes,
+      pdfPages: Number(this.pdfDoc?.numPages ?? 0),
+      residentCanvases: canvases.length,
+      canvasPixels: canvases.reduce((total, canvas) => total + canvas.width * canvas.height, 0),
+      fontFaces,
+      activeRenders: this.activeRenders.size,
+      loading: this.pendingPdfLoadingTask !== null
+    };
   }
 
   public zoomOut(): number {
@@ -175,10 +208,20 @@ export class PreviewFrame {
     try {
       const pdfjs = await this.pdfJs();
       if (generation !== this.pdfGeneration) return;
+      if (!this.pdfWorker || this.pdfWorker.destroyed) {
+        this.pdfWorker = pdfjs.PDFWorker.create({ name: "typstella-preview" });
+      }
       const bytes = decodeBase64(base64Data);
       const loadingTask = pdfjs.getDocument({
         data: bytes,
+        worker: this.pdfWorker as InstanceType<typeof pdfjs.PDFWorker>,
         ownerDocument: iframeDoc,
+        // WebView2 can retain native resources for dynamically installed
+        // FontFace objects after the PDF document has been destroyed. Render
+        // embedded glyphs as paths instead, which keeps repeated live-preview
+        // refreshes from growing the renderer working set.
+        disableFontFace: true,
+        useSystemFonts: false,
         cMapUrl: "/cmaps/",
         cMapPacked: true,
         standardFontDataUrl: "/standard_fonts/"
@@ -208,6 +251,7 @@ export class PreviewFrame {
       nextLoadingTask = null;
       this.pendingPdfLoadingTask = null;
       this.pageDimensions = nextDimensions;
+      this.currentPdfBytes = bytes.byteLength;
       this.mountedUrl = identity;
       if (this.isFitToWidth) this.previewZoomPercent = this.computeFitToWidthPercent();
       this.createPageSlots(iframeDoc, true);
@@ -221,7 +265,10 @@ export class PreviewFrame {
         milliseconds: performance.now() - startedAt,
         detail: { pageCount: pdfDoc.numPages, pdfBytes: bytes.byteLength }
       });
-      void cleanupPdfResources(oldPdfDoc, oldLoadingTask);
+      // The old page remains visible while the replacement is prepared, then
+      // release its document resources before this generation completes. The
+      // worker itself is shared and remains available for the next refresh.
+      await cleanupPdfResources(oldPdfDoc, oldLoadingTask);
     } catch (error) {
       if (generation !== this.pdfGeneration) return;
       this.setError("PDF Loading Failed", String(error));
@@ -250,7 +297,10 @@ export class PreviewFrame {
 
   private async ensureIframe(): Promise<HTMLIFrameElement> {
     if (this.iframe?.contentDocument?.getElementById("viewer-container")) return this.iframe;
-    if (this.iframe) this.iframe.remove();
+    if (this.iframe) {
+      releaseCanvasResources(this.iframe.contentDocument?.documentElement ?? null);
+      this.iframe.remove();
+    }
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
     iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -293,7 +343,10 @@ export class PreviewFrame {
     }
     for (const slot of [...viewer.querySelectorAll<HTMLElement>(":scope > .pdf-page-container")]) {
       const pageNo = Number(slot.dataset.pageNo);
-      if (pageNo > this.pdfDoc.numPages) slot.remove();
+      if (pageNo > this.pdfDoc.numPages) {
+        releaseCanvasResources(slot);
+        slot.remove();
+      }
     }
     this.layoutPageSlots({ preserveExistingPages });
   }
@@ -350,7 +403,14 @@ export class PreviewFrame {
     const renderKey = this.currentPageRenderKey(generation);
     if (slot.dataset.renderKey === renderKey) return;
 
-    const active: ActivePageRender = { generation, renderKey, task: null, page: null };
+    const active: ActivePageRender = {
+      generation,
+      renderKey,
+      task: null,
+      page: null,
+      canvas: null,
+      canvasCommitted: false
+    };
     const startedAt = performance.now();
     this.activeRenders.set(pageNo, active);
     try {
@@ -364,6 +424,7 @@ export class PreviewFrame {
       const outputScale = Math.min(window.devicePixelRatio || 1, MAX_OUTPUT_SCALE);
       const renderViewport = page.getViewport({ scale: cssScale * outputScale });
       const canvas = doc.createElement("canvas");
+      active.canvas = canvas;
       canvas.className = "pdf-page-canvas";
       canvas.width = Math.max(1, Math.floor(renderViewport.width));
       canvas.height = Math.max(1, Math.floor(renderViewport.height));
@@ -376,6 +437,7 @@ export class PreviewFrame {
       active.task = null;
       if (!this.renderIsCurrent(pageNo, active, slot)) return;
       replaceElementChildren(slot, canvas);
+      active.canvasCommitted = true;
       slot.dataset.renderKey = renderKey;
       delete slot.dataset.renderGeneration;
 
@@ -414,6 +476,7 @@ export class PreviewFrame {
     } finally {
       if (this.activeRenders.get(pageNo) === active) this.activeRenders.delete(pageNo);
       active.page?.cleanup();
+      if (active.canvas && !active.canvasCommitted) releaseCanvas(active.canvas);
     }
   }
 
@@ -523,11 +586,7 @@ export class PreviewFrame {
     this.pdfLoadingTask = null;
     this.pendingPdfLoadingTask = null;
     this.pdfDoc = null;
-    if (pdfDoc) {
-      try { await pdfDoc.destroy(); } catch {}
-    } else if (loadingTask) {
-      try { await loadingTask.destroy(); } catch {}
-    }
+    await cleanupPdfResources(pdfDoc, loadingTask);
     if (pendingLoadingTask && pendingLoadingTask !== loadingTask) {
       try { await pendingLoadingTask.destroy(); } catch {}
     }
@@ -666,19 +725,25 @@ export class PreviewFrame {
 
   public async clear(): Promise<void> {
     ++this.pdfGeneration;
+    releaseCanvasResources(this.iframe?.contentDocument?.documentElement ?? null);
     this.iframe?.remove();
     this.iframe = null;
     this.mountedUrl = "";
+    this.currentPdfBytes = 0;
     await this.disposePdfDocument();
+    this.pdfWorker?.destroy();
+    this.pdfWorker = null;
     this.clearErrorOverlay();
     this.clearMessageHost();
   }
 
   public setMessage(html: string): void {
     ++this.pdfGeneration;
+    releaseCanvasResources(this.iframe?.contentDocument?.documentElement ?? null);
     this.iframe?.remove();
     this.iframe = null;
     this.mountedUrl = "";
+    this.currentPdfBytes = 0;
     void this.disposePdfDocument();
     this.clearErrorOverlay();
     this.clearMessageHost();
@@ -766,6 +831,7 @@ async function cleanupPdfResources(
   loadingTask: { destroy(): Promise<void> } | null
 ): Promise<void> {
   if (pdfDoc) {
+    try { await pdfDoc.cleanup(false); } catch {}
     try { await pdfDoc.destroy(); } catch {}
   } else if (loadingTask) {
     try { await loadingTask.destroy(); } catch {}
@@ -792,12 +858,31 @@ function viewportRectangle(viewport: any, rect: unknown): [number, number, numbe
 }
 
 function replaceElementChildren(element: Element, ...children: Node[]): void {
+  const retained = new Set(children);
+  for (const child of [...element.children]) {
+    if (!retained.has(child)) releaseCanvasResources(child);
+  }
   while (element.firstChild) {
     element.removeChild(element.firstChild);
   }
   for (const child of children) {
     element.appendChild(child);
   }
+}
+
+function releaseCanvas(canvas: HTMLCanvasElement): void {
+  // Resizing clears the graphics backing store immediately in WebView2/WebKit
+  // instead of waiting for a later JavaScript and GPU garbage-collection pass.
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+function releaseCanvasResources(root: Element | null): void {
+  if (!root) return;
+  // Preview canvases live in an iframe realm, so `instanceof
+  // HTMLCanvasElement` from the parent window is not reliable here.
+  if (root.tagName === "CANVAS") releaseCanvas(root as HTMLCanvasElement);
+  root.querySelectorAll<HTMLCanvasElement>("canvas").forEach(releaseCanvas);
 }
 
 async function waitForPreviewScrollToSettle(

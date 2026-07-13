@@ -1070,6 +1070,10 @@ body.typstella-resizing #preview-render-pane::after {
 .settings-toggle input { margin: 0; }
 .settings-toggle span { display: flex; flex-direction: column; gap: 3px; }
 .settings-toggle small { color: var(--ui-header-text); font-size: 11px; }
+.settings-developer-log-filters { margin-top: 18px; }
+.settings-developer-log-filters h4 { margin: 0 0 4px; font-size: 12px; }
+.settings-developer-log-filters.disabled { opacity: 0.55; }
+.settings-developer-log-filters .settings-toggle { padding-left: 10px; }
 .settings-capability-note {
   border: 1px solid var(--ui-border);
   border-radius: 6px;

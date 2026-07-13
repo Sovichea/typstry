@@ -4,9 +4,9 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { dirname, join } from "@tauri-apps/api/path";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Transaction } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
-import { undo, redo } from "@codemirror/commands";
+import { undo, redo, undoDepth } from "@codemirror/commands";
 import { foldEffect, foldedRanges, indentUnit, unfoldEffect } from "@codemirror/language";
 import { closeBrackets, completionStatus } from "@codemirror/autocomplete";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
@@ -19,7 +19,7 @@ import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagno
 import { WorkspaceExplorer } from "./components/explorer";
 import { TinymistLspClient } from "./compiler/lsp";
 import type { EditorTextEdit, LspDiagnostic, LspInverseSyncResult, LspLogEntry, LspSourcePosition, LspStatus, PreviewDocumentPosition } from "./compiler/lsp";
-import type { AppSettings } from "./settings";
+import type { AppSettings, DeveloperLogCategory } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath } from "./platform/paths";
 import { isBinaryImagePath, isSupportedInAppPath } from "./platform/fileTypes";
@@ -62,6 +62,21 @@ type StartupTimingEntry = {
   source: string;
   label: string;
   ms: number;
+};
+
+type ProcessMemorySample = {
+  pid: number;
+  parentPid: number;
+  name: string;
+  workingSetBytes: number;
+};
+
+type MemoryDiagnosticTotals = {
+  jsHeapBytes: number;
+  relatedBytes: number;
+  webviewBytes: number;
+  tinymistBytes: number;
+  backendBytes: number;
 };
 
 const DEFAULT_INPUT_WIDTH_PCT = 50;
@@ -222,6 +237,9 @@ export class TypstellaWorkspaceController {
   private deferredTypographyPreviewContents: string | null = null;
   private lastPdfBase64 = "";
   private pdfPreviewFailureAt: number | null = null;
+  private memoryDiagnosticSequence = 0;
+  private saveMemoryDiagnosticGeneration = 0;
+  private previousMemoryDiagnostic: MemoryDiagnosticTotals | null = null;
   private editorScrollbarPointerActive = false;
   private readonly externalConflictPaths = new Set<string>();
   private readonly settingsController = new SettingsController(
@@ -1163,6 +1181,7 @@ export class TypstellaWorkspaceController {
     const wasActive = this.activeFilePath === path;
     this.openTabs.splice(tabIndex, 1);
     this.acceptedTypographyScales.delete(filePathKey(path));
+    await this.closeDocumentIfOpened(path);
 
     if (wasActive) {
       const nextTab = this.openTabs[Math.min(tabIndex, this.openTabs.length - 1)] ?? null;
@@ -1325,7 +1344,11 @@ export class TypstellaWorkspaceController {
         selection: {
           anchor: Math.min(tab.selectionAnchor, tab.content.length),
           head: Math.min(tab.selectionHead, tab.content.length)
-        }
+        },
+        // A tab load is navigation, not an edit. Recording full-document
+        // replacements in the shared history retains every visited document
+        // and makes undo cross file boundaries.
+        annotations: Transaction.addToHistory.of(false)
       });
     } finally {
       this.isLoadingFile = false;
@@ -1341,9 +1364,7 @@ export class TypstellaWorkspaceController {
 
     this.activeFilePath = path;
     if (path.toLowerCase().endsWith(".typ")) this.diagnosticWaitStartedAt = performance.now();
-    if (!options.skipPreviewActivation) {
-      await this.prepareRenderProjectIfNeeded();
-    }
+    let previewPresentationReused = false;
     let previewTarget: PreviewTarget | null = null;
     if (options.skipPreviewActivation) {
       // Restore editor/tab state first. Preview and LSP setup will run when the
@@ -1351,7 +1372,7 @@ export class TypstellaWorkspaceController {
     } else if (options.preservePreviewSession) {
       this.applyPreviewSessionToTab(tab, options.preservePreviewSession);
       if (options.preservePreviewSession.previewSessionKey) {
-        this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
+        previewPresentationReused = this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
       }
     } else if (!this.pinnedMainFilePath) {
       this.previewFrame.setMessage(this.noMainFileMessage());
@@ -1370,7 +1391,7 @@ export class TypstellaWorkspaceController {
         if (existingMainSession) {
           this.applyPreviewSessionToTab(tab, existingMainSession);
           if (existingMainSession.previewSessionKey) {
-            this.previewFrame.activateSession(existingMainSession.previewSessionKey);
+            previewPresentationReused = this.previewFrame.activateSession(existingMainSession.previewSessionKey);
           }
         } else {
           this.applyPreviewTargetToTab(tab, previewTarget);
@@ -1422,7 +1443,7 @@ export class TypstellaWorkspaceController {
       } else if (previewTarget?.disabled) {
         this.previewFrame.setMessage(this.disabledPreviewMessage());
       } else if (this.previewRootPath) {
-        void this.renderPdfPreview(tab.content);
+        if (!previewPresentationReused) void this.renderPdfPreview(tab.content);
       } else {
         this.previewFrame.setMessage(`<div style="padding: 20px; color: #5f6368; font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
       }
@@ -1633,6 +1654,8 @@ export class TypstellaWorkspaceController {
     }
 
     try {
+      const saveDiagnosticId = ++this.saveMemoryDiagnosticGeneration;
+      await this.logMemoryDiagnostics(`save ${saveDiagnosticId}: before write`);
       if (this.activeMode === "CODE" && this.settingsController.value.editor.formatOnSave) {
         await this.formatActiveDocument({ silent: true });
         this.removeTrailingSpaces();
@@ -1646,6 +1669,7 @@ export class TypstellaWorkspaceController {
         path: this.activeFilePath,
         contents: content
       });
+      await this.logMemoryDiagnostics(`save ${saveDiagnosticId}: after workspace write`);
 
       if (this.lspReady && this.lspClient) {
         await this.flushPendingLspSync();
@@ -1655,6 +1679,7 @@ export class TypstellaWorkspaceController {
           await this.lspClient.notifyTextSave(lspUri, lspContent);
         }
       }
+      await this.logMemoryDiagnostics(`save ${saveDiagnosticId}: after LSP save notification`);
 
       const activeTab = this.getActiveTab();
       const savedChangedRevision = activeTab
@@ -2091,6 +2116,22 @@ export class TypstellaWorkspaceController {
     this.openedDocumentUris.add(uri);
   }
 
+  private async closeDocumentIfOpened(path: string): Promise<void> {
+    if (!this.lspClient) return;
+    const uri = filePathToUri(path);
+    if (!this.openedDocumentUris.delete(uri)) return;
+    try {
+      await this.lspClient.closeTextDocument(uri);
+    } catch (error) {
+      this.openedDocumentUris.add(uri);
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "lsp",
+        message: `Failed to close ${fileNameFromPath(path)} in Tinymist: ${String(error)}`
+      });
+    }
+  }
+
   private async updatePinnedMain(path: string | null, force = false): Promise<boolean> {
     if (!this.lspReady || !this.lspClient) return false;
     const targetPath = path;
@@ -2166,6 +2207,7 @@ export class TypstellaWorkspaceController {
     const compileStartedAt = performance.now();
     const generation = ++this.pdfPreviewGeneration;
     const preparationRevision = this.pdfPreparationRevision;
+    await this.logMemoryDiagnostics(`render ${generation}: before preparation`);
     this.appendDeveloperLog({
       kind: "info",
       source: "preview scheduler",
@@ -2203,6 +2245,10 @@ export class TypstellaWorkspaceController {
       const pdf = await this.lspClient.exportPdfToMemory(previewPath);
       this.ensurePreviewPreparationCurrent(preparationRevision);
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: `Render generation ${generation}: Tinymist PDF export complete.` });
+      await this.logMemoryDiagnostics(
+        `render ${generation}: after Tinymist export`,
+        { exportBase64Chars: pdf.data?.length ?? 0 }
+      );
       this.performanceDiagnostics.record({
         name: "preview.compile",
         milliseconds: performance.now() - compileStartedAt,
@@ -2239,6 +2285,10 @@ export class TypstellaWorkspaceController {
       this.lastPdfBase64 = pdf.data!;
       await this.previewFrame.loadPdfData(pdf.data!, previewPath);
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: `Render generation ${generation}: PDF presentation complete.` });
+      await this.logMemoryDiagnostics(`render ${generation}: after PDF cleanup/presentation`);
+      window.setTimeout(() => {
+        void this.logMemoryDiagnostics(`render ${generation}: settled after page rendering`);
+      }, 1000);
       if (this.pdfPreviewFailureAt !== null) {
         this.performanceDiagnostics.record({
           name: "preview.recovery",
@@ -3159,10 +3209,12 @@ export class TypstellaWorkspaceController {
   }
 
   private logStartupTimingToConsole(entry: StartupTimingEntry): void {
+    if (!this.isDeveloperLogEnabled("performance")) return;
     console.info(`[startup timing] ${entry.source}: ${entry.label} took ${entry.ms.toFixed(1)} ms`);
   }
 
   private async logNativeStartupTimingsToConsole(): Promise<void> {
+    if (!this.isDeveloperLogEnabled("performance")) return;
     try {
       const nativeTimings = await invoke<StartupTimingEntry[]>("get_startup_timings");
       for (const entry of nativeTimings) {
@@ -3383,13 +3435,30 @@ export class TypstellaWorkspaceController {
   }
 
   private appendDeveloperLog(entry: LspLogEntry) {
-    if (!this.settingsController.value.developerMode) return;
+    const source = entry.source ?? "developer";
+    if (!this.isDeveloperLogEnabled(this.developerLogCategory(source))) return;
     this.logConsoleController.appendLog({
       kind: entry.kind,
-      source: entry.source ?? "developer",
+      source,
       message: entry.message,
       channel: "dev"
     });
+  }
+
+  private developerLogCategory(source: string): DeveloperLogCategory {
+    const normalized = source.toLocaleLowerCase();
+    if (normalized.includes("inverse sync")) return "inverseSync";
+    if (normalized.includes("forward sync")) return "forwardSync";
+    if (normalized.includes("memory")) return "memory";
+    if (normalized.includes("performance")) return "performance";
+    if (normalized.includes("preview")) return "preview";
+    if (normalized.includes("lsp") || normalized.includes("tinymist") || normalized.includes("toolchain")) return "lsp";
+    return "general";
+  }
+
+  private isDeveloperLogEnabled(category: DeveloperLogCategory): boolean {
+    const settings = this.settingsController.value;
+    return settings.developerMode && settings.developerLogs[category];
   }
 
   private updateSpellcheckLog(issues: readonly SpellingIssue[]): void {
@@ -3732,7 +3801,7 @@ export class TypstellaWorkspaceController {
     if (!workspaceRoot || filePathKey(change.rootPath) !== filePathKey(workspaceRoot)) return;
 
     // Ignore changes that are only inside the cache (.typstella) directory to prevent infinite loops and race conditions
-    const hasExternalChanges = change.paths.some(path => {
+    const externalPaths = change.paths.filter(path => {
       const relPath = path.startsWith(workspaceRoot)
         ? path.substring(workspaceRoot.length)
         : path;
@@ -3740,17 +3809,35 @@ export class TypstellaWorkspaceController {
       return !cleanRel.startsWith(".typstella");
     });
     
-    if (!hasExternalChanges) return;
+    if (externalPaths.length === 0) return;
+
+    const openPathKeysBeforeReload = new Set(this.openTabs.map(tab => filePathKey(tab.path)));
 
     // One ordered synchronization path: editor state, render mirror, LSP, preview.
-    await this.reloadOpenFilesFromDisk(false);
+    const openFilesChanged = await this.reloadOpenFilesFromDisk(false);
     if (this.workspaceRootPath !== workspaceRoot) return;
+    // The workspace watcher also observes Typstella's own saves. When every
+    // reported source path is already open and its disk contents still match
+    // the saved editor revision, there is no external change to propagate.
+    // Avoid rebuilding the mirror and invalidating Tinymist a second time.
+    if (
+      !openFilesChanged
+      && externalPaths.every(path => openPathKeysBeforeReload.has(filePathKey(path)))
+    ) {
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "memory diagnostics",
+        message: "Workspace watcher self-save event suppressed; mirror preparation and duplicate Tinymist invalidation skipped."
+      });
+      await this.logMemoryDiagnostics("workspace watcher: self-save suppressed");
+      return;
+    }
     await this.prepareRenderProjectIfNeeded();
 
     if (this.lspReady && this.lspClient) {
       const defaultType: 1 | 2 | 3 = change.kind === "create" ? 1 : change.kind === "remove" ? 3 : 2;
-      const lastPathIndex = change.paths.length - 1;
-      const changes = change.paths.map((path, index) => {
+      const lastPathIndex = externalPaths.length - 1;
+      const changes = externalPaths.map((path, index) => {
         return {
           uri: filePathToUri(path),
           type: change.kind === "rename" && change.paths.length > 1
@@ -3766,6 +3853,7 @@ export class TypstellaWorkspaceController {
   }
 
   private publishPerformanceMetric(metric: PerformanceMetric): void {
+    if (!this.isDeveloperLogEnabled("performance")) return;
     const value = metric.milliseconds !== undefined
       ? `${metric.milliseconds.toFixed(1)} ms`
       : metric.bytes !== undefined
@@ -3779,7 +3867,76 @@ export class TypstellaWorkspaceController {
     });
   }
 
-  private async reloadOpenFilesFromDisk(refreshPreview = true): Promise<void> {
+  private async logMemoryDiagnostics(
+    stage: string,
+    detail: Record<string, number | string | boolean> = {}
+  ): Promise<void> {
+    if (!this.isDeveloperLogEnabled("memory")) return;
+    const sequence = ++this.memoryDiagnosticSequence;
+    const heap = (performance as Performance & {
+      memory?: { usedJSHeapSize?: number; totalJSHeapSize?: number; jsHeapSizeLimit?: number };
+    }).memory;
+    const processes = await invoke<ProcessMemorySample[]>("get_memory_diagnostics").catch(error => {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "memory diagnostics",
+        message: `Memory sample ${sequence} native process query failed: ${String(error)}`
+      });
+      return [];
+    });
+    const categoryBytes = (predicate: (name: string) => boolean) => processes
+      .filter(process => predicate(process.name.toLocaleLowerCase()))
+      .reduce((total, process) => total + process.workingSetBytes, 0);
+    const webviewBytes = categoryBytes(name => name.includes("msedgewebview2") || name.includes("webkit"));
+    const tinymistBytes = categoryBytes(name => name.includes("tinymist"));
+    const relatedBytes = processes.reduce((total, process) => total + process.workingSetBytes, 0);
+    const backendBytes = Math.max(0, relatedBytes - webviewBytes - tinymistBytes);
+    const totals: MemoryDiagnosticTotals = {
+      jsHeapBytes: heap?.usedJSHeapSize ?? 0,
+      relatedBytes,
+      webviewBytes,
+      tinymistBytes,
+      backendBytes
+    };
+    const previous = this.previousMemoryDiagnostic;
+    this.previousMemoryDiagnostic = totals;
+    const preview = this.previewFrame.memorySnapshot();
+    const mib = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+    const delta = (value: number, before: number | undefined) => before === undefined
+      ? "n/a"
+      : `${value - before >= 0 ? "+" : ""}${mib(value - before)} MiB`;
+    const processSummary = processes
+      .map(process => `${process.name}[${process.pid}]=${mib(process.workingSetBytes)} MiB`)
+      .join(", ");
+    const openDocumentChars = this.openTabs.reduce((total, tab) => total + tab.content.length, 0);
+    const detailSummary = Object.entries(detail)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(", ");
+    this.appendDeveloperLog({
+      kind: "info",
+      source: "memory diagnostics",
+      message: [
+        `Memory sample ${sequence} (${stage})`,
+        `related=${mib(relatedBytes)} MiB (${delta(relatedBytes, previous?.relatedBytes)})`,
+        `webview=${mib(webviewBytes)} MiB (${delta(webviewBytes, previous?.webviewBytes)})`,
+        `tinymist=${mib(tinymistBytes)} MiB (${delta(tinymistBytes, previous?.tinymistBytes)})`,
+        `backend=${mib(backendBytes)} MiB (${delta(backendBytes, previous?.backendBytes)})`,
+        `jsHeap=${heap?.usedJSHeapSize === undefined ? "unavailable" : `${mib(heap.usedJSHeapSize)} MiB (${delta(heap.usedJSHeapSize, previous?.jsHeapBytes)})`}`,
+        `jsHeapTotal=${heap?.totalJSHeapSize === undefined ? "unavailable" : `${mib(heap.totalJSHeapSize)} MiB`}`,
+        `pdf=${mib(preview.pdfBytes)} MiB/${preview.pdfPages} pages/gen ${preview.pdfGeneration}`,
+        `canvas=${preview.residentCanvases} (${mib(preview.canvasPixels * 4)} MiB estimated RGBA)`,
+        `fontFaces=${preview.fontFaces}`,
+        `activeRenders=${preview.activeRenders}; pdfLoading=${preview.loading}`,
+        `lastPdfBase64=${mib(this.lastPdfBase64.length * 2)} MiB estimated UTF-16`,
+        `openTabs=${this.openTabs.length}; openDocumentUtf16=${openDocumentChars}; undoDepth=${undoDepth(this.editorInstance.state)}`,
+        detailSummary ? `detail: ${detailSummary}` : "",
+        `processes: ${processSummary || "unavailable"}`
+      ].filter(Boolean).join("; ")
+    });
+  }
+
+  private async reloadOpenFilesFromDisk(refreshPreview = true): Promise<boolean> {
+    let changed = false;
     for (const tab of [...this.openTabs]) {
       const pathKey = filePathKey(tab.path);
       const exists = await invoke<boolean>("workspace_path_exists", { path: tab.path });
@@ -3790,6 +3947,7 @@ export class TypstellaWorkspaceController {
           this.externalConflictPaths.delete(pathKey);
           await this.closeEditorTab(tab.path, true);
         }
+        changed = true;
         continue;
       }
 
@@ -3812,16 +3970,20 @@ export class TypstellaWorkspaceController {
         tab.isDirty = false;
         this.externalConflictPaths.delete(pathKey);
         this.renderEditorTabs();
+        changed = true;
         continue;
       }
       if (tab.isDirty) {
         this.reportExternalConflict(tab.path, "changed outside Typstella");
+        changed = true;
         continue;
       }
 
       this.externalConflictPaths.delete(pathKey);
       await this.applyExternalFileContent(tab, contents, refreshPreview);
+      changed = true;
     }
+    return changed;
   }
 
   private async applyExternalFileContent(tab: EditorTab, contents: string, refreshPreview = true): Promise<void> {

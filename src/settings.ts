@@ -11,10 +11,21 @@ export const themeNames = [
 
 export type ThemeName = typeof themeNames[number];
 export type PreviewRenderMode = "on-type" | "on-save";
+export type DeveloperLogCategory =
+  | "preview"
+  | "inverseSync"
+  | "forwardSync"
+  | "performance"
+  | "memory"
+  | "lsp"
+  | "general";
+
+export type DeveloperLogSettings = Record<DeveloperLogCategory, boolean>;
 
 export type AppSettings = {
   version: 1;
   developerMode: boolean;
+  developerLogs: DeveloperLogSettings;
   appearance: {
     theme: ThemeName;
     editorFontSize: number;
@@ -52,6 +63,15 @@ export type AppSettings = {
 export const defaultAppSettings: AppSettings = {
   version: 1,
   developerMode: false,
+  developerLogs: {
+    preview: true,
+    inverseSync: true,
+    forwardSync: true,
+    performance: true,
+    memory: true,
+    lsp: true,
+    general: true
+  },
   appearance: {
     theme: "default",
     editorFontSize: 14,
@@ -121,6 +141,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   const appearance = objectValue(root.appearance);
   const editor = objectValue(root.editor);
   const preview = objectValue(root.preview);
+  const developerLogs = objectValue(root.developerLogs);
   const toolchain = objectValue(root.toolchain);
   const theme = themeNames.includes(appearance.theme as ThemeName)
     ? appearance.theme as ThemeName
@@ -132,6 +153,15 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   return {
     version: 1,
     developerMode: booleanValue(root.developerMode, defaultAppSettings.developerMode),
+    developerLogs: {
+      preview: booleanValue(developerLogs.preview, defaultAppSettings.developerLogs.preview),
+      inverseSync: booleanValue(developerLogs.inverseSync, defaultAppSettings.developerLogs.inverseSync),
+      forwardSync: booleanValue(developerLogs.forwardSync, defaultAppSettings.developerLogs.forwardSync),
+      performance: booleanValue(developerLogs.performance, defaultAppSettings.developerLogs.performance),
+      memory: booleanValue(developerLogs.memory, defaultAppSettings.developerLogs.memory),
+      lsp: booleanValue(developerLogs.lsp, defaultAppSettings.developerLogs.lsp),
+      general: booleanValue(developerLogs.general, defaultAppSettings.developerLogs.general)
+    },
     appearance: {
       theme,
       editorFontSize: boundedNumber(appearance.editorFontSize, defaultAppSettings.appearance.editorFontSize, 10, 32),

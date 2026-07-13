@@ -494,6 +494,12 @@ export class TinymistLspClient {
     }
   }
 
+  public closeTextDocument(uri: string): Promise<void> {
+    return this.sendNotification("textDocument/didClose", {
+      textDocument: { uri }
+    });
+  }
+
   public async stopPreview(taskId: string): Promise<void> {
     await this.request<unknown>("workspace/executeCommand", {
       command: "tinymist.doKillPreview",

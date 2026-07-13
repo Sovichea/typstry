@@ -20,4 +20,14 @@ describe("performance diagnostics", () => {
     expect(PERFORMANCE_BUDGETS.maxResidentPdfPages).toBeLessThanOrEqual(7);
     expect(PERFORMANCE_BUDGETS.maxQueuedLanguageRequests).toBe(1);
   });
+
+  test("bounds retained performance samples", () => {
+    const diagnostics = new PerformanceDiagnostics();
+    for (let index = 0; index < PERFORMANCE_BUDGETS.maxRecordedMetrics + 25; index++) {
+      diagnostics.record({ name: "memory.heap", bytes: index });
+    }
+    const snapshot = diagnostics.snapshot();
+    expect(snapshot).toHaveLength(PERFORMANCE_BUDGETS.maxRecordedMetrics);
+    expect(snapshot[0].bytes).toBe(25);
+  });
 });
