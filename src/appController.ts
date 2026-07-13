@@ -3232,8 +3232,20 @@ export class TypsastraWorkspaceController {
     this.pdfSyncSocket?.close();
     this.pdfSyncSocket = null;
     this.pdfSyncSocketUrl = url;
+    const proxyUrl = await invoke<string>("start_preview_ws_proxy", { targetUrl: url }).catch(error => {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source,
+        message: `Failed to start native Tinymist data-plane bridge for ${url}: ${String(error)}`
+      });
+      return "";
+    });
+    if (!proxyUrl || this.pdfSyncSocketUrl !== url) return null;
     return await new Promise(resolve => {
-      const socket = new WebSocket(url);
+      // Tinymist validates WebSocket origins. The native loopback bridge sets
+      // the upstream Origin to the Tinymist endpoint while this browser-facing
+      // socket remains confined to a one-connection local proxy.
+      const socket = new WebSocket(proxyUrl);
       socket.binaryType = "arraybuffer";
       let settled = false;
       const finish = (value: WebSocket | null) => {

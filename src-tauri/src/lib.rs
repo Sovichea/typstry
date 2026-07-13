@@ -1927,6 +1927,28 @@ fn parse_loopback_url(url: &str, expected_scheme: &str) -> Result<reqwest::Url, 
     Ok(parsed)
 }
 
+fn preview_ws_origin(target_port: u16) -> String {
+    format!("http://127.0.0.1:{target_port}")
+}
+
+fn report_preview_ws_proxy_error(direction: &str, error: tokio_tungstenite::tungstenite::Error) {
+    use std::io::ErrorKind;
+    use tokio_tungstenite::tungstenite::Error;
+
+    let expected_shutdown = matches!(&error, Error::ConnectionClosed | Error::AlreadyClosed)
+        || matches!(
+            &error,
+            Error::Io(io_error)
+                if matches!(
+                    io_error.kind(),
+                    ErrorKind::BrokenPipe | ErrorKind::ConnectionAborted | ErrorKind::ConnectionReset
+                )
+        );
+    if !expected_shutdown {
+        eprintln!("Preview WebSocket proxy {direction} failed: {error}");
+    }
+}
+
 #[tauri::command]
 async fn start_preview_ws_proxy(target_url: String) -> Result<String, String> {
     let target = parse_loopback_url(&target_url, "ws")?;
@@ -1943,99 +1965,188 @@ async fn start_preview_ws_proxy(target_url: String) -> Result<String, String> {
     let target_base = target.to_string();
 
     tauri::async_runtime::spawn(async move {
-        loop {
-            let Ok((stream, _addr)) = listener.accept().await else {
-                break;
-            };
-            let target_base = target_base.clone();
-            tauri::async_runtime::spawn(async move {
-                let requested_path = std::sync::Arc::new(std::sync::Mutex::new(String::from("/")));
-                let requested_path_for_callback = requested_path.clone();
-                let client_ws = match accept_hdr_async(
-                    stream,
-                    move |request: &WsServerRequest, response: WsServerResponse| {
-                        if let Some(path_and_query) = request.uri().path_and_query() {
-                            if let Ok(mut target) = requested_path_for_callback.lock() {
-                                *target = path_and_query.as_str().to_string();
-                            }
-                        }
-                        Ok(response)
-                    },
-                )
-                .await
-                {
-                    Ok(socket) => socket,
-                    Err(error) => {
-                        eprintln!("Preview WebSocket proxy client handshake failed: {error}");
-                        return;
-                    }
-                };
+        // A source-map session owns one browser socket. Keep the proxy scoped
+        // to that socket so failed/restarted Tinymist tasks cannot accumulate
+        // dormant loopback listeners for the lifetime of the application.
+        let accepted =
+            tokio::time::timeout(std::time::Duration::from_secs(15), listener.accept()).await;
+        let stream = match accepted {
+            Ok(Ok((stream, _addr))) => stream,
+            Ok(Err(error)) => {
+                eprintln!("Preview WebSocket proxy accept failed: {error}");
+                return;
+            }
+            Err(_) => return,
+        };
 
-                let path = requested_path
-                    .lock()
-                    .map(|value| value.clone())
-                    .unwrap_or_else(|_| "/".to_string());
-                let mut outbound = match reqwest::Url::parse(&target_base) {
-                    Ok(url) => url,
-                    Err(error) => {
-                        eprintln!("Preview WebSocket proxy target URL invalid: {error}");
-                        return;
-                    }
-                };
-                outbound.set_path(path.split('?').next().unwrap_or("/"));
-                outbound.set_query(path.split_once('?').map(|(_, query)| query));
-                let outbound_url = outbound.to_string();
-                let mut outbound_request = match outbound_url.clone().into_client_request() {
-                    Ok(request) => request,
-                    Err(error) => {
-                        eprintln!("Preview WebSocket proxy request creation failed: {error}");
-                        return;
-                    }
-                };
-                let origin = format!("http://127.0.0.1:{target_port}");
-                if let Ok(value) = origin.parse() {
-                    outbound_request.headers_mut().insert("Origin", value);
-                }
-
-                let server_ws = match connect_async(outbound_request).await {
-                    Ok((socket, _response)) => socket,
-                    Err(error) => {
-                        eprintln!("Preview WebSocket proxy upstream handshake failed: {error}");
-                        return;
-                    }
-                };
-
-                let (mut client_write, mut client_read) = client_ws.split();
-                let (mut server_write, mut server_read) = server_ws.split();
-                let client_to_server = async {
-                    while let Some(message) = client_read.next().await {
-                        server_write.send(message?).await?;
-                    }
-                    Ok::<(), tokio_tungstenite::tungstenite::Error>(())
-                };
-                let server_to_client = async {
-                    while let Some(message) = server_read.next().await {
-                        client_write.send(message?).await?;
-                    }
-                    Ok::<(), tokio_tungstenite::tungstenite::Error>(())
-                };
-                tokio::select! {
-                    result = client_to_server => {
-                        if let Err(error) = result {
-                            eprintln!("Preview WebSocket proxy client-to-server failed: {error}");
-                        }
-                    }
-                    result = server_to_client => {
-                        if let Err(error) = result {
-                            eprintln!("Preview WebSocket proxy server-to-client failed: {error}");
-                        }
+        let requested_path = std::sync::Arc::new(std::sync::Mutex::new(String::from("/")));
+        let requested_path_for_callback = requested_path.clone();
+        let client_ws = match accept_hdr_async(
+            stream,
+            move |request: &WsServerRequest, response: WsServerResponse| {
+                if let Some(path_and_query) = request.uri().path_and_query() {
+                    if let Ok(mut target) = requested_path_for_callback.lock() {
+                        *target = path_and_query.as_str().to_string();
                     }
                 }
-            });
+                Ok(response)
+            },
+        )
+        .await
+        {
+            Ok(socket) => socket,
+            Err(error) => {
+                eprintln!("Preview WebSocket proxy client handshake failed: {error}");
+                return;
+            }
+        };
+
+        let path = requested_path
+            .lock()
+            .map(|value| value.clone())
+            .unwrap_or_else(|_| "/".to_string());
+        let mut outbound = match reqwest::Url::parse(&target_base) {
+            Ok(url) => url,
+            Err(error) => {
+                eprintln!("Preview WebSocket proxy target URL invalid: {error}");
+                return;
+            }
+        };
+        outbound.set_path(path.split('?').next().unwrap_or("/"));
+        outbound.set_query(path.split_once('?').map(|(_, query)| query));
+        let outbound_url = outbound.to_string();
+        let mut outbound_request = match outbound_url.clone().into_client_request() {
+            Ok(request) => request,
+            Err(error) => {
+                eprintln!("Preview WebSocket proxy request creation failed: {error}");
+                return;
+            }
+        };
+        if let Ok(value) = preview_ws_origin(target_port).parse() {
+            outbound_request.headers_mut().insert("Origin", value);
+        }
+
+        let server_ws = match connect_async(outbound_request).await {
+            Ok((socket, _response)) => socket,
+            Err(error) => {
+                eprintln!("Preview WebSocket proxy upstream handshake failed: {error}");
+                return;
+            }
+        };
+
+        let (mut client_write, mut client_read) = client_ws.split();
+        let (mut server_write, mut server_read) = server_ws.split();
+        let client_to_server = async {
+            while let Some(message) = client_read.next().await {
+                server_write.send(message?).await?;
+            }
+            Ok::<(), tokio_tungstenite::tungstenite::Error>(())
+        };
+        let server_to_client = async {
+            while let Some(message) = server_read.next().await {
+                client_write.send(message?).await?;
+            }
+            Ok::<(), tokio_tungstenite::tungstenite::Error>(())
+        };
+        tokio::select! {
+            result = client_to_server => {
+                if let Err(error) = result {
+                    report_preview_ws_proxy_error("client-to-server", error);
+                }
+            }
+            result = server_to_client => {
+                if let Err(error) = result {
+                    report_preview_ws_proxy_error("server-to-client", error);
+                }
+            }
         }
     });
 
     Ok(format!("ws://127.0.0.1:{proxy_port}"))
+}
+
+#[cfg(test)]
+mod preview_ws_proxy_tests {
+    use super::{parse_loopback_url, preview_ws_origin, start_preview_ws_proxy};
+    use futures_util::{SinkExt, StreamExt};
+    use std::sync::{Arc, Mutex};
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::{
+        accept_hdr_async, connect_async,
+        tungstenite::{
+            handshake::server::{Request, Response},
+            Message,
+        },
+    };
+
+    #[test]
+    fn accepts_only_explicit_loopback_websocket_targets() {
+        assert!(parse_loopback_url("ws://127.0.0.1:34373", "ws").is_ok());
+        assert!(parse_loopback_url("ws://localhost:34373/source-map", "ws").is_ok());
+        assert!(parse_loopback_url("wss://127.0.0.1:34373", "ws").is_err());
+        assert!(parse_loopback_url("ws://example.com:34373", "ws").is_err());
+        assert!(parse_loopback_url("ws://127.0.0.1", "ws").is_err());
+    }
+
+    #[test]
+    fn uses_the_tinymist_loopback_endpoint_as_upstream_origin() {
+        assert_eq!(preview_ws_origin(34373), "http://127.0.0.1:34373");
+    }
+
+    #[tokio::test]
+    async fn bridges_frames_with_the_expected_upstream_origin() {
+        let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_port = upstream.local_addr().unwrap().port();
+        let observed_origin = Arc::new(Mutex::new(None::<String>));
+        let observed_origin_for_server = observed_origin.clone();
+        let server = tokio::spawn(async move {
+            let (stream, _) = upstream.accept().await.unwrap();
+            let mut socket =
+                accept_hdr_async(stream, move |request: &Request, response: Response| {
+                    let origin = request
+                        .headers()
+                        .get("Origin")
+                        .and_then(|value| value.to_str().ok())
+                        .map(ToOwned::to_owned);
+                    *observed_origin_for_server.lock().unwrap() = origin;
+                    Ok(response)
+                })
+                .await
+                .unwrap();
+            assert_eq!(
+                socket.next().await.unwrap().unwrap().into_text().unwrap(),
+                "current"
+            );
+            socket
+                .send(Message::Binary(b"jump,2 24.5 80.25".to_vec().into()))
+                .await
+                .unwrap();
+            socket.close(None).await.unwrap();
+        });
+
+        let proxy_url = start_preview_ws_proxy(format!("ws://127.0.0.1:{upstream_port}"))
+            .await
+            .unwrap();
+        let (mut client, _) = connect_async(proxy_url).await.unwrap();
+        client.send(Message::Text("current".into())).await.unwrap();
+        let frame = tokio::time::timeout(std::time::Duration::from_secs(5), client.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(frame.into_data(), b"jump,2 24.5 80.25".as_slice());
+        let close = tokio::time::timeout(std::time::Duration::from_secs(5), client.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(close.is_close());
+        server.await.unwrap();
+        assert_eq!(
+            observed_origin.lock().unwrap().as_deref(),
+            Some(format!("http://127.0.0.1:{upstream_port}").as_str())
+        );
+    }
 }
 
 #[tauri::command]

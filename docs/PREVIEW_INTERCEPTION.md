@@ -10,7 +10,13 @@ The docked preview path is:
 2. Ask Tinymist/Typst to compile the selected preview root to PDF.
 3. Render the PDF with `pdfjs-dist` in a virtualized iframe.
 4. Keep only nearby pages rendered; pages outside the viewport are released.
-5. Use Tinymist's preview source-map data plane for forward and inverse sync.
+5. Use Tinymist's preview source-map data plane for forward and inverse sync through a one-connection native loopback bridge.
+
+The native bridge is required because current Tinymist versions validate the
+browser WebSocket `Origin`. A Tauri WebView cannot replace that header, so the
+Rust bridge connects upstream with the expected Tinymist loopback origin while
+preserving Tinymist's origin security check. Each bridge accepts one browser
+connection and then closes with its source-map session.
 
 The preview viewer does not use extracted PDF text to resolve source locations. PDF text extraction is too lossy for complex scripts and can produce incorrect offsets. Source synchronization should either use Tinymist source-map coordinates or fail visibly in developer logs.
 
