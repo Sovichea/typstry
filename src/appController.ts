@@ -187,6 +187,7 @@ export class TypstellaWorkspaceController {
   private lastPreviewRenderMode: PreviewRefreshStyle | undefined = undefined;
   private workspaceChangeQueue: Promise<void> = Promise.resolve();
   private projectImportQueue: Promise<void> = Promise.resolve();
+  private saveInProgress: Promise<void> | null = null;
   private pdfPreviewGeneration = 0;
   private pdfSyncPreviewTaskKey: string | null = null;
   private pdfSyncRegisteredTaskId: string | null = null;
@@ -986,7 +987,8 @@ export class TypstellaWorkspaceController {
 
   private getActiveTab(): EditorTab | null {
     if (!this.activeFilePath) return null;
-    return this.openTabs.find((tab) => tab.path === this.activeFilePath) ?? null;
+    const activeKey = filePathKey(this.activeFilePath);
+    return this.openTabs.find((tab) => filePathKey(tab.path) === activeKey) ?? null;
   }
 
   private persistActiveTabState() {
@@ -1583,6 +1585,17 @@ export class TypstellaWorkspaceController {
   }
 
   private async saveActiveFile() {
+    if (this.saveInProgress) return await this.saveInProgress;
+    const operation = this.performSaveActiveFile();
+    this.saveInProgress = operation;
+    try {
+      await operation;
+    } finally {
+      if (this.saveInProgress === operation) this.saveInProgress = null;
+    }
+  }
+
+  private async performSaveActiveFile(): Promise<void> {
     if (!this.activeFilePath) {
       return;
     }
@@ -1612,6 +1625,9 @@ export class TypstellaWorkspaceController {
       }
 
       const activeTab = this.getActiveTab();
+      const savedChangedRevision = activeTab
+        ? content !== activeTab.savedContent
+        : false;
       if (activeTab) {
         activeTab.content = content;
         activeTab.savedContent = content;
@@ -1620,7 +1636,7 @@ export class TypstellaWorkspaceController {
         this.renderEditorTabs();
       }
       this.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (this.settingsController.value.preview.renderMode === "on-save" && !this.previewDisabled) {
+      if (savedChangedRevision && this.settingsController.value.preview.renderMode === "on-save" && !this.previewDisabled) {
         void this.renderPdfPreview(content);
       }
 
@@ -3658,8 +3674,19 @@ export class TypstellaWorkspaceController {
     }
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
     await this.updatePinnedMain(previewLspMainPath(target));
+    const document = target.rootPath
+      ? researchDocumentIdentity(
+          this.workspaceRootPath ?? target.rootPath,
+          target.mainPath,
+          this.activeFilePath
+        )
+      : null;
     const identity = target.rootPath
-      ? previewSessionIdentity(target.rootPath, previewRefreshStyle(this.settingsController.value.preview.renderMode))
+      ? previewSessionIdentity(
+          target.rootPath,
+          previewRefreshStyle(this.settingsController.value.preview.renderMode),
+          document ?? undefined
+        )
       : null;
     const unchanged = identity?.key === this.previewSessionKey;
     if (unchanged) return;

@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] **v0.9.0 prerelease:** Rebuild and re-enable forward sync only after rapid-click, long-paragraph, included-file, persistent data-plane, timeout, and source-offset reliability tests pass. Forward sync remains disabled before this milestone.
+
 ## Completed
 
 - Basic UI layout with sidebar, CodeMirror editor, and live preview pane.

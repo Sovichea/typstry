@@ -48,6 +48,8 @@ The Toolchain panel installs stable Tinymist releases and shows each release's e
 
 `renderMode` accepts `"on-type"` or `"on-save"`. Imported files preview through their configured main document. The former standalone-preview directive is disabled for v1.0 and tracked for redesign in the v1.x plan.
 
+Forward cursor sync is temporarily disabled. Its reliability redesign and re-enablement are scheduled for the v0.9.0 prerelease.
+
 ## Fonts and typography
 
 Only MiSans Latin and Fira Mono are bundled. Typstella installs them in the current user's font directory on first launch, avoiding administrator access on Windows, Linux, and macOS.

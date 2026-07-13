@@ -259,6 +259,11 @@ export class SettingsController {
     setChecked("settings-show-zws", editor.showZws);
     setChecked("settings-format-on-save", editor.formatOnSave);
     setChecked("settings-cursor-sync", preview.cursorSync);
+    const cursorSync = document.getElementById("settings-cursor-sync") as HTMLInputElement | null;
+    if (cursorSync) {
+      cursorSync.disabled = true;
+      cursorSync.title = "Forward sync is disabled until the v0.9.0 prerelease reliability work.";
+    }
     setChecked("settings-khmer-prep", preview.khmerRenderPreparation);
     setChecked("settings-developer-mode", this.settings.developerMode);
     this.populateLanguageProviders();
