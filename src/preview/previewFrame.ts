@@ -29,7 +29,9 @@ type ActivePageRender = {
 const ZOOM_LEVELS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
 const FALLBACK_ZOOM_PERCENT = 90;
 const MAX_OUTPUT_SCALE = 2;
-const FIT_PADDING_PX = 40;
+// The viewer has 20px padding on each side. Keep an additional gutter for the
+// vertical scrollbar and fractional layout rounding so fit mode never overflows.
+const FIT_PADDING_PX = 56;
 const FORWARD_SYNC_GREEN = "#3db489";
 
 export class PreviewFrame {
@@ -106,6 +108,7 @@ export class PreviewFrame {
 
   public zoomToFit(): void {
     this.isFitToWidth = true;
+    this.updateHorizontalOverflow();
     this.applyFitToWidth();
   }
 
@@ -118,7 +121,7 @@ export class PreviewFrame {
     }
     if (maxPageWidth <= 0) return FALLBACK_ZOOM_PERCENT;
     const availableWidth = paneWidth - FIT_PADDING_PX;
-    return Math.max(10, Math.round((availableWidth / maxPageWidth) * 100));
+    return Math.max(10, Math.floor((availableWidth / maxPageWidth) * 100));
   }
 
   private applyFitToWidth(): void {
@@ -128,6 +131,7 @@ export class PreviewFrame {
   }
 
   private setZoom(percent: number): number {
+    this.updateHorizontalOverflow();
     if (percent === this.previewZoomPercent) return percent;
     this.zoomStartedAt = performance.now();
     const anchor = this.captureScrollAnchor();
@@ -138,6 +142,17 @@ export class PreviewFrame {
     this.restoreScrollAnchor(anchor);
     requestAnimationFrame(() => this.renderVisiblePages());
     return percent;
+  }
+
+  private updateHorizontalOverflow(): void {
+    const doc = this.iframe?.contentDocument;
+    if (!doc?.body) return;
+    doc.body.style.overflowX = this.isFitToWidth ? "hidden" : "auto";
+    doc.body.style.overscrollBehaviorX = this.isFitToWidth ? "none" : "auto";
+    if (this.isFitToWidth) {
+      doc.body.scrollLeft = 0;
+      doc.documentElement.scrollLeft = 0;
+    }
   }
 
   public async loadPdfData(base64Data: string, identity = "compiler-pdf"): Promise<void> {
@@ -196,6 +211,7 @@ export class PreviewFrame {
       this.mountedUrl = identity;
       if (this.isFitToWidth) this.previewZoomPercent = this.computeFitToWidthPercent();
       this.createPageSlots(iframeDoc, true);
+      this.updateHorizontalOverflow();
       this.setupIframeInteractions();
       this.installPageObserver(iframe);
       this.restoreScrollAnchor(previousScroll);
@@ -255,6 +271,7 @@ export class PreviewFrame {
     this.pane.appendChild(iframe);
     this.iframe = iframe;
     await loaded;
+    this.updateHorizontalOverflow();
     this.setupIframeInteractions();
     return iframe;
   }
