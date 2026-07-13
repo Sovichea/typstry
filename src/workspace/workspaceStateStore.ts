@@ -66,7 +66,7 @@ export class WorkspaceStateStore {
   }
 
   private key(workspacePath: string): string {
-    return `typstella-workspace-${workspacePath}`;
+    return `typsastra-workspace-${workspacePath}`;
   }
 
   private numberOr(value: unknown, fallback: number): number {

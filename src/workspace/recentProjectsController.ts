@@ -1,6 +1,6 @@
 import { createAppIcon } from "../ui/icons";
 
-const storageKey = "typstella-recent-projects";
+const storageKey = "typsastra-recent-projects";
 
 export class RecentProjectsController {
   constructor(private readonly onOpen: (path: string) => void | Promise<void>) {}

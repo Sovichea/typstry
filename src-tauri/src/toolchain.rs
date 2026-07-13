@@ -275,7 +275,7 @@ pub fn status(data_dir: &Path) -> ToolchainStatus {
         typst_version: Some(typst.clone()),
         typst_source: Some(format!("Embedded in Tinymist {}", tinymist)),
         tinymist_version: Some(tinymist.clone()),
-        tinymist_source: Some("Managed by Typstella".to_string()),
+        tinymist_source: Some("Managed by Typsastra".to_string()),
         lsp_available: true,
         message: format!(
             "Tinymist {} with embedded Typst {} is ready.",
@@ -286,7 +286,7 @@ pub fn status(data_dir: &Path) -> ToolchainStatus {
 
 fn github_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent(format!("Typstella/{}", env!("CARGO_PKG_VERSION")))
+        .user_agent(format!("Typsastra/{}", env!("CARGO_PKG_VERSION")))
         .default_headers({
             let mut headers = reqwest::header::HeaderMap::new();
             headers.insert(
@@ -306,7 +306,7 @@ fn github_client() -> Result<reqwest::Client, String> {
 
 fn github_asset_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .user_agent(format!("Typstella/{}", env!("CARGO_PKG_VERSION")))
+        .user_agent(format!("Typsastra/{}", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(10 * 60))
         .build()

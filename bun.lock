@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "typstella",
+      "name": "typsastra",
       "dependencies": {
         "@babel/runtime": "^8.0.0",
         "@codemirror/autocomplete": "^6.20.3",

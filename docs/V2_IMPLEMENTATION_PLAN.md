@@ -1,4 +1,4 @@
-# Typstella v2 Implementation Plan
+# Typsastra v2 Implementation Plan
 
 ## Status
 
@@ -81,7 +81,7 @@ WYSIWYM is not required for v1.x and must not distract from the stable code edit
 ## Workstream V2-S: Adoption and migration
 
 - [ ] Define migration from v1.x settings, assistant configuration, project manifests, and ignored diagnostics.
-- [ ] Preserve `.typstella` archive compatibility or provide explicit conversion tooling.
+- [ ] Preserve `.typsastra` archive compatibility or provide explicit conversion tooling.
 - [ ] Publish privacy, AI-provider, cost, model-quality, and supported-language documentation.
 - [ ] Run an opt-in preview period before enabling any real-time AI feature broadly.
 - [ ] Keep a supported mode with all AI features disabled.

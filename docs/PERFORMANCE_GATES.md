@@ -1,6 +1,6 @@
 # Reliability and performance gates
 
-Phase 7 turns Typstella's existing incremental language analysis and virtual PDF viewer into measured contracts. Metrics are printed to the web developer console and appear in the Dev log tab when Developer mode is enabled.
+Phase 7 turns Typsastra's existing incremental language analysis and virtual PDF viewer into measured contracts. Metrics are printed to the web developer console and appear in the Dev log tab when Developer mode is enabled.
 
 ## Approved budgets
 
@@ -56,5 +56,5 @@ Before a release, manually verify on both platforms:
 2. Confirm the performance log never reports more than seven resident pages.
 3. Zoom repeatedly and confirm visible pages recover at full resolution.
 4. Introduce a syntax error, repair it, and confirm preview and diagnostics recover without restarting Tinymist.
-5. Record the Typstella, WebView, renderer/GPU, and Tinymist process memory after a complete scroll.
+5. Record the Typsastra, WebView, renderer/GPU, and Tinymist process memory after a complete scroll.
 6. Open and close an undocked preview and confirm no uninitialized intermediate document becomes visible.

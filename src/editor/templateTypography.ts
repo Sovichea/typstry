@@ -6,8 +6,8 @@ export type LocalTemplateApplication = {
   showExpression: string;
 };
 
-const blockStart = "// typstella:typography:start";
-const blockEnd = "// typstella:typography:end";
+const blockStart = "// typsastra:typography:start";
+const blockEnd = "// typsastra:typography:end";
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -117,7 +117,7 @@ export function templateTypographyEdit(
 
 export function newTypographyTemplate(config: DocumentTypography): string {
   return [
-    "#let typstella-typography(body) = {",
+    "#let typsastra-typography(body) = {",
     renderTemplateTypographyBlock(config),
     "  body",
     "}",
@@ -126,10 +126,10 @@ export function newTypographyTemplate(config: DocumentTypography): string {
 }
 
 export function ensureTypographyTemplateApplication(mainText: string): TypographyEdit {
-  if (/#import\s+"typstella-template\.typ"\s*:\s*typstella-typography/.test(mainText)) {
+  if (/#import\s+"typsastra-template\.typ"\s*:\s*typsastra-typography/.test(mainText)) {
     return { from: 0, to: 0, insert: "" };
   }
-  const insert = '#import "typstella-template.typ": typstella-typography\n#show: typstella-typography\n\n';
+  const insert = '#import "typsastra-template.typ": typsastra-typography\n#show: typsastra-typography\n\n';
   const bomOffset = mainText.startsWith("\uFEFF") ? 1 : 0;
   const from = bomOffset;
   return { from, to: from, insert };

@@ -1,19 +1,19 @@
-# Typstella v1.0 Release Implementation Plan
+# Typsastra v1.0 Release Implementation Plan
 
 ## Objective
 
-Ship Typstella v1.0 as a dependable, complex-script-first research writing environment with reproducible project interchange, guided project creation, and explicit release-quality gates.
+Ship Typsastra v1.0 as a dependable, complex-script-first research writing environment with reproducible project interchange, guided project creation, and explicit release-quality gates.
 
 This plan complements the [complex-script-first implementation plan](./COMPLEX_SCRIPT_FIRST_IMPLEMENTATION_PLAN.md). That plan owns editor, language-provider, preview, and research-workflow architecture. This document owns only the remaining product work and release gates required for v1.0.
 
 ## Release principles
 
 1. Stability and data safety take priority over new features.
-2. Typst source remains ordinary, portable source. Typstella metadata may guide the application but must never be required by the standard Typst compiler.
+2. Typst source remains ordinary, portable source. Typsastra metadata may guide the application but must never be required by the standard Typst compiler.
 3. A shared project records the compiler environment with which it was exported. Import never silently claims compatibility with a different Typst version.
 4. Opening or importing a project never executes project-provided code.
 5. Templates are local, reviewable, editable source—not opaque generators.
-6. Version-bound means an exact Typst semantic version. Because Typstella manages Tinymist rather than a standalone compiler, the manifest also records the exact Tinymist version that embeds that Typst version.
+6. Version-bound means an exact Typst semantic version. Because Typsastra manages Tinymist rather than a standalone compiler, the manifest also records the exact Tinymist version that embeds that Typst version.
 
 ## Tracking convention
 
@@ -25,22 +25,22 @@ Tasks use stable IDs such as `V1-I.3`. An item is complete only when implementat
 
 ### Archive contract
 
-Replace the current unversioned workspace ZIP with a versioned Typstella project archive. Use the extension `.typstella` while retaining ZIP as the underlying container format.
+Replace the current unversioned workspace ZIP with a versioned Typsastra project archive. Use the extension `.typsastra` while retaining ZIP as the underlying container format.
 
 Each archive contains ordinary project files plus a generated manifest at:
 
 ```text
-.typstella/project.json
+.typsastra/project.json
 ```
 
 Proposed schema:
 
 ```json
 {
-  "format": "com.typstella.project",
+  "format": "com.typsastra.project",
   "schemaVersion": 1,
   "createdBy": {
-    "application": "Typstella",
+    "application": "Typsastra",
     "version": "0.3.0"
   },
   "project": {
@@ -60,7 +60,7 @@ Proposed schema:
       "style": "normal",
       "weight": 400,
       "stretch": 100,
-      "path": ".typstella/fonts/package/MiSansKhmer-Regular.ttf",
+      "path": ".typsastra/fonts/package/MiSansKhmer-Regular.ttf",
       "sha256": "...",
       "license": {
         "name": "...",
@@ -81,7 +81,7 @@ Rules:
 
 - `format`, `schemaVersion`, exact Typst version, exact Tinymist version, main-file path, and file hashes are mandatory.
 - Generated caches, render mirrors, `.git`, `target`, and `node_modules` remain excluded.
-- `.typstella/project.json` and the verified font payload under `.typstella/fonts/package/` are the only generated `.typstella` content exported.
+- `.typsastra/project.json` and the verified font payload under `.typsastra/fonts/package/` are the only generated `.typsastra` content exported.
 - Every font face resolved for document rendering is declared and included, including the actual generated/scaled face when complex-script scaling is active. Disposable generated-font cache paths are not copied directly; export creates a verified package payload.
 - Package dependencies are declared when known. Third-party fonts are included only when their redistribution and modification terms permit it; otherwise version-bound export is blocked until the user replaces or legally resolves the font.
 - A legacy plain ZIP may still be exported through an explicitly named **Export Source ZIP** action, but it carries no compatibility promise.
@@ -90,7 +90,7 @@ Rules:
 ### Import flow
 
 ```text
-Choose or double-click .typstella
+Choose or double-click .typsastra
   -> inspect manifest without extracting
   -> validate schema, paths, sizes, hashes, and archive limits
   -> choose an empty destination folder
@@ -115,7 +115,7 @@ Changing the toolchain later is allowed from project/toolchain settings. The UI 
 
 ### Self-contained render fonts
 
-A `.typstella` archive must contain every exact font face declared for project rendering plus every additional fallback face resolved by the exported render. This union prevents an unused-but-configured complex-script fallback from disappearing merely because the current revision does not contain that script. Import must not depend on a similarly named system font, because family names alone do not guarantee identical outlines, shaping tables, metrics, or version.
+A `.typsastra` archive must contain every exact font face declared for project rendering plus every additional fallback face resolved by the exported render. This union prevents an unused-but-configured complex-script fallback from disappearing merely because the current revision does not contain that script. Import must not depend on a similarly named system font, because family names alone do not guarantee identical outlines, shaping tables, metrics, or version.
 
 ```text
 Export preflight
@@ -124,7 +124,7 @@ Export preflight
   -> capture every additional resolved font/fallback face
   -> resolve the exact source font bytes
   -> verify font identity, format, license, and embedding/redistribution rights
-  -> copy the exact bytes into .typstella/fonts/package/
+  -> copy the exact bytes into .typsastra/fonts/package/
   -> record face metadata, provenance, and SHA-256
   -> compile once against only the packaged font path
   -> require equivalent successful output before writing the archive
@@ -140,35 +140,35 @@ Required behavior:
 - Verify imported font hashes before loading them. Reject undeclared fonts, unsupported formats, malformed collections, excessive sizes/face counts, path collisions, and a manifest identity that disagrees with parsed font metadata.
 - Prevent family-name collisions from selecting a system font ahead of the packaged face. Rendering is keyed by the packaged identity and hash, not merely the family string.
 - Display a font preflight table with **Included**, **Missing**, **Ambiguous**, **License required**, or **Not redistributable** status. Do not silently substitute fonts.
-- If a font cannot be redistributed, block **Export Typstella Project** and offer to select a redistributable replacement. **Export Source ZIP** may remain available but must state that it is not render-reproducible and must not copy a restricted system font.
+- If a font cannot be redistributed, block **Export Typsastra Project** and offer to select a redistributable replacement. **Export Source ZIP** may remain available but must state that it is not render-reproducible and must not copy a restricted system font.
 - Record license name, license/source URL when known, copyright/vendor, modification permission, redistribution permission, and OS/2 embedding restrictions. A user assertion may supply missing provenance for their own font, but it must not override an explicit restrictive license.
 - Imported projects use their packaged fonts for preview and PDF export even when other font versions are installed. Users may deliberately replace a font later, which marks the rendering environment as modified.
 
 For standard Typst CLI portability, the imported project documentation should expose the equivalent command:
 
 ```text
-typst compile --font-path .typstella/fonts/package main.typ
+typst compile --font-path .typsastra/fonts/package main.typ
 ```
 
 The `.typ` source remains ordinary Typst source; the font-path argument supplies the archived rendering environment.
 
 ### File association and double-click behavior
 
-Installed desktop packages should register `.typstella` as **Typstella Project**, with MIME type `application/vnd.typstella.project`, and use the Typstella application icon. The Tauri bundle configuration is expected to declare:
+Installed desktop packages should register `.typsastra` as **Typsastra Project**, with MIME type `application/vnd.typsastra.project`, and use the Typsastra application icon. The Tauri bundle configuration is expected to declare:
 
 ```json
 {
   "bundle": {
     "fileAssociations": [
       {
-        "ext": ["typstella"],
-        "name": "Typstella Project",
-        "description": "Version-bound Typstella project archive",
-        "mimeType": "application/vnd.typstella.project",
+        "ext": ["typsastra"],
+        "name": "Typsastra Project",
+        "description": "Version-bound Typsastra project archive",
+        "mimeType": "application/vnd.typsastra.project",
         "role": "Editor",
         "rank": "Owner",
         "exportedType": {
-          "identifier": "com.typstella.project",
+          "identifier": "com.typsastra.project",
           "conformsTo": ["public.data", "public.archive"]
         }
       }
@@ -180,17 +180,17 @@ Installed desktop packages should register `.typstella` as **Typstella Project**
 Double-click is an import entry point, not permission to extract immediately:
 
 ```text
-Operating system opens project.typstella
-  -> Typstella receives and canonicalizes the file path
+Operating system opens project.typsastra
+  -> Typsastra receives and canonicalizes the file path
   -> queue the request until native state and frontend are ready
   -> inspect format and manifest
   -> show the normal import and compatibility flow
   -> extract only after user confirmation
 ```
 
-Cold launch and already-running behavior must both work. When Typstella is already open, a single-instance handoff should deliver the path to the existing window, focus it, and open one import dialog. Repeated OS events for the same canonical path must be deduplicated. Unsupported/corrupt files receive an error without changing the active workspace.
+Cold launch and already-running behavior must both work. When Typsastra is already open, a single-instance handoff should deliver the path to the existing window, focus it, and open one import dialog. Repeated OS events for the same canonical path must be deduplicated. Unsupported/corrupt files receive an error without changing the active workspace.
 
-Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop integration, and macOS application bundles. AppImage association depends on the user's desktop integration mechanism, so Typstella must not claim automatic association for a standalone AppImage.
+Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop integration, and macOS application bundles. AppImage association depends on the user's desktop integration mechanism, so Typsastra must not claim automatic association for a standalone AppImage.
 
 ### Checklist
 
@@ -204,16 +204,16 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 - [x] **V1-I.8 Add transactional import.** Extract to a staging directory, verify every hash, clean up failed imports, and never overwrite a non-empty destination.
 - [x] **V1-I.9 Resolve compatible toolchains.** Match the exact embedded Typst version, prefer the recorded Tinymist version, and only offer releases whose embedded compiler metadata has been verified.
 - [x] **V1-I.10 Add the compatibility dialog.** Explain exact match, alternative build, unavailable version, offline state, and the consequences of overriding the pin.
-- [x] **V1-I.11 Add per-workspace toolchain binding.** Store the recommended and selected versions separately; restarting Typstella must restore the workspace selection without unexpectedly changing other projects.
-- [x] **V1-I.12 Add menus and progress UI.** File menu actions: **Import Typstella Project**, **Export Typstella Project**, and **Export Source ZIP**. Use the `*.typstella` filter for version-bound projects. Downloads, validation, extraction, and cleanup must be cancellable where safe.
+- [x] **V1-I.11 Add per-workspace toolchain binding.** Store the recommended and selected versions separately; restarting Typsastra must restore the workspace selection without unexpectedly changing other projects.
+- [x] **V1-I.12 Add menus and progress UI.** File menu actions: **Import Typsastra Project**, **Export Typsastra Project**, and **Export Source ZIP**. Use the `*.typsastra` filter for version-bound projects. Downloads, validation, extraction, and cleanup must be cancellable where safe.
 - [x] **V1-I.13 Add migration behavior.** Continue opening normal folders and legacy ZIP exports without inventing a compatibility guarantee; document how to re-export them in the new format.
 - [x] **V1-I.14 Test the interchange contract.** Cover Unicode paths, large projects, corrupt ZIPs, zip-slip, hash mismatch, missing main files, unavailable versions, cancellation, disk-full behavior, and Windows/Linux/macOS round trips.
-- [x] **V1-I.15 Register the file association.** Add `.typstella`, `application/vnd.typstella.project`, the exported macOS type, the Typstella icon, and installer metadata without claiming ownership of `.typ` or `.typst` source files.
+- [x] **V1-I.15 Register the file association.** Add `.typsastra`, `application/vnd.typsastra.project`, the exported macOS type, the Typsastra icon, and installer metadata without claiming ownership of `.typ` or `.typst` source files.
 - [x] **V1-I.16 Route OS-open events safely.** Handle cold launch and single-instance handoff, queue requests until initialization completes, canonicalize and deduplicate paths, focus the existing window, and invoke the same import controller used by the File menu.
 - [x] **V1-I.17 Test packaged double-click import.** Verify association, icon, cold/warm launch, spaces and Unicode paths, corrupt archives, repeated events, cancellation, and uninstall cleanup on every supported installer format.
 - [x] **V1-I.18 Capture effective render fonts.** Union exact faces declared by project typography configuration with faces resolved by the bound compilation; do not rely on regex/source scanning or family names alone.
 - [x] **V1-I.19 Add font provenance and license validation.** Parse supported font formats, embedding restrictions, source metadata, redistribution/modification permission, and generated-font provenance; produce actionable blockers.
-- [x] **V1-I.20 Build the packaged font payload.** Copy exact verified faces into `.typstella/fonts/package/`, use deterministic names, hash every file, and record all face/style/variation metadata in the manifest.
+- [x] **V1-I.20 Build the packaged font payload.** Copy exact verified faces into `.typsastra/fonts/package/`, use deterministic names, hash every file, and record all face/style/variation metadata in the manifest.
 - [x] **V1-I.21 Verify hermetic rendering.** Before finalizing export, compile against the packaged font directory with ordinary system resolution excluded or audited; fail if a different or missing face is selected.
 - [x] **V1-I.22 Load imported fonts project-locally.** Verify hashes and font structure, prioritize packaged faces for the workspace's Tinymist/Typst processes, and never register them with the OS.
 - [x] **V1-I.23 Add font-package security limits.** Bound file size, total font bytes, collection face count, parsing time, supported formats, normalized paths, and duplicate family/PostScript identities.
@@ -225,11 +225,11 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 - [ ] Import never extracts project content before archive validation and destination confirmation.
 - [ ] A compatible managed toolchain can be installed from the import dialog and is selected for that workspace.
 - [ ] Choosing another version displays a persistent compatibility warning but does not prevent deliberate use.
-- [ ] Double-clicking a `.typstella` file opens one validated import flow in either a new or already-running Typstella instance.
-- [ ] A `.typstella` export contains every exact font face used by its validated render or fails with an actionable font/license report.
+- [ ] Double-clicking a `.typsastra` file opens one validated import flow in either a new or already-running Typsastra instance.
+- [ ] A `.typsastra` export contains every exact font face used by its validated render or fails with an actionable font/license report.
 - [ ] Import preview and PDF export use only the verified packaged font identities regardless of conflicting system fonts.
 - [ ] No imported font is installed globally, and malformed/untrusted font payloads are rejected before renderer initialization.
-- [ ] Ordinary `.typ` sources still compile outside Typstella.
+- [ ] Ordinary `.typ` sources still compile outside Typsastra.
 - [ ] Malicious or malformed archives cannot write outside the chosen destination or leave a partial project presented as successful.
 
 ---
@@ -254,7 +254,7 @@ project-name/
 ```typst
 = Hello, world!
 
-Start writing with Typstella and Typst.
+Start writing with Typsastra and Typst.
 ```
 
 Do not add a template library, package dependency, or generated assets.
@@ -387,7 +387,7 @@ Features: recto chapter starts, running heads, configurable trim size and margin
 ### Acceptance criteria
 
 - [ ] A user can create every template from either entry point and immediately preview it.
-- [ ] Generated projects are ordinary Typst projects and do not require Typstella to compile.
+- [ ] Generated projects are ordinary Typst projects and do not require Typsastra to compile.
 - [ ] No template downloads or executes code during creation.
 - [ ] Templates compile in CI with their declared Typst version.
 - [ ] Project creation never leaves a partial directory after a reported failure.
@@ -411,7 +411,7 @@ These gates take priority over every other v1.0 feature.
 
 ### v1.0 release gate
 
-Typstella is eligible for v1.0 only when:
+Typsastra is eligible for v1.0 only when:
 
 - all `V1-I`, `V1-N`, and `V1-S` acceptance criteria pass;
 - no known data-loss, unsafe extraction, project corruption, or toolchain-selection blocker remains;
@@ -427,8 +427,8 @@ Typstella is eligible for v1.0 only when:
 
 Post-v1.0 work is tracked separately:
 
-- [Typstella v1.x implementation plan](./V1X_IMPLEMENTATION_PLAN.md)
-- [Typstella v2 implementation plan](./V2_IMPLEMENTATION_PLAN.md)
+- [Typsastra v1.x implementation plan](./V1X_IMPLEMENTATION_PLAN.md)
+- [Typsastra v2 implementation plan](./V2_IMPLEMENTATION_PLAN.md)
 
 ## Recommended priority order
 

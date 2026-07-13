@@ -1,11 +1,11 @@
-#set document(title: "Typstella Unicode Examples")
+#set document(title: "Typsastra Unicode Examples")
 #set page(margin: 24mm)
-// typstella:typography:start
+// typsastra:typography:start
 #set text(font: "MiSans Latin", size: 11pt)
-// typstella:typography:end
+// typsastra:typography:end
 #set heading(numbering: "1.")
 
-= Typstella Unicode Examples
+= Typsastra Unicode Examples
 
 This workspace contains editable examples for learning Typst and testing multilingual documents.
 
@@ -23,7 +23,7 @@ This workspace contains editable examples for learning Typst and testing multili
 
 == 03. Language Tools
 
-Typstella offers interactive language tools such as spellcheck and word completion, controlled from Settings (`Ctrl+,` or `Cmd+,`).
+Typsastra offers interactive language tools such as spellcheck and word completion, controlled from Settings (`Ctrl+,` or `Cmd+,`).
 
 - `01-khmer-deep-support`: Khmer language document with Cetz circuit diagrams.
 - `02-khmer-segmentation-comparison`: Khmer justify-only baseline, experimental render preparation, and recommended tracking-tuned justification.
@@ -34,7 +34,7 @@ Typstella offers interactive language tools such as spellcheck and word completi
 
 - `01-simple-thesis`: Three chapters demonstrating labels and cross-chapter references.
 - `02-khmer-folklore-book`: A multi-file Khmer folklore book with five included stories and a table of contents.
-- `03-typstella-readme`: The Typstella project README built as a Typst project.
+- `03-typsastra-readme`: The Typsastra project README built as a Typst project.
 
 == Templates
 
@@ -42,6 +42,6 @@ Typstella offers interactive language tools such as spellcheck and word completi
 
 Open any `main.typ` file from the explorer. These files are your own writable copies, so you can change them freely.
 
-When Typstella detects a script that needs another font, choose the font you prefer from the notification or Settings.
+When Typsastra detects a script that needs another font, choose the font you prefer from the notification or Settings.
 
 Imported template sections use their configured main-document preview.

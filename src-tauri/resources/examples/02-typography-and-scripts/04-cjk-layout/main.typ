@@ -1,8 +1,8 @@
 #set document(title: "CJK Layout")
 #set page(margin: 22mm)
-// typstella:typography:start
+// typsastra:typography:start
 #set text(font: "MiSans Latin", size: 11pt)
-// typstella:typography:end
+// typsastra:typography:end
 #set par(justify: true)
 
 = CJK Layout

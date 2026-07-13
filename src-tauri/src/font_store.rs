@@ -15,22 +15,22 @@ struct FontFile {
 
 const BASE_FONTS: &[FontFile] = &[
     FontFile {
-        file_name: "Typstella-FiraMono-Regular.ttf",
+        file_name: "Typsastra-FiraMono-Regular.ttf",
         registry_name: "Fira Mono Regular (TrueType)",
         bytes: include_bytes!("../fonts/FiraMono-Regular.ttf"),
     },
     FontFile {
-        file_name: "Typstella-FiraMono-Bold.ttf",
+        file_name: "Typsastra-FiraMono-Bold.ttf",
         registry_name: "Fira Mono Bold (TrueType)",
         bytes: include_bytes!("../fonts/FiraMono-Bold.ttf"),
     },
     FontFile {
-        file_name: "Typstella-MiSansLatin-Regular.ttf",
+        file_name: "Typsastra-MiSansLatin-Regular.ttf",
         registry_name: "MiSans Latin Regular (TrueType)",
         bytes: include_bytes!("../fonts/MiSansLatin-Regular.ttf"),
     },
     FontFile {
-        file_name: "Typstella-MiSansLatin-Bold.ttf",
+        file_name: "Typsastra-MiSansLatin-Bold.ttf",
         registry_name: "MiSans Latin Bold (TrueType)",
         bytes: include_bytes!("../fonts/MiSansLatin-Bold.ttf"),
     },
@@ -385,7 +385,7 @@ fn extract_font(
 pub async fn install_unicode_font(font_id: &str) -> Result<InstalledFont, String> {
     if let Some(spec) = DIRECT_DOWNLOADS.iter().find(|spec| spec.id == font_id) {
         let client = reqwest::Client::builder()
-            .user_agent(format!("Typstella/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("Typsastra/{}", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(120))
             .build()
             .map_err(|error| format!("Failed to initialize the font downloader: {error}"))?;
@@ -409,7 +409,7 @@ pub async fn install_unicode_font(font_id: &str) -> Result<InstalledFont, String
         if bytes.len() > MAX_FONT_BYTES || !valid_font(&bytes) {
             return Err(format!("{} is not a valid desktop font.", spec.family));
         }
-        let installed_file = format!("Typstella-{}", spec.file_name);
+        let installed_file = format!("Typsastra-{}", spec.file_name);
         write_and_register(
             &installed_file,
             &format!("{} Variable (TrueType)", spec.family),
@@ -426,7 +426,7 @@ pub async fn install_unicode_font(font_id: &str) -> Result<InstalledFont, String
         .find(|spec| spec.id == font_id)
         .ok_or_else(|| format!("Unknown Unicode font recommendation: {font_id}"))?;
     let client = reqwest::Client::builder()
-        .user_agent(format!("Typstella/{}", env!("CARGO_PKG_VERSION")))
+        .user_agent(format!("Typsastra/{}", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(120))
         .build()
         .map_err(|error| format!("Failed to initialize the font downloader: {error}"))?;
@@ -461,8 +461,8 @@ pub async fn install_unicode_font(font_id: &str) -> Result<InstalledFont, String
         .map_err(|error| format!("The {} archive is invalid: {error}", spec.family))?;
     let regular = extract_font(&mut archive, spec.regular_file)?;
     let bold = extract_font(&mut archive, spec.bold_file)?;
-    let installed_regular = format!("Typstella-{}", spec.regular_file);
-    let installed_bold = format!("Typstella-{}", spec.bold_file);
+    let installed_regular = format!("Typsastra-{}", spec.regular_file);
+    let installed_bold = format!("Typsastra-{}", spec.bold_file);
     write_and_register(
         &installed_regular,
         &format!("{} Regular (TrueType)", spec.family),

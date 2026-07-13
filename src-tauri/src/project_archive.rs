@@ -7,9 +7,11 @@ use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
 use zip::write::FileOptions;
 
-pub const PROJECT_FORMAT: &str = "com.typstella.project";
+pub const PROJECT_FORMAT: &str = "com.typsastra.project";
 pub const PROJECT_SCHEMA_VERSION: u32 = 1;
-pub const PROJECT_MANIFEST_PATH: &str = ".typstella/project.json";
+pub const PROJECT_MANIFEST_PATH: &str = ".typsastra/project.json";
+pub const LEGACY_PROJECT_FORMAT: &str = "com.typstella.project";
+pub const LEGACY_PROJECT_MANIFEST_PATH: &str = ".typstella/project.json";
 const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES: usize = 20_000;
 const MAX_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
@@ -151,10 +153,12 @@ struct ValidatedArchiveEntry {
 struct ValidatedArchive {
     inspection: ArchiveInspection,
     entries: Vec<ValidatedArchiveEntry>,
+    manifest_path: String,
 }
 
 pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(), String> {
-    if manifest.format != PROJECT_FORMAT {
+    let legacy = manifest.format == LEGACY_PROJECT_FORMAT;
+    if manifest.format != PROJECT_FORMAT && !legacy {
         return Err(format!(
             "Unsupported project format '{}'. Expected '{}'.",
             manifest.format, PROJECT_FORMAT
@@ -162,11 +166,12 @@ pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(),
     }
     if manifest.schema_version != PROJECT_SCHEMA_VERSION {
         return Err(format!(
-            "Unsupported Typstella project schema version {}. This build supports version {}.",
+            "Unsupported Typsastra project schema version {}. This build supports version {}.",
             manifest.schema_version, PROJECT_SCHEMA_VERSION
         ));
     }
-    if manifest.created_by.application != "Typstella"
+    let expected_creator = if legacy { "Typstella" } else { "Typsastra" };
+    if manifest.created_by.application != expected_creator
         || manifest.created_by.version.trim().is_empty()
     {
         return Err("The project creator metadata is invalid.".to_string());
@@ -215,7 +220,12 @@ pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(),
     let mut font_paths = HashSet::new();
     for font in &manifest.fonts {
         validate_archive_path(&font.path)?;
-        if !font.path.starts_with(".typstella/fonts/package/") {
+        let font_prefix = if legacy {
+            ".typstella/fonts/package/"
+        } else {
+            ".typsastra/fonts/package/"
+        };
+        if !font.path.starts_with(font_prefix) {
             return Err(format!(
                 "Packaged font path '{}' is outside the font package.",
                 font.path
@@ -270,7 +280,7 @@ pub fn validate_manifest_compatibility(manifest: &ProjectManifest) -> Result<(),
     Ok(())
 }
 
-pub fn inspect_typstella_project(archive_path: &Path) -> Result<ArchiveInspection, String> {
+pub fn inspect_typsastra_project(archive_path: &Path) -> Result<ArchiveInspection, String> {
     let file = open_archive_file(archive_path)?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|error| format!("The selected file is not a valid ZIP archive: {error}"))?;
@@ -278,12 +288,12 @@ pub fn inspect_typstella_project(archive_path: &Path) -> Result<ArchiveInspectio
 }
 
 #[allow(dead_code)]
-pub fn import_typstella_project(
+pub fn import_typsastra_project(
     archive_path: &Path,
     destination_path: &Path,
     expected_manifest_sha256: &str,
 ) -> Result<ImportedProject, String> {
-    import_typstella_project_cancellable(
+    import_typsastra_project_cancellable(
         archive_path,
         destination_path,
         expected_manifest_sha256,
@@ -291,7 +301,7 @@ pub fn import_typstella_project(
     )
 }
 
-pub fn import_typstella_project_cancellable(
+pub fn import_typsastra_project_cancellable(
     archive_path: &Path,
     destination_path: &Path,
     expected_manifest_sha256: &str,
@@ -336,7 +346,7 @@ pub fn import_typstella_project_cancellable(
     }
 
     let staging = tempfile::Builder::new()
-        .prefix(".typstella-import-")
+        .prefix(".typsastra-import-")
         .tempdir_in(&parent)
         .map_err(|error| format!("Failed to create import staging directory: {error}"))?;
     let mut extracted_files = HashSet::new();
@@ -414,7 +424,7 @@ pub fn import_typstella_project_cancellable(
                 metadata.path
             ));
         }
-        if metadata.path != PROJECT_MANIFEST_PATH {
+        if metadata.path != validated.manifest_path {
             let expected = validated
                 .inspection
                 .manifest
@@ -479,8 +489,8 @@ pub fn export_source_zip(workspace_root: &Path, archive_path: &Path) -> Result<(
     write_archive(archive_path, |writer| write_snapshots(writer, &files))
 }
 
-pub fn export_typstella_project(options: ProjectExport<'_>) -> Result<ProjectManifest, String> {
-    require_extension(options.archive_path, "typstella")?;
+pub fn export_typsastra_project(options: ProjectExport<'_>) -> Result<ProjectManifest, String> {
+    require_extension(options.archive_path, "typsastra")?;
     let root = canonical_workspace_root(options.workspace_root)?;
     let main = std::fs::canonicalize(options.main_file_path).map_err(|error| {
         format!(
@@ -497,7 +507,7 @@ pub fn export_typstella_project(options: ProjectExport<'_>) -> Result<ProjectMan
     let packaged_fonts = options.packaged_fonts.unwrap_or_default();
     for font in &packaged_fonts {
         validate_archive_path(&font.path)?;
-        if !font.path.starts_with(".typstella/fonts/package/") || !font.license.redistributable {
+        if !font.path.starts_with(".typsastra/fonts/package/") || !font.license.redistributable {
             return Err(format!(
                 "Font {:?} is not a valid redistributable package asset.",
                 font.postscript_name
@@ -537,7 +547,7 @@ pub fn export_typstella_project(options: ProjectExport<'_>) -> Result<ProjectMan
         format: PROJECT_FORMAT.to_string(),
         schema_version: PROJECT_SCHEMA_VERSION,
         created_by: CreatedBy {
-            application: "Typstella".to_string(),
+            application: "Typsastra".to_string(),
             version: options.app_version.to_string(),
         },
         project: ProjectIdentity {
@@ -574,7 +584,11 @@ pub fn export_typstella_project(options: ProjectExport<'_>) -> Result<ProjectMan
 }
 
 fn open_archive_file(path: &Path) -> Result<File, String> {
-    require_extension(path, "typstella")?;
+    let extension = path.extension().and_then(|value| value.to_str());
+    if !matches!(extension, Some(value) if value.eq_ignore_ascii_case("typsastra") || value.eq_ignore_ascii_case("typstella"))
+    {
+        return Err("The project archive must use the .typsastra extension (legacy .typstella archives are also supported).".to_string());
+    }
     let metadata = std::fs::metadata(path).map_err(|error| {
         format!(
             "Failed to inspect project archive '{}': {error}",
@@ -668,7 +682,7 @@ fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedAr
             ));
         }
         validate_unix_entry_type(entry.unix_mode(), is_directory, path)?;
-        if path == PROJECT_MANIFEST_PATH {
+        if path == PROJECT_MANIFEST_PATH || path == LEGACY_PROJECT_MANIFEST_PATH {
             if is_directory || manifest_index.replace(index).is_some() {
                 return Err(
                     "The archive must contain exactly one project manifest file.".to_string(),
@@ -686,8 +700,13 @@ fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedAr
         });
     }
 
-    let manifest_index = manifest_index
-        .ok_or_else(|| format!("The archive does not contain '{PROJECT_MANIFEST_PATH}'."))?;
+    let manifest_index = manifest_index.ok_or_else(|| {
+        format!(
+            "The archive does not contain '{}' or the legacy '{}'.",
+            PROJECT_MANIFEST_PATH, LEGACY_PROJECT_MANIFEST_PATH
+        )
+    })?;
+    let manifest_path = entries[manifest_index].path.clone();
     let mut manifest_entry = file
         .by_index(manifest_index)
         .map_err(|error| format!("Failed to read project manifest: {error}"))?;
@@ -755,7 +774,7 @@ fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedAr
 
     let archive_files = entries
         .iter()
-        .filter(|entry| !entry.is_directory && entry.path != PROJECT_MANIFEST_PATH)
+        .filter(|entry| !entry.is_directory && entry.path != manifest_path)
         .map(|entry| entry.path.as_str())
         .collect::<HashSet<_>>();
     let declared_files = manifest
@@ -780,6 +799,7 @@ fn validate_open_archive(file: &mut zip::ZipArchive<File>) -> Result<ValidatedAr
             manifest,
         },
         entries,
+        manifest_path,
     })
 }
 
@@ -949,7 +969,7 @@ fn collect_directory(
 }
 
 fn is_excluded_directory(name: &str) -> bool {
-    matches!(name, ".git" | ".typstella" | "node_modules" | "target")
+    matches!(name, ".git" | ".typsastra" | "node_modules" | "target")
 }
 
 fn archive_path_for(root: &Path, path: &Path) -> Result<String, String> {
@@ -994,7 +1014,7 @@ fn require_extension(path: &Path, expected: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "Typstella project exports must use the .{expected} extension."
+            "Typsastra project exports must use the .{expected} extension."
         ))
     }
 }
@@ -1108,9 +1128,9 @@ mod tests {
         std::fs::write(workspace.path().join("main.typ"), "= Hello\n").unwrap();
         std::fs::create_dir(workspace.path().join("chapters")).unwrap();
         std::fs::write(workspace.path().join("chapters").join("ខ្មែរ.typ"), "= ខ្មែរ\n").unwrap();
-        std::fs::create_dir(workspace.path().join(".typstella")).unwrap();
+        std::fs::create_dir(workspace.path().join(".typsastra")).unwrap();
         std::fs::write(
-            workspace.path().join(".typstella").join("cache.txt"),
+            workspace.path().join(".typsastra").join("cache.txt"),
             "skip",
         )
         .unwrap();
@@ -1118,7 +1138,7 @@ mod tests {
     }
 
     fn export_project(workspace: &Path, destination: &Path) -> ProjectManifest {
-        export_typstella_project(ProjectExport {
+        export_typsastra_project(ProjectExport {
             workspace_root: workspace,
             archive_path: destination,
             main_file_path: &workspace.join("main.typ"),
@@ -1148,7 +1168,7 @@ mod tests {
     fn project_manifest_round_trips_and_validates() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("manifest-test.typstella");
+        let archive = output.path().join("manifest-test.typsastra");
         let manifest = export_project(workspace.path(), &archive);
         let encoded = serde_json::to_string(&manifest).unwrap();
         let decoded: ProjectManifest = serde_json::from_str(&encoded).unwrap();
@@ -1160,15 +1180,44 @@ mod tests {
     }
 
     #[test]
+    fn legacy_typstella_archives_remain_importable() {
+        let workspace = create_workspace();
+        let output = tempfile::tempdir().unwrap();
+        let current_archive = output.path().join("current.typsastra");
+        let mut manifest = export_project(workspace.path(), &current_archive);
+        manifest.format = LEGACY_PROJECT_FORMAT.to_string();
+        manifest.created_by.application = "Typstella".to_string();
+        manifest
+            .integrity
+            .files
+            .retain(|path, _| path == "main.typ");
+
+        let manifest_bytes = serde_json::to_vec_pretty(&manifest).unwrap();
+        let main_bytes = std::fs::read(workspace.path().join("main.typ")).unwrap();
+        let legacy_archive = output.path().join("legacy.typstella");
+        write_custom_archive(
+            &legacy_archive,
+            &[
+                (LEGACY_PROJECT_MANIFEST_PATH, &manifest_bytes, None),
+                ("main.typ", &main_bytes, None),
+            ],
+        );
+
+        let inspection = inspect_typsastra_project(&legacy_archive).unwrap();
+        assert_eq!(inspection.manifest.format, LEGACY_PROJECT_FORMAT);
+        assert_eq!(inspection.manifest.created_by.application, "Typstella");
+    }
+
+    #[test]
     fn cancelled_import_never_promotes_destination() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("cancel.typstella");
+        let archive = output.path().join("cancel.typsastra");
         export_project(workspace.path(), &archive);
-        let inspection = inspect_typstella_project(&archive).unwrap();
+        let inspection = inspect_typsastra_project(&archive).unwrap();
         let destination = output.path().join("cancelled-project");
 
-        let error = import_typstella_project_cancellable(
+        let error = import_typsastra_project_cancellable(
             &archive,
             &destination,
             &inspection.manifest_sha256,
@@ -1182,14 +1231,14 @@ mod tests {
             .unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with(".typstella-import-")));
+            .starts_with(".typsastra-import-")));
     }
 
     #[test]
     fn invalid_schema_versions_paths_and_hashes_are_rejected() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("validation.typstella");
+        let archive = output.path().join("validation.typsastra");
         let manifest = export_project(workspace.path(), &archive);
 
         let mut invalid = manifest.clone();
@@ -1212,9 +1261,9 @@ mod tests {
     fn font_manifest_rejects_restricted_missing_and_duplicate_identities() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("fonts.typstella");
+        let archive = output.path().join("fonts.typsastra");
         let mut manifest = export_project(workspace.path(), &archive);
-        let path = ".typstella/fonts/package/test.ttf".to_string();
+        let path = ".typsastra/fonts/package/test.ttf".to_string();
         let hash = "a".repeat(64);
         let font = ProjectFont {
             id: "Test-Regular:0".into(),
@@ -1251,7 +1300,7 @@ mod tests {
     fn export_is_sorted_unicode_safe_and_excludes_generated_directories() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("unicode-test.typstella");
+        let archive = output.path().join("unicode-test.typsastra");
         export_project(workspace.path(), &archive);
         let file = File::open(&archive).unwrap();
         let mut zip = zip::ZipArchive::new(file).unwrap();
@@ -1267,7 +1316,7 @@ mod tests {
     fn manifest_hashes_match_archive_contents() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("hash-test.typstella");
+        let archive = output.path().join("hash-test.typsastra");
         let manifest = export_project(workspace.path(), &archive);
         let file = File::open(&archive).unwrap();
         let mut zip = zip::ZipArchive::new(file).unwrap();
@@ -1283,8 +1332,8 @@ mod tests {
     fn identical_inputs_produce_identical_archives() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let first = output.path().join("deterministic-a.typstella");
-        let second = output.path().join("deterministic-b.typstella");
+        let first = output.path().join("deterministic-a.typsastra");
+        let second = output.path().join("deterministic-b.typsastra");
         export_project(workspace.path(), &first);
         export_project(workspace.path(), &second);
         assert_eq!(
@@ -1322,16 +1371,16 @@ mod tests {
     fn preflight_and_transactional_import_succeed() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("valid.typstella");
+        let archive = output.path().join("valid.typsastra");
         export_project(workspace.path(), &archive);
-        let inspection = inspect_typstella_project(&archive).unwrap();
+        let inspection = inspect_typsastra_project(&archive).unwrap();
         let destination = output.path().join("imported-project");
         let imported =
-            import_typstella_project(&archive, &destination, &inspection.manifest_sha256).unwrap();
+            import_typsastra_project(&archive, &destination, &inspection.manifest_sha256).unwrap();
         assert_eq!(Path::new(&imported.workspace_path), destination);
         assert!(destination.join("main.typ").is_file());
         assert!(destination.join("chapters").join("ខ្មែរ.typ").is_file());
-        assert!(!destination.join(".typstella").join("cache.txt").exists());
+        assert!(!destination.join(".typsastra").join("cache.txt").exists());
         assert!(destination.join(PROJECT_MANIFEST_PATH).is_file());
     }
 
@@ -1339,18 +1388,18 @@ mod tests {
     fn preflight_rejects_traversal_collisions_and_symlinks() {
         let output = tempfile::tempdir().unwrap();
 
-        let traversal = output.path().join("traversal.typstella");
+        let traversal = output.path().join("traversal.typsastra");
         write_custom_archive(&traversal, &[("../outside.typ", b"bad", None)]);
-        assert!(inspect_typstella_project(&traversal)
+        assert!(inspect_typsastra_project(&traversal)
             .unwrap_err()
             .contains("Invalid project archive path"));
 
-        let collision = output.path().join("collision.typstella");
+        let collision = output.path().join("collision.typsastra");
         write_custom_archive(
             &collision,
             &[("Main.typ", b"one", None), ("main.typ", b"two", None)],
         );
-        assert!(inspect_typstella_project(&collision)
+        assert!(inspect_typsastra_project(&collision)
             .unwrap_err()
             .contains("colliding paths"));
 
@@ -1358,18 +1407,18 @@ mod tests {
             .unwrap_err()
             .contains("symbolic link"));
 
-        let unicode_collision = output.path().join("unicode-collision.typstella");
+        let unicode_collision = output.path().join("unicode-collision.typsastra");
         write_custom_archive(
             &unicode_collision,
             &[("é.typ", b"one", None), ("e\u{301}.typ", b"two", None)],
         );
-        assert!(inspect_typstella_project(&unicode_collision)
+        assert!(inspect_typsastra_project(&unicode_collision)
             .unwrap_err()
             .contains("colliding paths"));
 
-        let reserved = output.path().join("reserved.typstella");
+        let reserved = output.path().join("reserved.typsastra");
         write_custom_archive(&reserved, &[("CON.typ", b"bad", None)]);
-        assert!(inspect_typstella_project(&reserved)
+        assert!(inspect_typsastra_project(&reserved)
             .unwrap_err()
             .contains("reserved Windows name"));
     }
@@ -1377,10 +1426,10 @@ mod tests {
     #[test]
     fn preflight_rejects_zip_bomb_compression_ratio() {
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("ratio.typstella");
+        let archive = output.path().join("ratio.typsastra");
         let zeros = vec![0_u8; 2 * 1024 * 1024];
         write_custom_archive(&archive, &[("large.bin", &zeros, None)]);
-        assert!(inspect_typstella_project(&archive)
+        assert!(inspect_typsastra_project(&archive)
             .unwrap_err()
             .contains("unsafe compression ratio"));
     }
@@ -1388,14 +1437,14 @@ mod tests {
     #[test]
     fn failed_integrity_leaves_no_destination() {
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("bad-hash.typstella");
+        let archive = output.path().join("bad-hash.typsastra");
         let mut files = BTreeMap::new();
         files.insert("main.typ".to_string(), sha256_hex(b"expected"));
         let manifest = ProjectManifest {
             format: PROJECT_FORMAT.to_string(),
             schema_version: PROJECT_SCHEMA_VERSION,
             created_by: CreatedBy {
-                application: "Typstella".to_string(),
+                application: "Typsastra".to_string(),
                 version: "1.0.0".to_string(),
             },
             project: ProjectIdentity {
@@ -1424,9 +1473,9 @@ mod tests {
                 ("main.typ", b"tampered", None),
             ],
         );
-        let inspection = inspect_typstella_project(&archive).unwrap();
+        let inspection = inspect_typsastra_project(&archive).unwrap();
         let destination = output.path().join("imported-project");
-        let error = import_typstella_project(&archive, &destination, &inspection.manifest_sha256)
+        let error = import_typsastra_project(&archive, &destination, &inspection.manifest_sha256)
             .unwrap_err();
         assert!(error.contains("Integrity verification failed"));
         assert!(!destination.exists());
@@ -1438,25 +1487,25 @@ mod tests {
             .any(|entry| entry
                 .file_name()
                 .to_string_lossy()
-                .starts_with(".typstella-import-")));
+                .starts_with(".typsastra-import-")));
     }
 
     #[test]
     fn changed_archive_and_existing_destination_are_rejected() {
         let workspace = create_workspace();
         let output = tempfile::tempdir().unwrap();
-        let archive = output.path().join("checked.typstella");
+        let archive = output.path().join("checked.typsastra");
         export_project(workspace.path(), &archive);
-        let inspection = inspect_typstella_project(&archive).unwrap();
+        let inspection = inspect_typsastra_project(&archive).unwrap();
         let destination = output.path().join("existing");
         std::fs::create_dir(&destination).unwrap();
         assert!(
-            import_typstella_project(&archive, &destination, &inspection.manifest_sha256,)
+            import_typsastra_project(&archive, &destination, &inspection.manifest_sha256,)
                 .unwrap_err()
                 .contains("already exists")
         );
         assert!(
-            import_typstella_project(&archive, &output.path().join("other"), "0")
+            import_typsastra_project(&archive, &output.path().join("other"), "0")
                 .unwrap_err()
                 .contains("changed after inspection")
         );

@@ -1,6 +1,6 @@
 {
   "version": "0.4.0",
-  "productName": "Typstella",
+  "productName": "Typsastra",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -10,7 +10,7 @@
   "app": {
     "windows": [
       {
-        "title": "Typstella",
+        "title": "Typsastra",
         "width": 1400,
         "height": 900,
         "resizable": true,
@@ -37,18 +37,18 @@
     },
     "fileAssociations": [
       {
-        "ext": ["typstella"],
-        "name": "Typstella Project",
-        "description": "Version-bound Typstella project archive",
-        "mimeType": "application/vnd.typstella.project",
+        "ext": ["typsastra"],
+        "name": "Typsastra Project",
+        "description": "Version-bound Typsastra project archive",
+        "mimeType": "application/vnd.typsastra.project",
         "role": "Editor",
         "rank": "Owner",
         "exportedType": {
-          "identifier": "com.typstella.project",
+          "identifier": "com.typsastra.project",
           "conformsTo": ["public.data", "public.archive"]
         }
       }
     ]
   },
-  "identifier": "com.typstella.editor"
+  "identifier": "com.typsastra.editor"
 }

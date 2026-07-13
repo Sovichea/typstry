@@ -29,7 +29,7 @@ function getFileIconSvg(filename: string): string {
 }
 
 export function isHiddenWorkspaceEntry(name: string): boolean {
-  return name === ".typstella";
+  return name === ".typsastra" || name === ".typstella";
 }
 
 export class WorkspaceExplorer {

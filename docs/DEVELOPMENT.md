@@ -11,8 +11,8 @@
 ## Local development
 
 ```bash
-git clone --recurse-submodules https://github.com/Sovichea/typstella.git
-cd typstella
+git clone --recurse-submodules https://github.com/Sovichea/typsastra.git
+cd typsastra
 bun install --frozen-lockfile
 bun run tauri dev
 ```
@@ -34,7 +34,7 @@ Run the frontend and Rust checks before submitting changes:
 ```bash
 bun test
 bun run build
-cargo fmt --manifest-path src-tauri/Cargo.toml --package typstella -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml --package typsastra -- --check
 cargo check --manifest-path src-tauri/Cargo.toml --lib
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```

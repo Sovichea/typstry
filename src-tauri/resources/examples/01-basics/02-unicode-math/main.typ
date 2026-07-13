@@ -1,8 +1,8 @@
 #set document(title: "Unicode and Mathematics")
 #set page(margin: 24mm)
-// typstella:typography:start
+// typsastra:typography:start
 #set text(font: "MiSans Latin", size: 11pt)
-// typstella:typography:end
+// typsastra:typography:end
 #set heading(numbering: "1.")
 
 = Unicode and Mathematics

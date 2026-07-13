@@ -60,7 +60,7 @@ pub fn scaled_workspace_font_update_required(
 ) -> Result<bool, String> {
     validate_request(workspace_root, family, scale)?;
     let generated_dir = workspace_root
-        .join(".typstella")
+        .join(".typsastra")
         .join("fonts")
         .join("generated");
     if (scale - 1.0).abs() <= 0.0001 {
@@ -119,7 +119,7 @@ pub fn prepare_scaled_workspace_font(
 ) -> Result<ScaledFontResult, String> {
     validate_request(workspace_root, family, scale)?;
 
-    let fonts_dir = workspace_root.join(".typstella").join("fonts");
+    let fonts_dir = workspace_root.join(".typsastra").join("fonts");
     let generated_dir = fonts_dir.join("generated");
     if !scaled_workspace_font_update_required(workspace_root, family, scale)? {
         let generated_files = current_manifest(&generated_dir)
@@ -184,7 +184,7 @@ pub fn prepare_scaled_workspace_font(
                     "{family:?} is stored in a font collection. Select an individual TTF or OTF face for scaling."
                 ));
             }
-            let scaled = typstella_font_scaler::scale_font_uniform(&bytes, scale)
+            let scaled = typsastra_font_scaler::scale_font_uniform(&bytes, scale)
                 .map_err(|error| format!("Failed to scale {family:?}: {error}"))?;
             let extension = source_path
                 .and_then(Path::extension)
@@ -237,7 +237,7 @@ pub fn clear_scaled_workspace_fonts(workspace_root: &Path) -> Result<(), String>
         return Err("The workspace root does not exist.".into());
     }
     let generated_dir = workspace_root
-        .join(".typstella")
+        .join(".typsastra")
         .join("fonts")
         .join("generated");
     if generated_dir.exists() {
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn unit_scale_removes_previous_scaled_output_once() {
         let workspace = tempfile::tempdir().unwrap();
-        let generated = workspace.path().join(".typstella/fonts/generated");
+        let generated = workspace.path().join(".typsastra/fonts/generated");
         fs::create_dir_all(&generated).unwrap();
         fs::write(generated.join("old.ttf"), b"font").unwrap();
         fs::write(
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn matching_generated_font_is_reused() {
         let workspace = tempfile::tempdir().unwrap();
-        let generated = workspace.path().join(".typstella/fonts/generated");
+        let generated = workspace.path().join(".typsastra/fonts/generated");
         fs::create_dir_all(&generated).unwrap();
         fs::write(generated.join("cached.ttf"), b"font").unwrap();
         fs::write(

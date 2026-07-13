@@ -14,6 +14,6 @@
 
 == Closing note
 
-Choose fonts according to the scripts used by your document. Typstella's font detector can recommend compatible families without changing your choice automatically. 
+Choose fonts according to the scripts used by your document. Typsastra's font detector can recommend compatible families without changing your choice automatically.
 
 For spellcheck and word completion, configure Language Tools in Settings (`Ctrl+,`). Khmer is bundled, and the Lao dictionary can be downloaded interactively.

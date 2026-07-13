@@ -13,9 +13,10 @@ describe("workspace explorer", () => {
     expect(nodes.map(node => node.name)).toEqual(["z.typ", "assets", "a.typ"]);
   });
 
-  test("hides Typstella's managed workspace cache directory", () => {
+  test("hides Typsastra's managed workspace cache directory", () => {
+    expect(isHiddenWorkspaceEntry(".typsastra")).toBe(true);
     expect(isHiddenWorkspaceEntry(".typstella")).toBe(true);
     expect(isHiddenWorkspaceEntry(".typst")).toBe(false);
-    expect(isHiddenWorkspaceEntry("typstella")).toBe(false);
+    expect(isHiddenWorkspaceEntry("typsastra")).toBe(false);
   });
 });

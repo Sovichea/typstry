@@ -1,4 +1,4 @@
-Below is a concrete implementation plan for **Typstella non-destructive Khmer render preparation**.
+Below is a concrete implementation plan for **Typsastra non-destructive Khmer render preparation**.
 
 Goal:
 
@@ -11,7 +11,7 @@ Editor, diagnostics, and reverse sync map back to original files.
 
 ---
 
-# Typstella Khmer Render Preparation Implementation Plan
+# Typsastra Khmer Render Preparation Implementation Plan
 
 ## Current status (2026-07-04)
 
@@ -35,13 +35,13 @@ The implemented source directive is scope-aware:
 // @disable-render-prep
 ```
 
-It disables render preparation for the following syntactic scope so examples can compare plain Typst rendering against Typstella's generated ZWS rendering without changing application settings.
+It disables render preparation for the following syntactic scope so examples can compare plain Typst rendering against Typsastra's generated ZWS rendering without changing application settings.
 
 ## 0. Core principle
 
 Never modify the user’s `.typ` source files automatically.
 
-Instead, Typstella should maintain two document representations:
+Instead, Typsastra should maintain two document representations:
 
 ```text
 Authoring source
@@ -49,8 +49,8 @@ Authoring source
   chapters/intro.typ
 
 Rendering source
-  .typstella/cache/render/main.typ
-  .typstella/cache/render/chapters/intro.typ
+  .typsastra/cache/render/main.typ
+  .typsastra/cache/render/chapters/intro.typ
 ```
 
 The rendering source may contain inserted `U+200B` zero-width spaces, but the authoring source should remain unchanged.
@@ -61,7 +61,7 @@ The rendering source may contain inserted `U+200B` zero-width spaces, but the au
 
 ## Objective
 
-Prove that Typstella can compile a generated `.typ` file instead of the original source file.
+Prove that Typsastra can compile a generated `.typ` file instead of the original source file.
 
 At this stage, do not worry about reverse sync, diagnostics mapping, or perfect Typst parsing.
 
@@ -79,11 +79,11 @@ project/
     diagram.png
 ```
 
-Typstella should generate:
+Typsastra should generate:
 
 ```text
 project/
-  .typstella/
+  .typsastra/
     cache/
       render/
         main.typ
@@ -97,7 +97,7 @@ project/
 Source files are copied or symlinked into the render cache. Typst compiles:
 
 ```text
-.typstella/cache/render/main.typ
+.typsastra/cache/render/main.typ
 ```
 
 instead of:
@@ -123,10 +123,10 @@ Directory         → mirrored directory
 Example:
 
 ```text
-main.typ                  → .typstella/cache/render/main.typ
-chapters/intro.typ        → .typstella/cache/render/chapters/intro.typ
-figures/diagram.png       → .typstella/cache/render/figures/diagram.png
-refs.yml                  → .typstella/cache/render/refs.yml
+main.typ                  → .typsastra/cache/render/main.typ
+chapters/intro.typ        → .typsastra/cache/render/chapters/intro.typ
+figures/diagram.png       → .typsastra/cache/render/figures/diagram.png
+refs.yml                  → .typsastra/cache/render/refs.yml
 ```
 
 This keeps imports working:
@@ -290,13 +290,13 @@ safe text chunk
 Example input:
 
 ```text
-Typstella គាំទ្រការសរសេរអត្ថបទស្រាវជ្រាវក្នុងភាសាខ្មែរ។
+Typsastra គាំទ្រការសរសេរអត្ថបទស្រាវជ្រាវក្នុងភាសាខ្មែរ។
 ```
 
 Possible generated output:
 
 ```text
-Typstella គាំទ្រ\u200bការ\u200bសរសេរ\u200bអត្ថបទ\u200bស្រាវជ្រាវ\u200bក្នុង\u200bភាសា\u200bខ្មែរ។
+Typsastra គាំទ្រ\u200bការ\u200bសរសេរ\u200bអត្ថបទ\u200bស្រាវជ្រាវ\u200bក្នុង\u200bភាសា\u200bខ្មែរ។
 ```
 
 ## Do not insert ZWS
@@ -348,7 +348,7 @@ Generated files contain inserted characters that do not exist in the original so
 For each generated file:
 
 ```text
-.typstella/cache/maps/chapters/intro.typ.map.json
+.typsastra/cache/maps/chapters/intro.typ.map.json
 ```
 
 Example:
@@ -357,7 +357,7 @@ Example:
 {
   "version": 1,
   "source_file": "/project/chapters/intro.typ",
-  "generated_file": "/project/.typstella/cache/render/chapters/intro.typ",
+  "generated_file": "/project/.typsastra/cache/render/chapters/intro.typ",
   "mappings": [
     {
       "generated_start": 0,
@@ -420,7 +420,7 @@ For reverse sync, the first one is more important.
 
 ## Objective
 
-Typstella preview/export should compile the generated file.
+Typsastra preview/export should compile the generated file.
 
 Instead of:
 
@@ -431,13 +431,13 @@ typst compile main.typ
 use:
 
 ```bash
-typst compile .typstella/cache/render/main.typ
+typst compile .typsastra/cache/render/main.typ
 ```
 
 For Tinymist, the preview root should point to:
 
 ```text
-.typstella/cache/render/main.typ
+.typsastra/cache/render/main.typ
 ```
 
 not the original `main.typ`.
@@ -450,10 +450,10 @@ User opens:
 main.typ
 ```
 
-Typstella internally previews:
+Typsastra internally previews:
 
 ```text
-.typstella/cache/render/main.typ
+.typsastra/cache/render/main.typ
 ```
 
 The user should not need to know this unless debugging.
@@ -528,15 +528,15 @@ If unchanged, skip regeneration.
 
 ## Objective
 
-Typst diagnostics will refer to generated cache files. Typstella should show them on original files.
+Typst diagnostics will refer to generated cache files. Typsastra should show them on original files.
 
 Example Typst diagnostic:
 
 ```text
-.typstella/cache/render/chapters/intro.typ:42:10
+.typsastra/cache/render/chapters/intro.typ:42:10
 ```
 
-Typstella should map it back to:
+Typsastra should map it back to:
 
 ```text
 chapters/intro.typ:42:7
@@ -569,7 +569,7 @@ Do not hide errors.
 
 ## Objective
 
-When the user clicks in preview, Typstella should jump to the correct original source location.
+When the user clicks in preview, Typsastra should jump to the correct original source location.
 
 Preview position comes from generated file:
 
@@ -691,9 +691,9 @@ Implemented scope-aware comment:
 Possible future region syntax:
 
 ```typst
-// typstella: no-segment-start
+// typsastra: no-segment-start
 ...
-// typstella: no-segment-end
+// typsastra: no-segment-end
 ```
 
 This is useful for special cases, poems, code examples, or documents where exact spacing matters.
@@ -769,7 +769,7 @@ Compare before/after render.
 Deliverable:
 
 ```text
-Typstella can generate .typstella/cache/render/main.typ
+Typsastra can generate .typsastra/cache/render/main.typ
 and compile from it.
 ```
 
@@ -938,12 +938,12 @@ The final system should look like this:
 ```text
 Original source files
         ↓
-Typstella file watcher
+Typsastra file watcher
         ↓
 Render preparation pipeline
         ↓
-.typstella/cache/render/*.typ
-.typstella/cache/maps/*.map.json
+.typsastra/cache/render/*.typ
+.typsastra/cache/maps/*.map.json
         ↓
 Typst/Tinymist preview/export
         ↓

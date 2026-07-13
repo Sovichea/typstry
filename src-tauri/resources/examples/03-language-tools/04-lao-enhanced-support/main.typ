@@ -2,7 +2,7 @@
 
 #set document(
   title: "ເອກະສານລາວ - Lao Document",
-  author: "Typstella Examples",
+  author: "Typsastra Examples",
 )
 
 #show: lao_document

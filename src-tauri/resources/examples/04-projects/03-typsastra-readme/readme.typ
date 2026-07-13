@@ -3,7 +3,7 @@
 = Introduction to #imp.project-name <intro>
 
 #align(center)[
-  #image("assets/typstella-wordmark.png", width: 75%)
+  #image("assets/typsastra-wordmark-v2.png", width: 75%)
 ]
 
 #imp.project-name is a complex-script-first Typst environment for research and long-form multilingual writing.
@@ -45,4 +45,4 @@ Each language entry in Settings shows its support level, stability status, and w
 
 #imp.project-name has a documented contributor framework for adding new complex-script languages. A contributor can implement a new language without editing any generic CodeMirror integration or Khmer code by following the language contributor guide and using the `bun run conform` command to validate their policy and provider.
 
-For more information, see the official publication @typst2024 and our repository @typstella2026.
+For more information, see the official publication @typst2024 and our repository @typsastra2026.

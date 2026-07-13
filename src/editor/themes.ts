@@ -31,9 +31,9 @@ export const baseEditorLayoutTheme = EditorView.theme({
       filter: "drop-shadow(0 0 2px var(--editor-cursor-shadow, rgba(255, 255, 255, 0.95))) drop-shadow(0 0 5px var(--editor-cursor-glow, rgba(0, 92, 197, 0.45)))"
   },
   ".cm-focused .cm-cursor": {
-      animation: "typstella-cursor-pulse 1.05s steps(1) infinite"
+      animation: "typsastra-cursor-pulse 1.05s steps(1) infinite"
   },
-  "@keyframes typstella-cursor-pulse": {
+  "@keyframes typsastra-cursor-pulse": {
       "0%, 45%": {
           borderLeftColor: "var(--editor-cursor-color, #005cc5)",
           filter: "drop-shadow(0 0 2px var(--editor-cursor-shadow, rgba(255, 255, 255, 0.95))) drop-shadow(0 0 5px var(--editor-cursor-glow, rgba(0, 92, 197, 0.45)))"

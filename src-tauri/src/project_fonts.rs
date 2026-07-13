@@ -176,8 +176,8 @@ pub fn build_package(
             "The document uses too many distinct font identities to package safely.".into(),
         );
     }
-    let package = workspace.join(".typstella").join("fonts").join("package");
-    let generated = workspace.join(".typstella").join("fonts").join("generated");
+    let package = workspace.join(".typsastra").join("fonts").join("package");
+    let generated = workspace.join(".typsastra").join("fonts").join("generated");
     let mut database = fontdb::Database::new();
     if generated.is_dir() {
         database.load_fonts_dir(&generated);
@@ -232,7 +232,7 @@ pub fn build_package(
         }
         let generated_source = source
             .replace('\\', "/")
-            .contains("/.typstella/fonts/generated/");
+            .contains("/.typsastra/fonts/generated/");
         let license = license(&parsed, generated_source).map_err(|reason| {
             format!(
                 "Font {:?} cannot be packaged: {reason}.",
@@ -267,7 +267,7 @@ pub fn build_package(
             style: format!("{:?}", face.style).to_lowercase(),
             weight: face.weight.0,
             stretch: face.stretch.to_number(),
-            path: format!(".typstella/fonts/package/{file_name}"),
+            path: format!(".typsastra/fonts/package/{file_name}"),
             sha256: hash,
             face_index: face.index,
             format: ext.into(),
@@ -307,7 +307,7 @@ pub fn declared_family_faces(
     workspace: &Path,
     families: &[String],
 ) -> Result<BTreeSet<String>, String> {
-    let generated = workspace.join(".typstella").join("fonts").join("generated");
+    let generated = workspace.join(".typsastra").join("fonts").join("generated");
     let mut database = fontdb::Database::new();
     if generated.is_dir() {
         database.load_fonts_dir(&generated);
@@ -380,7 +380,7 @@ pub fn verify_package_files(
     workspace: &Path,
     manifest: &FontPackageManifest,
 ) -> Result<PathBuf, String> {
-    let directory = workspace.join(".typstella").join("fonts").join("package");
+    let directory = workspace.join(".typsastra").join("fonts").join("package");
     let mut total = 0_u64;
     for record in &manifest.fonts {
         let name = Path::new(&record.path)
@@ -455,7 +455,7 @@ mod tests {
     fn rejects_unknown_and_corrupt_font_formats() {
         assert!(extension(b"wOFFbad").is_err());
         let workspace = tempfile::tempdir().unwrap();
-        let package = workspace.path().join(".typstella/fonts/package");
+        let package = workspace.path().join(".typsastra/fonts/package");
         fs::create_dir_all(&package).unwrap();
         fs::write(package.join("bad.ttf"), b"not a font").unwrap();
         let manifest = FontPackageManifest {
@@ -467,7 +467,7 @@ mod tests {
                 style: "normal".into(),
                 weight: 400,
                 stretch: 100,
-                path: ".typstella/fonts/package/bad.ttf".into(),
+                path: ".typsastra/fonts/package/bad.ttf".into(),
                 sha256: digest(b"not a font"),
                 face_index: 0,
                 format: "ttf".into(),

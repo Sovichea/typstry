@@ -14,7 +14,7 @@ type UnicodeFontCandidate = typeof unicodeEditorFonts[number];
 type SystemFontCatalog = { all: string[]; monospace: string[] };
 type InstalledFont = { family: string };
 
-const declinedStorageKey = "typstella-declined-unicode-fonts";
+const declinedStorageKey = "typsastra-declined-unicode-fonts";
 
 export class EditorFontManager {
   private codeFont: CodeEditorFontId = "Fira Mono";
@@ -36,7 +36,7 @@ export class EditorFontManager {
   public initialize(): void {
     this.download.addEventListener("click", () => {
       if (this.showSettingsAction) {
-        document.dispatchEvent(new CustomEvent("typstella:open-settings", { detail: { panel: "editor" } }));
+        document.dispatchEvent(new CustomEvent("typsastra:open-settings", { detail: { panel: "editor" } }));
       } else if (this.activeCandidate) {
         void this.installAndApply(this.activeCandidate);
       }
@@ -185,7 +185,7 @@ export class EditorFontManager {
       if (this.activeCandidate?.id !== candidate.id) return;
       this.applyStack(installed.family);
       this.renderApplied(candidate);
-      document.dispatchEvent(new Event("typstella:system-fonts-changed"));
+      document.dispatchEvent(new Event("typsastra:system-fonts-changed"));
     } catch (error) {
       this.showSettingsAction = false;
       this.dismissDeclines = false;

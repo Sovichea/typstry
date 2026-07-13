@@ -22,8 +22,8 @@ export function typographyScaleChange(previousScale: number, nextScale: number):
   return Math.abs(nextScale - 1) <= 0.0001 ? "apply" : "confirm";
 }
 
-const blockStart = "// typstella:typography:start";
-const blockEnd = "// typstella:typography:end";
+const blockStart = "// typsastra:typography:start";
+const blockEnd = "// typsastra:typography:end";
 
 export const documentScripts: readonly DocumentScript[] = [
   { id: "khmer", label: "Khmer", unicodeProperty: "Khmer", pattern: /[\u1780-\u17ff\u19e0-\u19ff]/gu, preferredFamilies: ["MiSans Khmer", "Noto Sans Khmer"] },
@@ -85,7 +85,7 @@ function decimal(value: number): string {
 export function renderTypographyBlock(config: DocumentTypography): string {
   const lines = [blockStart];
   if (config.complexFont) {
-    lines.push(`// typstella:complex-font ${JSON.stringify({
+    lines.push(`// typsastra:complex-font ${JSON.stringify({
       family: config.complexFont,
       script: config.complexScript,
       scale: Math.max(0.5, Math.min(2, config.complexScale))
@@ -107,7 +107,7 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
   const end = start >= 0 ? text.indexOf(blockEnd, start) : -1;
   if (start < 0 || end < 0) return null;
   const block = text.slice(start, end);
-  const metadata = /\/\/ typstella:complex-font (\{[^\r\n]+\})/.exec(block);
+  const metadata = /\/\/ typsastra:complex-font (\{[^\r\n]+\})/.exec(block);
   let complexMetadata: { family?: string; script?: string; scale?: number } | null = null;
   if (metadata) {
     try { complexMetadata = JSON.parse(metadata[1]); } catch { return null; }

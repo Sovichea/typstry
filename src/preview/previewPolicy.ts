@@ -108,7 +108,7 @@ export function usesTemplateAwareStandaloneRoot(
 ): boolean {
   if (!standalone || !previewRootPath) return false;
   return filePathKey(activePath) !== filePathKey(previewRootPath)
-    && /\.typstella-preview\.typ$/i.test(previewRootPath.replace(/\\/g, "/"));
+    && /\.typsastra-preview\.typ$/i.test(previewRootPath.replace(/\\/g, "/"));
 }
 
 export function previewSessionIdentity(
@@ -125,7 +125,7 @@ export function previewSessionIdentity(
     hash ^= key.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
-  return { key, taskId: `typstella-preview-${(hash >>> 0).toString(16)}` };
+  return { key, taskId: `typsastra-preview-${(hash >>> 0).toString(16)}` };
 }
 
 export function tinymistPreviewArguments(

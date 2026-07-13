@@ -12,7 +12,7 @@ import {
 } from "./documentTypography";
 
 type EditorMode = "CODE" | "WYSIWYM";
-const typographyChoiceStorageKey = "typstella-last-document-typography";
+const typographyChoiceStorageKey = "typsastra-last-document-typography";
 
 export type EditorToolbarDependencies = {
   getMode: () => EditorMode;

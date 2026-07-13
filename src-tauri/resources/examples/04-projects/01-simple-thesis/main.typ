@@ -2,7 +2,7 @@
 
 #show: thesis.with(
   title: "A Small Thesis on Multilingual Technical Writing",
-  author: "Typstella Examples",
+  author: "Typsastra Examples",
 )
 
 #include "chapters/01-introduction.typ"

@@ -55,7 +55,7 @@ describe("preview policy", () => {
     const active = "C:\\workspace\\chapters\\one.typ";
     expect(usesTemplateAwareStandaloneRoot(
       active,
-      "C:/workspace/.one.typ.task.typstella-preview.typ",
+      "C:/workspace/.one.typ.task.typsastra-preview.typ",
       true
     )).toBe(true);
     expect(usesTemplateAwareStandaloneRoot(active, active, true)).toBe(false);

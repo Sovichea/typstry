@@ -1,6 +1,6 @@
 # Compatibility Policy
 
-This document defines versioning rules, stability contracts, and promotion criteria for Typstella's language provider and editing policy systems.
+This document defines versioning rules, stability contracts, and promotion criteria for Typsastra's language provider and editing policy systems.
 
 ## Provider ID stability
 
@@ -33,7 +33,7 @@ A migration record must include:
 - The version at which the change was made.
 - A brief rationale.
 
-If an installed language entry refers to an unknown provider ID, Typstella must silently remove the entry rather than error. The provider can be re-installed by the user.
+If an installed language entry refers to an unknown provider ID, Typsastra must silently remove the entry rather than error. The provider can be re-installed by the user.
 
 ---
 

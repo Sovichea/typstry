@@ -453,7 +453,7 @@ mod tests {
         let source_path = project_root.join("main.typ");
         let source = fs::read_to_string(&source_path).unwrap();
         let segmenter = KhmerTextSegmenter::new().unwrap();
-        let cache_root = std::env::temp_dir().join("typstella-khmer-prepare-scope-test");
+        let cache_root = std::env::temp_dir().join("typsastra-khmer-prepare-scope-test");
         let _ = fs::remove_dir_all(&cache_root);
         let options = RenderPrepareOptions {
             enable_khmer_zws: true,

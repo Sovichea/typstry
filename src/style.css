@@ -849,16 +849,16 @@ html {
   background-color: #007fd4;
 }
 
-body.typstella-resizing,
-body.typstella-resizing * {
+body.typsastra-resizing,
+body.typsastra-resizing * {
   cursor: inherit !important;
 }
 
-body.typstella-resizing iframe {
+body.typsastra-resizing iframe {
   pointer-events: none !important;
 }
 
-body.typstella-resizing #preview-render-pane {
+body.typsastra-resizing #preview-render-pane {
   position: relative;
 }
 
@@ -883,11 +883,11 @@ body.typstella-resizing #preview-render-pane {
   opacity: 0.7;
 }
 
-body.typstella-resizing #preview-render-pane iframe {
+body.typsastra-resizing #preview-render-pane iframe {
   visibility: hidden;
 }
 
-body.typstella-resizing #preview-render-pane::after {
+body.typsastra-resizing #preview-render-pane::after {
   content: "Resizing preview…";
   position: absolute;
   inset: 0;

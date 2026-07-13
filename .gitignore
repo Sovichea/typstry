@@ -20,7 +20,8 @@ src-tauri/gen/
 crates/*/target/
 **/*.rs.bk
 
-# Typstella workspace-generated render/font caches
+# Typsastra workspace-generated render/font caches (plus the legacy name)
+.typsastra/
 .typstella/
 
 # Editor

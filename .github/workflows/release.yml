@@ -59,8 +59,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
-          releaseName: 'Typstella v__VERSION__'
-          releaseBody: 'Typstella v__VERSION__: a complex-script-first Typst environment for research and long-form multilingual writing. Khmer is the first deeply supported language.'
+          releaseName: 'Typsastra v__VERSION__'
+          releaseBody: 'Typsastra v__VERSION__: a complex-script-first Typst environment for research and long-form multilingual writing. Khmer is the first deeply supported language.'
           releaseDraft: true
           prerelease: false
           tauriScript: bun run tauri

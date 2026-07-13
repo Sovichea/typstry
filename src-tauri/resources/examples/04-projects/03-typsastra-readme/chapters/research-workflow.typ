@@ -11,7 +11,7 @@ The project keeps reusable concerns separate:
 - `assets/` owns portable figures.
 
 #figure(
-  image("../assets/typstella-icon.png", width: 18%),
+  image("../assets/typsastra-icon.png", width: 18%),
   caption: [A figure referenced from an included chapter.],
 ) <workflow-icon>
 

@@ -1,12 +1,12 @@
 # Language Contributor Guide
 
-This document describes the complete path for adding support for a new language or script to Typstella. Follow the steps in order. Each step has a validation command so you can confirm progress before moving forward.
+This document describes the complete path for adding support for a new language or script to Typsastra. Follow the steps in order. Each step has a validation command so you can confirm progress before moving forward.
 
 ## Before You Start
 
 ### 1. Understand the support levels
 
-Typstella uses three capability tiers. Choose the tier you are targeting and note that higher tiers require more work and more review.
+Typsastra uses three capability tiers. Choose the tier you are targeting and note that higher tiers require more work and more review.
 
 | Tier | What it includes | Example |
 |------|-----------------|---------|

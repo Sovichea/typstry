@@ -4,7 +4,7 @@
 #show: project.with(
   title: imp.project-name + " README Documentation",
   authors: imp.authors,
-  logo: "assets/typstella-icon.png",
+  logo: "assets/typsastra-icon.png",
 )
 
 #include "readme.typ"

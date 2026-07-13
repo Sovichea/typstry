@@ -1,9 +1,9 @@
 #import "lib.typ": khmer_digits
 
 #let khmer_folklore_book(body) = {
-  // typstella:typography:start
+  // typsastra:typography:start
   set text(font: ("MiSans Latin", "MiSans Khmer"), size: 11pt)
-  // typstella:typography:end
+  // typsastra:typography:end
 
   set page(
     paper: "a5",
