@@ -198,6 +198,7 @@ export class TypsastraWorkspaceController {
   private workspaceRootPath: string | null = null;
   private workspaceMetadata: WorkspaceMetadata | null = null;
   private workspaceLoading = false;
+  private wordWrapDeferredForResize = false;
   private recommendedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
   private selectedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
   private currentVersion = 1;
@@ -329,7 +330,9 @@ export class TypsastraWorkspaceController {
   private readonly layoutController = new LayoutController(
     () => this.saveWorkspaceState(),
     () => this.logConsoleController.setVisible(false),
-    message => this.appendDeveloperLog({ kind: "info", source: "preview layout", message })
+    message => this.appendDeveloperLog({ kind: "info", source: "preview layout", message }),
+    () => this.beginHorizontalPaneResize(),
+    () => this.endHorizontalPaneResize()
   );
   private readonly workspaceStateStore = new WorkspaceStateStore();
   private readonly recentProjectsController = new RecentProjectsController(path => this.openWorkspace(path));
@@ -1666,6 +1669,36 @@ export class TypsastraWorkspaceController {
     } finally {
       if (this.saveInProgress === operation) this.saveInProgress = null;
     }
+  }
+
+  private deferWordWrapForResize(): void {
+    const editor = this.editorInstance;
+    if (!editor || !this.settingsController.value.editor.wordWrap || this.wordWrapDeferredForResize) return;
+    this.wordWrapDeferredForResize = true;
+    editor.dispatch({ effects: wrapCompartment.reconfigure([]) });
+  }
+
+  private beginHorizontalPaneResize(): void {
+    this.previewFrame.suspendResizeLayout();
+    this.deferWordWrapForResize();
+  }
+
+  private endHorizontalPaneResize(): void {
+    this.restoreWordWrapAfterResize();
+    this.previewFrame.resumeResizeLayout();
+  }
+
+  private restoreWordWrapAfterResize(): void {
+    if (!this.wordWrapDeferredForResize) return;
+    this.wordWrapDeferredForResize = false;
+    const editor = this.editorInstance;
+    if (!editor) return;
+    editor.dispatch({
+      effects: wrapCompartment.reconfigure(
+        this.settingsController.value.editor.wordWrap ? EditorView.lineWrapping : []
+      )
+    });
+    this.refreshEditorLayout("resize completed");
   }
 
   private async performSaveActiveFile(): Promise<void> {

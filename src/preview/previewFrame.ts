@@ -55,6 +55,8 @@ export class PreviewFrame {
   private previewZoomPercent = FALLBACK_ZOOM_PERCENT;
   private isFitToWidth = true;
   private resizeObserver: ResizeObserver | null = null;
+  private resizeLayoutSuspended = false;
+  private resizeLayoutPending = false;
   private lastInteractionStatusKey = "";
   private pdfJsPromise: Promise<PdfJsModule> | null = null;
   private pdfWorker: { destroyed?: boolean; destroy(): void } | null = null;
@@ -89,6 +91,10 @@ export class PreviewFrame {
     }, { passive: false });
 
     this.resizeObserver = new ResizeObserver(() => {
+      if (this.resizeLayoutSuspended) {
+        this.resizeLayoutPending = true;
+        return;
+      }
       if (!this.isFitToWidth || !this.pdfDoc) return;
       this.applyFitToWidth();
     });
@@ -109,6 +115,21 @@ export class PreviewFrame {
 
   public get isFitMode(): boolean {
     return this.isFitToWidth;
+  }
+
+  public suspendResizeLayout(): void {
+    this.resizeLayoutSuspended = true;
+    this.resizeLayoutPending = false;
+  }
+
+  public resumeResizeLayout(): void {
+    if (!this.resizeLayoutSuspended) return;
+    this.resizeLayoutSuspended = false;
+    const shouldApplyFinalFit = this.resizeLayoutPending;
+    this.resizeLayoutPending = false;
+    if (shouldApplyFinalFit && this.isFitToWidth && this.pdfDoc) {
+      this.applyFitToWidth();
+    }
   }
 
   public zoomIn(): number {

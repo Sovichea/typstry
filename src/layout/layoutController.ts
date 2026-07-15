@@ -4,7 +4,9 @@ export class LayoutController {
   constructor(
     private readonly onLayoutChanged: () => void,
     private readonly onHideLogConsole: () => void,
-    private readonly onDebug: (message: string) => void = () => {}
+    private readonly onDebug: (message: string) => void = () => {},
+    private readonly onEditorWidthResizeStart: () => void = () => {},
+    private readonly onEditorWidthResizeEnd: () => void = () => {}
   ) {}
 
   public initialize(): void {
@@ -50,8 +52,9 @@ export class LayoutController {
       this.installDragResize(explorerResizer, "col-resize", event => {
         explorerSidebar.style.width = `${Math.max(150, Math.min(event.clientX, 800))}px`;
       }, () => {
+        this.onEditorWidthResizeEnd();
         this.onLayoutChanged();
-      });
+      }, this.onEditorWidthResizeStart);
     }
 
     const editorResizer = document.getElementById("editor-preview-resizer");
@@ -59,13 +62,19 @@ export class LayoutController {
     const preview = document.getElementById("preview-container-wrapper");
     const viewport = document.getElementById("workspace-viewport");
     if (editorResizer && input && preview && viewport) {
+      let viewportRect: DOMRect | null = null;
       this.installDragResize(editorResizer, "col-resize", event => {
-        const rect = viewport.getBoundingClientRect();
+        const rect = viewportRect ?? viewport.getBoundingClientRect();
         const percentage = Math.max(10, Math.min(((event.clientX - rect.left) / rect.width) * 100, 90));
         input.style.width = `${percentage}%`;
         preview.style.width = `${100 - percentage}%`;
       }, () => {
+        viewportRect = null;
+        this.onEditorWidthResizeEnd();
         this.onLayoutChanged();
+      }, () => {
+        viewportRect = viewport.getBoundingClientRect();
+        this.onEditorWidthResizeStart();
       });
     }
 
@@ -130,11 +139,21 @@ export class LayoutController {
   private installDragResize(
     resizer: HTMLElement,
     cursor: string,
-    onDrag: (event: MouseEvent) => void,
-    onEnd: () => void = () => {}
+    onDrag: (event: { clientX: number; clientY: number }) => void,
+    onEnd: () => void = () => {},
+    onStart: () => void = () => {}
   ): void {
     let pending: { pointerId: number; x: number; y: number } | null = null;
     let dragging = false;
+    let dragFrame: number | null = null;
+    let latestPosition: { clientX: number; clientY: number } | null = null;
+
+    const flushDrag = (): void => {
+      dragFrame = null;
+      const position = latestPosition;
+      latestPosition = null;
+      if (dragging && position) onDrag(position);
+    };
 
     resizer.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
@@ -151,8 +170,10 @@ export class LayoutController {
         if (distance < LayoutController.dragThresholdPx) return;
         dragging = true;
         this.beginResize(resizer, cursor);
+        onStart();
       }
-      onDrag(event);
+      latestPosition = { clientX: event.clientX, clientY: event.clientY };
+      if (dragFrame === null) dragFrame = requestAnimationFrame(flushDrag);
     });
 
     const finish = (event: PointerEvent): void => {
@@ -161,6 +182,10 @@ export class LayoutController {
       pending = null;
       if (resizer.hasPointerCapture(pointerId)) resizer.releasePointerCapture(pointerId);
       if (dragging) {
+        if (dragFrame !== null) {
+          cancelAnimationFrame(dragFrame);
+          flushDrag();
+        }
         dragging = false;
         this.endResize(resizer);
         onEnd();

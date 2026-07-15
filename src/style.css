@@ -900,6 +900,43 @@ body.typsastra-resizing #preview-render-pane::after {
   font: 12px var(--font-family-sans);
 }
 
+body.typsastra-resizing #preview-container-wrapper > * {
+  display: none !important;
+}
+
+body.typsastra-resizing #preview-container-wrapper::after {
+  content: "Resizing preview\2026";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: var(--ui-bg);
+  color: var(--ui-header-text);
+  font: 12px var(--font-family-sans);
+}
+
+body.typsastra-resizing #input-container-wrapper {
+  position: relative;
+  background: var(--ui-bg);
+}
+
+body.typsastra-resizing #input-container-wrapper > * {
+  display: none !important;
+}
+
+body.typsastra-resizing #input-container-wrapper::after {
+  content: "Resizing editor\2026";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: var(--ui-bg);
+  color: var(--ui-header-text);
+  font: 12px var(--font-family-sans);
+}
+
 .hidden {
   display: none !important;
 }
