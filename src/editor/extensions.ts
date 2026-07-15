@@ -318,8 +318,8 @@ export function getEditorExtensions(
     foldService.of(typstFunctionFoldService),
     lineNumbersCompartment.of(lineNumbers()),
     foldGutter({
-      openText: "v",
-      closedText: ">"
+      openText: "-",
+      closedText: "+"
     }),
     activeLineCompartment.of([highlightActiveLineGutter(), highlightActiveLine()]),
     drawSelection(), dropCursor(), history(), 

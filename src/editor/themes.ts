@@ -23,6 +23,15 @@ export const baseEditorLayoutTheme = EditorView.theme({
   ".cm-gutterElement": {
       lineHeight: "var(--editor-line-height, 1.7) !important"
   },
+  ".cm-foldGutter .cm-gutterElement": {
+      color: "var(--ui-accent-color, #3db489) !important",
+      fontFamily: "var(--font-family-sans) !important",
+      fontSize: "14px !important",
+      fontWeight: "800 !important"
+  },
+  ".cm-foldGutter .cm-gutterElement:hover": {
+      backgroundColor: "var(--ui-navigation-background) !important"
+  },
   ".cm-line": { padding: "0 12px", overflow: "visible !important" },
   ".cm-gutters": { borderRight: "1px solid var(--ui-border)" },
   ".cm-cursor, .cm-dropCursor": {

@@ -7,12 +7,11 @@ import { dirname, join } from "@tauri-apps/api/path";
 import { EditorState, Transaction } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, lineNumbers } from "@codemirror/view";
 import { undo, redo, undoDepth } from "@codemirror/commands";
-import { foldEffect, foldedRanges, indentUnit, unfoldEffect } from "@codemirror/language";
+import { foldAll, foldEffect, foldedRanges, indentUnit, unfoldAll, unfoldEffect } from "@codemirror/language";
 import { closeBrackets, completionStatus } from "@codemirror/autocomplete";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { getEditorExtensions, themeCompartment, getThemeExtension, applyUIThemeVariables, wrapCompartment, lineNumbersCompartment, activeLineCompartment, closeBracketsCompartment, indentationGuidesCompartment, tabSizeCompartment, completionCompartment, showZwsCompartment, showZeroWidthSpaces } from "./editor/extensions";
 import { createTypstAutocomplete } from "./editor/autocomplete";
-import { collectDefaultTypstFunctionFolds } from "./editor/folding";
 import type { EditorFoldRange } from "./editor/folding";
 import { looksLikeStalePrefixDiagnostic, setEditorDiagnosticsEffect } from "./editor/diagnostics";
 import type { EditorDiagnostic, EditorDiagnosticSeverity } from "./editor/diagnostics";
@@ -221,6 +220,7 @@ export class TypsastraWorkspaceController {
   private latestDocumentVersion = 1;
   private diagnosticWaitStartedAt: number | null = null;
   private openTabs: EditorTab[] = [];
+  private suppressFoldStatePersistence = false;
   private readonly openedDocumentUris = new Set<string>();
   private readonly preparedPreviewDocumentVersions = new Map<string, number>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
@@ -915,6 +915,15 @@ export class TypsastraWorkspaceController {
               const topVisiblePosition = update.view.lineBlockAtHeight(update.view.scrollDOM.scrollTop).from;
               this.documentOutlineController.setCursorPosition(topVisiblePosition, this.activeFilePath);
             }
+            if (!this.suppressFoldStatePersistence && update.transactions.some(transaction =>
+              transaction.effects.some(effect => effect.is(foldEffect) || effect.is(unfoldEffect))
+            )) {
+              const tab = this.getActiveTab();
+              if (tab) {
+                tab.foldRanges = this.collectCurrentFoldRanges();
+                void this.saveWorkspaceState();
+              }
+            }
             if (!update.docChanged && this.shouldForwardSyncSelectionUpdate(update)) {
               this.previewSyncController.schedule(this.forwardSyncDebounceMs);
             }
@@ -1097,12 +1106,32 @@ export class TypsastraWorkspaceController {
   }
 
   private restoreTabFoldState(tab: EditorTab) {
-    const ranges = tab.foldRanges === null
-      ? collectDefaultTypstFunctionFolds(this.editorInstance.state)
-      : this.normalizeFoldRanges(tab.foldRanges, this.editorInstance.state.doc.length);
+    this.suppressFoldStatePersistence = true;
+    try {
+      if (tab.foldRanges === null) {
+        this.applyFoldRanges([]);
+        foldAll(this.editorInstance);
+        tab.foldRanges = this.collectCurrentFoldRanges();
+      } else {
+        const ranges = this.normalizeFoldRanges(tab.foldRanges, this.editorInstance.state.doc.length);
+        tab.foldRanges = ranges;
+        this.applyFoldRanges(ranges);
+      }
+    } finally {
+      this.suppressFoldStatePersistence = false;
+    }
+  }
 
-    tab.foldRanges = ranges;
-    this.applyFoldRanges(ranges);
+  private foldCurrentFile(): void {
+    if (!this.getActiveTab() || isBinaryImagePath(this.activeFilePath ?? "")) return;
+    foldAll(this.editorInstance);
+    this.editorInstance.focus();
+  }
+
+  private unfoldCurrentFile(): void {
+    if (!this.getActiveTab() || isBinaryImagePath(this.activeFilePath ?? "")) return;
+    unfoldAll(this.editorInstance);
+    this.editorInstance.focus();
   }
 
   private applyFoldRanges(ranges: EditorFoldRange[]) {
@@ -5410,6 +5439,14 @@ export class TypsastraWorkspaceController {
 
     document.getElementById("action-format-document")?.addEventListener("click", () => {
       void this.formatActiveDocument();
+    });
+
+    document.getElementById("action-fold-file")?.addEventListener("click", () => {
+      this.foldCurrentFile();
+    });
+
+    document.getElementById("action-unfold-file")?.addEventListener("click", () => {
+      this.unfoldCurrentFile();
     });
 
     document.getElementById("action-toggle-word-wrap")?.addEventListener("click", () => {

@@ -24,21 +24,6 @@ export function typstFunctionFoldService(state: EditorState, lineStart: number, 
   return findTypstFoldRange(state.doc.toString(), lineStart, lineEnd);
 }
 
-export function collectDefaultTypstFunctionFolds(state: EditorState): EditorFoldRange[] {
-  const text = state.doc.toString();
-  const ranges: EditorFoldRange[] = [];
-
-  for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber++) {
-    const line = state.doc.line(lineNumber);
-    const range = findTypstFoldRange(text, line.from, line.to);
-    if (range && !ranges.some((existing) => range.from >= existing.from && range.to <= existing.to)) {
-      ranges.push(range);
-    }
-  }
-
-  return ranges;
-}
-
 function findTypstFoldRange(text: string, lineStart: number, lineEnd: number): EditorFoldRange | null {
   const letDeclarationRange = findTypstLetFunctionFoldRange(text, lineStart, lineEnd);
   if (letDeclarationRange) return letDeclarationRange;
