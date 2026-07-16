@@ -542,6 +542,7 @@ const themeColors: Record<string, ThemeColorVariables> = {
 
 export async function applyUIThemeVariables(themeName: string) {
     const colors = themeColors[themeName] || themeColors.default;
+    document.documentElement.style.colorScheme = colors.mode;
     document.documentElement.style.setProperty("--ui-bg", colors.bg);
     document.documentElement.style.setProperty("--ui-text", colors.text);
     document.documentElement.style.setProperty("--ui-border", colors.border);
