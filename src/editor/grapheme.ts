@@ -135,11 +135,46 @@ export function snapSelectionToGraphemeBoundaries(
   temporaryBoundary: number | null = null
 ): EditorSelection {
   const ranges = selection.ranges.map(range => {
+    if (!range.empty) {
+      const forward = range.anchor < range.head;
+      const anchor = snapSelectionEndpoint(
+        doc,
+        range.anchor,
+        forward ? "backward" : "forward",
+        temporaryBoundary
+      );
+      const head = snapSelectionEndpoint(
+        doc,
+        range.head,
+        forward ? "forward" : "backward",
+        temporaryBoundary
+      );
+      return anchor === head ? EditorSelection.cursor(anchor) : EditorSelection.range(anchor, head);
+    }
     const anchor = snapPositionToGraphemeBoundary(doc, range.anchor, temporaryBoundary);
     const head = snapPositionToGraphemeBoundary(doc, range.head, temporaryBoundary);
     return anchor === head ? EditorSelection.cursor(anchor) : EditorSelection.range(anchor, head);
   });
   return EditorSelection.create(ranges, selection.mainIndex);
+}
+
+function snapSelectionEndpoint(
+  doc: Text,
+  position: number,
+  direction: "backward" | "forward",
+  temporaryBoundary: number | null
+): number {
+  const clamped = Math.max(0, Math.min(position, doc.length));
+  const line = doc.lineAt(clamped);
+  const local = clamped - line.from;
+  const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
+  for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
+    if (local === boundary.from || local === boundary.to) return clamped;
+    if (boundary.from < local && local < boundary.to) {
+      return line.from + (direction === "backward" ? boundary.from : boundary.to);
+    }
+  }
+  return clamped;
 }
 
 function deleteByPolicy(view: EditorView, direction: "backward" | "forward"): boolean {

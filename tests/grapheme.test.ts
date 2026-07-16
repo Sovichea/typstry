@@ -38,6 +38,23 @@ describe("editor grapheme navigation", () => {
     expect(selection.main.head).toBe(0);
   });
 
+  test("expands Khmer word selection at line start to the full cluster", () => {
+    for (const word of ["ឲ្យ", "ឱ្យ"]) {
+      const doc = Text.of([`${word} text`]);
+      const forward = snapSelectionToGraphemeBoundaries(
+        doc,
+        EditorSelection.single(0, 1)
+      ).main;
+      expect({ from: forward.from, to: forward.to }).toEqual({ from: 0, to: word.length });
+
+      const backward = snapSelectionToGraphemeBoundaries(
+        doc,
+        EditorSelection.single(1, 0)
+      ).main;
+      expect({ from: backward.from, to: backward.to }).toEqual({ from: 0, to: word.length });
+    }
+  });
+
   test("backspace deletes one Unicode code point except Khmer subscript pairs", () => {
     const doc = Text.of(["ខ្មែរ"]);
     expect(codePointDeletionRange(doc, 4, "backward")).toEqual({ from: 3, to: 4 });
