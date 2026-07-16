@@ -37,6 +37,7 @@ icu_segmenter = { version = "2.2", default-features = false, features = ["compil
 open = "5.3"
 typsastra-font-scaler = { path = "../crates/font-scaler" }
 tauri-plugin-process = "2"
+typst-syntax = "=0.15.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

@@ -15,6 +15,7 @@ use tokio_tungstenite::{
 
 mod examples;
 mod font_store;
+mod language_scopes;
 mod project_archive;
 mod project_fonts;
 mod render_prepare;
@@ -2694,6 +2695,7 @@ pub fn run() {
             remove_hunspell_dictionary,
             open_devtools,
             complete_language_word,
+            language_scopes::extract_typst_language_scopes,
             prepare_examples_workspace,
             list_tinymist_releases,
             install_tinymist_toolchain,

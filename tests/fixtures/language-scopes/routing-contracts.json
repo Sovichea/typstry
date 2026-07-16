@@ -1,0 +1,38 @@
+{
+  "contractVersion": 1,
+  "cases": [
+    {
+      "name": "khmer-primary-english-embedded",
+      "scopeLanguage": "km",
+      "embeddedLanguages": ["en"],
+      "runs": { "ខ្មែរ": "km", "English": "en" }
+    },
+    {
+      "name": "lao-primary-english-embedded",
+      "scopeLanguage": "lo",
+      "embeddedLanguages": ["en"],
+      "runs": { "ລາວ": "lo", "English": "en" }
+    },
+    {
+      "name": "english-primary-khmer-arabic-embedded",
+      "scopeLanguage": "en",
+      "embeddedLanguages": ["km", "ar"],
+      "runs": { "English": "en", "ខ្មែរ": "km", "العربية": "ar" }
+    },
+    {
+      "name": "french-does-not-fall-through-to-english",
+      "scopeLanguage": "fr",
+      "embeddedLanguages": ["en"],
+      "word": "coin",
+      "expectedOwner": "fr",
+      "note": "A French issue remains owned by French even when the spelling is valid English."
+    },
+    {
+      "name": "same-script-languages-require-explicit-scopes",
+      "scopeLanguage": "en",
+      "embeddedLanguages": ["fr", "es"],
+      "runs": { "English": "en" },
+      "unroutedWithoutExplicitScope": ["fr", "es"]
+    }
+  ]
+}

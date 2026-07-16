@@ -393,38 +393,38 @@ Requirements:
 
 ### Phase 0 — Syntax-parser and compatibility gate
 
-- [ ] Prototype extraction with the official `typst-syntax` parser.
-- [ ] Pin the parser version and test it against every supported managed Typst/Tinymist toolchain version.
-- [ ] Measure release binary size, clean build time, startup cost, and parse latency before accepting the dependency.
-- [ ] If the dependency exceeds the approved budget, document the threshold and require any fallback scanner to match the official parser fixture corpus and error recovery.
-- [ ] Define byte-to-UTF-16 conversion and malformed-edit behavior before editor integration.
+- [x] Prototype extraction with the official `typst-syntax` parser.
+- [x] Pin the parser version and test it against every supported managed Typst/Tinymist toolchain version.
+- [x] Measure release binary size, clean build time, startup cost, and parse latency before accepting the dependency.
+- [x] If the dependency exceeds the approved budget, document the threshold and require any fallback scanner to match the official parser fixture corpus and error recovery.
+- [x] Define byte-to-UTF-16 conversion and malformed-edit behavior before editor integration.
 
 Exit gate: one parser strategy is selected with measured costs and a version-compatibility policy; regex-only extraction is prohibited.
 
 ### Phase 1 — Contracts and fixtures
 
-- [ ] Define language declaration, effective range, provider resolution, and input-source contracts.
-- [ ] Define accepted-term persistence, matching, migration, and language-family contracts.
-- [ ] Add fixtures for inline calls, direct string bodies, unconditional set, set-if, show-set exclusions, shadowed/aliased `text`, spread arguments, named `#block[...]`, anonymous `#[...]`, code blocks, generic function content, nested, repeated, malformed, commented, raw, math, code, and mixed-script cases.
-- [ ] Lock independent inheritance of `lang`, `region`, and `script`, including Typst defaults and region-only changes.
-- [ ] Lock ISO 639 aliases, ISO 3166 regions, ambiguous provider locales, and invalid values owned by Tinymist.
-- [ ] Lock primary-plus-embedded behavior for Khmer/English, Lao/English, Arabic/English, and same-script French/English cases.
-- [ ] Verify that a French misspelling which is a valid English word remains an issue in a French scope.
-- [ ] Add UTF-16 fixtures containing emoji and non-BMP characters before declarations and scope boundaries.
-- [ ] Define the static/dynamic support boundary in user documentation.
+- [x] Define language declaration, effective range, provider resolution, and input-source contracts.
+- [x] Define accepted-term persistence, matching, migration, and language-family contracts.
+- [x] Add fixtures for inline calls, direct string bodies, unconditional set, set-if, show-set exclusions, shadowed/aliased `text`, spread arguments, named `#block[...]`, anonymous `#[...]`, code blocks, generic function content, nested, repeated, malformed, commented, raw, math, code, and mixed-script cases.
+- [x] Lock independent inheritance of `lang`, `region`, and `script`, including Typst defaults and region-only changes.
+- [x] Lock ISO 639 aliases, ISO 3166 regions, ambiguous provider locales, and invalid values owned by Tinymist.
+- [x] Lock primary-plus-embedded behavior for Khmer/English, Lao/English, Arabic/English, and same-script French/English cases.
+- [x] Verify that a French misspelling which is a valid English word remains an issue in a French scope.
+- [x] Add UTF-16 fixtures containing emoji and non-BMP characters before declarations and scope boundaries.
+- [x] Define the static/dynamic support boundary in user documentation.
 
 Exit gate: expected effective ranges and declaration ranges are locked before editor integration.
 
 ### Phase 2 — Static scope parser and resolver
 
-- [ ] Implement revision-safe native syntax extraction and byte-to-UTF-16 mapping.
-- [ ] Implement code/content lexical propagation, independent style-field inheritance, and nested direct-call overrides.
-- [ ] Distinguish ordinary set, set-if, and show-set syntax without evaluating dynamic expressions.
-- [ ] Map supported direct string bodies conservatively across escapes.
-- [ ] Coalesce non-overlapping effective ranges.
-- [ ] Add debounced extraction and incremental spellcheck invalidation with a full-document correctness fallback.
-- [ ] Replace stale valid scopes with unresolved ranges during malformed/incomplete edits.
-- [ ] Benchmark 100,000-character and 1,000-declaration documents.
+- [x] Implement revision-safe native syntax extraction and byte-to-UTF-16 mapping.
+- [x] Implement code/content lexical propagation, independent style-field inheritance, and nested direct-call overrides.
+- [x] Distinguish ordinary set, set-if, and show-set syntax without evaluating dynamic expressions.
+- [x] Map supported direct string bodies conservatively across escapes.
+- [x] Coalesce non-overlapping effective ranges.
+- [x] Add debounced extraction and incremental spellcheck invalidation with a full-document correctness fallback.
+- [x] Replace stale valid scopes with unresolved ranges during malformed/incomplete edits.
+- [x] Benchmark 100,000-character and 1,000-declaration documents.
 
 Exit gate: resolved ranges equal fresh full extraction for every fixture and randomized edit sequence, including error recovery.
 
