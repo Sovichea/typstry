@@ -46,7 +46,7 @@ import {
   type LegacyWorkspaceState,
   type WorkspaceMetadata
 } from "./workspace/workspaceStateStore";
-import { RecentProjectsController } from "./workspace/recentProjectsController";
+import { RecentProjectsController, recentProjectShortcutIndex } from "./workspace/recentProjectsController";
 import { WorkspaceWatcher, type WorkspaceChange } from "./workspace/workspaceWatcher";
 import { workspaceViewportState } from "./workspace/workspaceVisibility";
 import { PerformanceDiagnostics, type PerformanceMetric } from "./performance/diagnostics";
@@ -5331,6 +5331,18 @@ export class TypsastraWorkspaceController {
       if (cmdOrCtrl && e.shiftKey && !e.altKey && keyCode === "KeyF") {
         e.preventDefault();
         void this.formatActiveDocument();
+        return;
+      }
+
+      const recentProjectIndex = recentProjectShortcutIndex(e);
+      const welcomeScreen = document.getElementById("welcome-screen");
+      if (
+        recentProjectIndex !== null
+        && welcomeScreen
+        && !welcomeScreen.classList.contains("hidden")
+        && this.recentProjectsController.openAt(recentProjectIndex)
+      ) {
+        e.preventDefault();
         return;
       }
       

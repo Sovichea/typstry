@@ -2,6 +2,12 @@ import { createAppIcon } from "../ui/icons";
 
 const storageKey = "typsastra-recent-projects";
 
+export function recentProjectShortcutIndex(event: Pick<KeyboardEvent, "code" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): number | null {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return null;
+  const match = /^Digit([1-5])$/.exec(event.code);
+  return match ? Number(match[1]) - 1 : null;
+}
+
 export class RecentProjectsController {
   constructor(private readonly onOpen: (path: string) => void | Promise<void>) {}
 
@@ -13,6 +19,13 @@ export class RecentProjectsController {
     const recent = [path, ...this.read().filter(item => item !== path)].slice(0, 5);
     localStorage.setItem(storageKey, JSON.stringify(recent));
     this.render();
+  }
+
+  public openAt(index: number): boolean {
+    const path = this.read()[index];
+    if (!path) return false;
+    void this.onOpen(path);
+    return true;
   }
 
   private read(): string[] {
@@ -55,7 +68,7 @@ export class RecentProjectsController {
       text.title = path;
       const hotkey = document.createElement("span");
       hotkey.className = "welcome-item-hotkey";
-      hotkey.textContent = `Ctrl-${index + 1}`;
+      hotkey.textContent = `Ctrl+${index + 1}`;
       item.append(icon, text, hotkey);
       item.addEventListener("click", () => { void this.onOpen(path); });
       section.appendChild(item);

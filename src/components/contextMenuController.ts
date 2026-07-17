@@ -38,12 +38,13 @@ const previewItems = `
   <div class="dropdown-separator"></div>
   <div class="dropdown-item" id="ctx-export-pdf">Export PDF</div>`;
 
-export function explorerKeyboardAction(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): "copy" | "paste" | "delete" | null {
+export function explorerKeyboardAction(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): "copy" | "paste" | "delete" | "rename" | null {
   const commandModifier = (event.ctrlKey || event.metaKey) && !event.altKey;
   const key = event.key.toLowerCase();
   if (commandModifier && !event.shiftKey && key === "c") return "copy";
   if (commandModifier && !event.shiftKey && key === "v") return "paste";
   if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key === "Delete") return "delete";
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key === "F2") return "rename";
   return null;
 }
 
@@ -57,6 +58,7 @@ export class ContextMenuController {
   private readonly menu = document.getElementById("context-menu")!;
   private spellingIssue: SpellingIssue | null = null;
   private spellingSuggestions: string[] = [];
+  private contextMenuOpenedFromExplorer = false;
 
   constructor(private readonly dependencies: ContextMenuDependencies) {}
 
@@ -64,7 +66,12 @@ export class ContextMenuController {
     document.addEventListener("click", () => this.hide());
     this.menu.addEventListener("click", event => {
       const action = (event.target as HTMLElement).closest<HTMLElement>(".dropdown-item")?.id;
-      if (action) void this.execute(action);
+      if (action) {
+        const restoreExplorerFocus = this.contextMenuOpenedFromExplorer;
+        void this.execute(action).finally(() => {
+          if (restoreExplorerFocus) this.dependencies.getExplorer().focus();
+        });
+      }
     });
     document.addEventListener("contextmenu", event => void this.showForTarget(event));
     document.getElementById("preview-menu-btn")?.addEventListener("click", event => {
@@ -92,9 +99,14 @@ export class ContextMenuController {
     event.preventDefault();
     event.stopPropagation();
 
-    if (action === "copy") await this.execute("ctx-fs-copy");
-    else if (action === "paste") await this.execute("ctx-fs-paste");
-    else await this.execute("ctx-fs-delete");
+    try {
+      if (action === "copy") await this.execute("ctx-fs-copy");
+      else if (action === "paste") await this.execute("ctx-fs-paste");
+      else if (action === "rename") await this.execute("ctx-fs-rename");
+      else await this.execute("ctx-fs-delete");
+    } finally {
+      this.dependencies.getExplorer().focus();
+    }
   }
 
   private async execute(action: string): Promise<void> {
@@ -355,6 +367,7 @@ export class ContextMenuController {
 
   private async showForTarget(event: MouseEvent): Promise<void> {
     const target = event.target as HTMLElement;
+    this.contextMenuOpenedFromExplorer = false;
     if (target.closest("#preview-container-wrapper")) {
       event.preventDefault();
       this.hide();
@@ -384,8 +397,12 @@ export class ContextMenuController {
     this.targetPath = explorerItem?.dataset.path || "";
     this.targetIsDirectory = explorerItem?.dataset.isDir === "true";
     let items: string;
-    if (explorerItem) items = this.explorerItems();
+    if (explorerItem) {
+      this.contextMenuOpenedFromExplorer = true;
+      items = this.explorerItems();
+    }
     else if (target.closest(".workspace-explorer-section")) {
+      this.contextMenuOpenedFromExplorer = true;
       this.targetPath = this.dependencies.getWorkspaceRoot() || "";
       this.targetIsDirectory = !!this.targetPath;
       items = this.explorerBackgroundItems();
@@ -440,11 +457,11 @@ export class ContextMenuController {
     const mainAction = isTyp
       ? `<div class="dropdown-item" id="ctx-set-main-file">${this.dependencies.isPinnedMainFile(this.targetPath) ? "Unset as Main File" : "Set as Main File"}</div><div class="dropdown-separator"></div>`
       : "";
-    return `${mainAction}<div class="dropdown-item" id="ctx-new-file">New File</div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename</div><div class="dropdown-item" id="ctx-fs-delete">Delete</div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File</div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File</div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
+    return `${mainAction}<div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-rename">Rename <span class="hotkey">F2</span></div><div class="dropdown-item" id="ctx-fs-delete">Delete <span class="hotkey">Delete</span></div>${this.targetIsDirectory ? "" : '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-copy">Copy File <span class="hotkey">Ctrl+C</span></div>'}${this.copiedFilePath ? '<div class="dropdown-item" id="ctx-fs-paste">Paste File <span class="hotkey">Ctrl+V</span></div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal in System Explorer</div><div class="dropdown-item" id="ctx-fs-copy-rel-path">Copy Relative Path</div><div class="dropdown-item" id="ctx-fs-copy-abs-path">Copy Absolute Path</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+O</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
   }
 
   private explorerBackgroundItems(): string {
-    return `<div class="dropdown-item" id="ctx-new-file">New File</div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div>${this.copiedFilePath ? '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-paste">Paste File</div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal Workspace in Explorer</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
+    return `<div class="dropdown-item" id="ctx-new-file">New File <span class="hotkey">Ctrl+N</span></div><div class="dropdown-item" id="ctx-fs-new-folder">New Folder</div>${this.copiedFilePath ? '<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-paste">Paste File <span class="hotkey">Ctrl+V</span></div>' : ""}<div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-fs-reveal">Reveal Workspace in Explorer</div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-open-project">Open Workspace <span class="hotkey">Ctrl+O</span></div><div class="dropdown-separator"></div><div class="dropdown-item" id="ctx-restart-workspace">Restart Workspace</div>`;
   }
 
   private tabItems(): string {

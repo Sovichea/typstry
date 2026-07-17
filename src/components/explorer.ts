@@ -80,6 +80,11 @@ export class WorkspaceExplorer {
     return path ? { path, isDirectory: item.dataset.isDir === "true" } : null;
   }
 
+  public focus(): void {
+    this.container.focus({ preventScroll: true });
+    this.ensureKeyboardSelection();
+  }
+
   private visibleItems(): HTMLElement[] {
     return [...this.container.querySelectorAll<HTMLElement>(".tree-item[data-path]")]
       .filter(item => item.getClientRects().length > 0);

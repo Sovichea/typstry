@@ -27,8 +27,10 @@ describe("workspace explorer", () => {
     expect(explorerKeyboardAction(event("c", { ctrlKey: true }))).toBe("copy");
     expect(explorerKeyboardAction(event("V", { ctrlKey: true }))).toBe("paste");
     expect(explorerKeyboardAction(event("Delete"))).toBe("delete");
+    expect(explorerKeyboardAction(event("F2"))).toBe("rename");
     expect(explorerKeyboardAction(event("c"))).toBeNull();
     expect(explorerKeyboardAction(event("Delete", { shiftKey: true }))).toBeNull();
+    expect(explorerKeyboardAction(event("F2", { ctrlKey: true }))).toBeNull();
   });
 
   test("matches expanded Windows directories across slash styles", () => {
