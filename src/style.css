@@ -3056,30 +3056,28 @@ button.welcome-item:disabled {
 .cm-language-scope-marker {
   display: inline-grid;
   place-items: center;
-  width: 14px;
-  height: 14px;
-  margin-inline: 2px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  color: var(--ui-warning-color);
-  font: 700 10px/1 var(--font-family-sans);
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  color: var(--ui-bg);
+  background: var(--ui-warning-color);
+  font: 800 10px/16px var(--font-family-sans);
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.cm-lineNumbers .cm-gutterElement:has(> .cm-language-scope-marker) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .cm-language-scope-marker.info {
-  color: var(--ui-header-text);
-}
-
-/* Keep the language-warning lane allocated while scope analysis catches up to
-   an edit. Otherwise CodeMirror collapses and restores the gutter on every
-   keystroke, shifting the editor horizontally. */
-.cm-gutter.cm-language-scope-gutter {
-  min-width: 20px;
-}
-
-.cm-language-scope-gutter .cm-gutterElement {
-  box-sizing: border-box;
-  min-width: 20px;
-  text-align: center;
+  color: var(--ui-bg);
+  background: var(--ui-header-text);
 }
 
 .settings-language-provider-controls {

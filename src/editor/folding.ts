@@ -41,8 +41,14 @@ function findTypstFoldRange(text: string, lineStart: number, lineEnd: number): E
     if (nonFunctionWords.has(name)) continue;
     if (!isFunctionFoldCandidate(text, lineStart, matchStart)) continue;
 
-    const closer = matchingDelimiter(opener);
-    const closeOffset = findMatchingDelimiter(text, openerOffset, opener, closer);
+    let closeOffset = findMatchingDelimiter(text, openerOffset, opener, matchingDelimiter(opener));
+    if (closeOffset !== null && opener === "(") {
+      const contentOpenOffset = skipInlineWhitespace(text, closeOffset + 1);
+      if (text[contentOpenOffset] === "[") {
+        const contentCloseOffset = findMatchingDelimiter(text, contentOpenOffset, "[", "]");
+        if (contentCloseOffset !== null) closeOffset = contentCloseOffset;
+      }
+    }
     if (closeOffset === null || closeOffset <= lineEnd) continue;
     if (lineNumberAt(text, closeOffset) - lineNumberAt(text, matchStart) + 1 <= 3) continue;
 
@@ -88,7 +94,7 @@ function isFunctionFoldCandidate(text: string, lineStart: number, matchStart: nu
 
   const linePrefix = text.slice(lineStart, matchStart).trimEnd();
   if (/[([{,=:]$/.test(linePrefix)) return true;
-  if (/^(?:let|set|show|if|for|while|return)\b/.test(linePrefix.trimStart())) return true;
+  if (/^#?(?:let|set|show|if|for|while|return)\b/.test(linePrefix.trimStart())) return true;
 
   return isInsideUnclosedTypstCodeExpression(text.slice(0, matchStart));
 }

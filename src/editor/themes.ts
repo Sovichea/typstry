@@ -24,13 +24,33 @@ export const baseEditorLayoutTheme = EditorView.theme({
       lineHeight: "var(--editor-line-height, 1.7) !important"
   },
   ".cm-foldGutter .cm-gutterElement": {
-      color: "var(--ui-accent-color, #3db489) !important",
       fontFamily: "var(--font-family-sans) !important",
-      fontSize: "14px !important",
-      fontWeight: "800 !important"
+      fontSize: "12px !important",
+      fontWeight: "500 !important"
   },
-  ".cm-foldGutter .cm-gutterElement:hover": {
-      backgroundColor: "var(--ui-navigation-background) !important"
+  ".cm-foldGutter .cm-gutterElement > span": {
+      display: "inline-grid",
+      placeItems: "center",
+      width: "16px",
+      height: "16px",
+      boxSizing: "border-box",
+      padding: "0 !important",
+      color: "var(--ui-text) !important",
+      backgroundColor: "var(--ui-navigation-background)",
+      border: "1px solid var(--ui-border)",
+      borderRadius: "2px",
+      lineHeight: "14px",
+      verticalAlign: "middle",
+      cursor: "pointer"
+  },
+  ".cm-foldGutter .cm-gutterElement > span:hover": {
+      backgroundColor: "var(--ui-hover)",
+      borderColor: "var(--ui-accent-color)"
+  },
+  '.cm-foldGutter .cm-gutterElement > span[data-folded="true"]': {
+      color: "var(--ui-bg) !important",
+      backgroundColor: "var(--ui-accent-color)",
+      borderColor: "var(--ui-accent-color)"
   },
   ".cm-line": { padding: "0 12px", overflow: "visible !important" },
   ".cm-gutters": { borderRight: "1px solid var(--ui-border)" },

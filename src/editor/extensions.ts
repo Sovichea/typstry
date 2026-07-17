@@ -69,6 +69,16 @@ function foldedTypstPlaceholderDOM(_view: EditorView, onclick: (event: Event) =>
   return placeholder;
 }
 
+function typstFoldMarkerDOM(open: boolean): HTMLElement {
+  const marker = document.createElement("span");
+  const label = open ? "Fold line" : "Unfold line";
+  marker.textContent = open ? "-" : "+";
+  marker.dataset.folded = String(!open);
+  marker.title = label;
+  marker.setAttribute("aria-label", label);
+  return marker;
+}
+
 const preventEscapedBracketAutoClose = EditorView.inputHandler.of((view, from, to, text) => {
   const bracketsToPrevent = ["$", "(", "[", "{", '"', "'", "*", "_"];
   if (bracketsToPrevent.includes(text)) {
@@ -318,8 +328,7 @@ export function getEditorExtensions(
     foldService.of(typstFunctionFoldService),
     lineNumbersCompartment.of(lineNumbers()),
     foldGutter({
-      openText: "-",
-      closedText: "+"
+      markerDOM: typstFoldMarkerDOM
     }),
     activeLineCompartment.of([highlightActiveLineGutter(), highlightActiveLine()]),
     drawSelection(), dropCursor(), history(), 

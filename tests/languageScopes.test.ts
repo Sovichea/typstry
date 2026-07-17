@@ -55,6 +55,14 @@ const extraction = (mutations: TextStyleMutation[] = []): LanguageScopeExtractio
 });
 
 describe("Typst language-scope resolver", () => {
+  test("overlays provider warnings in the line-number gutter", async () => {
+    const source = await Bun.file(new URL("../src/editor/languageScopes/ui.ts", import.meta.url)).text();
+    expect(source).toContain("lineNumberMarkers.compute");
+    expect(source).toContain("cm-language-scope-marker");
+    expect(source).not.toContain("cm-language-scope-line-number-text");
+    expect(source).not.toContain("cm-language-scope-gutter");
+  });
+
   test("keeps the Phase 1 multilingual routing fixture versioned", async () => {
     const fixture = await Bun.file("tests/fixtures/language-scopes/routing-contracts.json").json();
     expect(fixture.contractVersion).toBe(1);

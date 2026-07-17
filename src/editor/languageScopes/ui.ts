@@ -1,5 +1,5 @@
 import { RangeSetBuilder, StateEffect, StateField, type Extension } from "@codemirror/state";
-import { Decoration, EditorView, GutterMarker, gutter } from "@codemirror/view";
+import { Decoration, EditorView, GutterMarker, lineNumberMarkers } from "@codemirror/view";
 import type { ProviderAvailability, SourceRange } from "./types";
 
 export interface LanguageScopeHint {
@@ -72,17 +72,15 @@ const languageHintDecorations = EditorView.decorations.compute([languageScopeHin
   return Decoration.set(ranges, true);
 });
 
-const languageHintGutter = gutter({
-  class: "cm-language-scope-gutter",
-  markers(view) {
+const languageHintLineNumberMarkers = lineNumberMarkers.compute([languageScopeHintsField], (state) => {
     const builder = new RangeSetBuilder<GutterMarker>();
     const seenLines = new Set<number>();
-    const hints = [...view.state.field(languageScopeHintsField)].sort(
+    const hints = [...state.field(languageScopeHintsField)].sort(
       (left, right) => left.range.fromUtf16 - right.range.fromUtf16,
     );
     for (const hint of hints) {
-      const position = Math.max(0, Math.min(view.state.doc.length, hint.range.fromUtf16));
-      const line = view.state.doc.lineAt(position);
+      const position = Math.max(0, Math.min(state.doc.length, hint.range.fromUtf16));
+      const line = state.doc.lineAt(position);
       if (seenLines.has(line.from)) continue;
       seenLines.add(line.from);
       builder.add(line.from, line.from, new LanguageWarningMarker(
@@ -91,11 +89,10 @@ const languageHintGutter = gutter({
       ));
     }
     return builder.finish();
-  },
 });
 
 export function languageScopeHintsExtension(): Extension {
-  return [languageScopeHintsField, languageHintDecorations, languageHintGutter];
+  return [languageScopeHintsField, languageHintDecorations, languageHintLineNumberMarkers];
 }
 
 function deduplicateHints(hints: readonly LanguageScopeHint[]): LanguageScopeHint[] {
