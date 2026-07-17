@@ -111,8 +111,19 @@ export class LayoutController {
           width: 800,
           height: 600
         });
-        win.once("tauri://close-requested", () => {
-          restoreDock();
+        win.once("tauri://close-requested", async () => {
+          try {
+            const { WebviewWindow: WebviewWindowType } = await import("@tauri-apps/api/webviewWindow");
+            const mainWin = await WebviewWindowType.getByLabel("main");
+            if (mainWin) {
+              restoreDock();
+            } else {
+              await win.close();
+            }
+          } catch (e) {
+            console.error("Error checking main window during close:", e);
+            try { await win.close(); } catch {}
+          }
         });
       } catch (error) {
         console.error("Failed to create WebviewWindow", error);

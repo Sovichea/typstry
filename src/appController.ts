@@ -5849,16 +5849,26 @@ export class TypsastraWorkspaceController {
     document.getElementById("titlebar-close")?.addEventListener("click", () => appWindow.close());
 
     void appWindow.onCloseRequested(async (event) => {
+      event.preventDefault();
       const hasUnsaved = this.openTabs.some(tab => tab.isDirty);
+      let proceed = true;
       if (hasUnsaved) {
-        event.preventDefault();
-        const confirmed = await confirm(
+        proceed = await confirm(
           "You have unsaved changes. Are you sure you want to close Typsastra?",
           { title: "Unsaved Changes", kind: "warning" }
         );
-        if (confirmed) {
-          void appWindow.destroy();
+      }
+      if (proceed) {
+        try {
+          const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+          const previewWin = await WebviewWindow.getByLabel("preview");
+          if (previewWin) {
+            await previewWin.close();
+          }
+        } catch (e) {
+          console.error("Failed to close preview window on exit:", e);
         }
+        void appWindow.destroy();
       }
     });
 

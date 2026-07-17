@@ -2510,6 +2510,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    window.app_handle().exit(0);
+                }
+            }
+        })
         .manage(pending_project_imports)
         .manage(ProjectImportOperations::default())
         .plugin(tauri_plugin_single_instance::init(
