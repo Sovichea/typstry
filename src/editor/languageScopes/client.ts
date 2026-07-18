@@ -12,6 +12,8 @@ export type LanguageScopeInvoke = (request: {
   text: string;
 }) => Promise<LanguageScopeExtraction>;
 
+export type LanguageScopeTextSource = string | (() => string);
+
 const nativeInvoke: LanguageScopeInvoke = (request) =>
   invoke<LanguageScopeExtraction>("extract_typst_language_scopes", { request });
 
@@ -30,7 +32,7 @@ export class LanguageScopeClient {
   analyze(
     documentKey: string,
     revision: number,
-    text: string,
+    textSource: LanguageScopeTextSource,
     rootContext: RootLanguageContext = "main",
   ): Promise<ResolvedLanguageScopes | null> {
     const generation = ++this.generation;
@@ -40,6 +42,7 @@ export class LanguageScopeClient {
           resolve(null);
           return;
         }
+        const text = typeof textSource === "function" ? textSource() : textSource;
         void this.extract({ documentKey, revision, text }).then(
           (extraction) => {
             if (generation !== this.generation

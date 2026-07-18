@@ -25,7 +25,7 @@ import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath, remapFilePath } from "./platform/paths";
 import { isBinaryImagePath, isSupportedInAppPath, fileExtension } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
-import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus } from "./preview/previewFrame";
+import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus, type PreviewPageStatus } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
 import { tinymistDataPlanePositionText } from "./preview/tinymistDataPlane";
 import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewNearbySourceColumns, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
@@ -234,6 +234,8 @@ export class TypsastraWorkspaceController {
   private openTabs: EditorTab[] = [];
   private suppressFoldStatePersistence = false;
   private defaultFoldGeneration = 0;
+  private documentOutlineUpdateTimer: number | null = null;
+  private documentOutlineUpdateGeneration = 0;
   private readonly openedDocumentUris = new Set<string>();
   private readonly preparedPreviewDocumentVersions = new Map<string, number>();
   private lastKhmerRenderPrepState: boolean | undefined = undefined;
@@ -242,6 +244,7 @@ export class TypsastraWorkspaceController {
   private projectImportQueue: Promise<void> = Promise.resolve();
   private saveInProgress: Promise<void> | null = null;
   private pdfPreviewGeneration = 0;
+  private previewPageStatus: PreviewPageStatus = { currentPage: 0, pageCount: 0 };
   private imageZoomIn: (() => void) | null = null;
   private imageZoomOut: (() => void) | null = null;
   private imageZoomToFit: (() => void) | null = null;
@@ -338,6 +341,8 @@ export class TypsastraWorkspaceController {
     this.updatePreviewZoomLabel(zoomPercent);
   }, metric => {
     this.performanceDiagnostics.recordFirst(metric) ?? this.performanceDiagnostics.record(metric);
+  }, status => {
+    this.updatePreviewPageStatus(status);
   });
   private readonly previewSyncController = new PreviewSyncController({
     getEditor: () => this.editorInstance,
@@ -568,6 +573,7 @@ export class TypsastraWorkspaceController {
     document.getElementById("preview-zoom-fit-btn")?.addEventListener("click", () => {
       this.zoomToFit();
     });
+    this.initializePreviewPageControls();
 
     const undockBtn = document.getElementById("undock-preview-btn");
     if (undockBtn) {
@@ -969,7 +975,7 @@ export class TypsastraWorkspaceController {
             if (update.docChanged && !this.isLoadingFile) {
               const currentText = update.state.doc.toString();
               this.previewSyncController.clearForward();
-              this.editorFontManager.updateDocument(currentText);
+              this.editorFontManager.scheduleDocumentUpdate(currentText);
               if (!update.view.composing) {
                 this.handleContentMutation(currentText);
                 this.spellcheckController.documentChanged(update);
@@ -1302,19 +1308,24 @@ export class TypsastraWorkspaceController {
     this.spellcheckController.activateDocument(path ? filePathKey(path) : "");
   }
 
-  private scheduleDocumentOutlineUpdate(path: string, source: string): void {
-    // Let CodeMirror commit and paint the newly activated document before the
-    // outline performs its full-source scan.
-    window.requestAnimationFrame(() => window.setTimeout(() => {
+  private scheduleDocumentOutlineUpdate(path: string, delay = 180): void {
+    if (this.documentOutlineUpdateTimer !== null) {
+      window.clearTimeout(this.documentOutlineUpdateTimer);
+    }
+    const generation = ++this.documentOutlineUpdateGeneration;
+    // Outline parsing scans the full source and may resolve included files.
+    // Wait until typing pauses so it never blocks CodeMirror's input update.
+    this.documentOutlineUpdateTimer = window.setTimeout(() => {
+      this.documentOutlineUpdateTimer = null;
       const activeTab = this.getActiveTab();
       if (
-        !activeTab
+        generation !== this.documentOutlineUpdateGeneration
+        || !activeTab
         || filePathKey(activeTab.path) !== filePathKey(path)
-        || activeTab.content !== source
       ) return;
       void this.documentOutlineController.update(
         path,
-        source,
+        activeTab.content,
         this.workspaceRootPath || "",
         async candidatePath => {
           try {
@@ -1324,7 +1335,7 @@ export class TypsastraWorkspaceController {
           }
         }
       );
-    }, 0));
+    }, delay);
   }
 
   private foldCurrentFile(): void {
@@ -1823,7 +1834,7 @@ export class TypsastraWorkspaceController {
     this.editorFontManager.updateDocument(tab.content);
     this.spellcheckController.schedule();
     if (path.toLowerCase().endsWith(".typ")) {
-      this.scheduleDocumentOutlineUpdate(path, tab.content);
+      this.scheduleDocumentOutlineUpdate(path, 0);
       this.documentOutlineController.setCursorPosition(this.editorInstance.state.selection.main.head, this.activeFilePath);
     } else {
       this.documentOutlineController.clear();
@@ -2949,18 +2960,7 @@ export class TypsastraWorkspaceController {
       message: `Document mutation: active=${this.activeFilePath ?? "none"}; sourceUtf16=${rawText.length}; loading=${this.isLoadingFile}; preparationRevision=${this.pdfPreparationRevision}; mode=${this.settingsController.value.preview.renderMode}; disabled=${this.previewDisabled}; lspReady=${this.lspReady}.`
     });
     if (this.activeFilePath && this.activeFilePath.toLowerCase().endsWith(".typ")) {
-      void this.documentOutlineController.update(
-        this.activeFilePath, 
-        rawText, 
-        this.workspaceRootPath || "", 
-        async (p) => {
-          try {
-            return await invoke<string>("read_workspace_file", { path: p });
-          } catch {
-            return null;
-          }
-        }
-      );
+      this.scheduleDocumentOutlineUpdate(this.activeFilePath);
     }
     if (!this.isLoadingFile) {
       this.updateActiveTabContent(rawText);
@@ -3774,6 +3774,56 @@ export class TypsastraWorkspaceController {
     }
   }
 
+  private initializePreviewPageControls(): void {
+    const input = document.getElementById("preview-page-input") as HTMLInputElement | null;
+    if (!input || input.dataset.initialized === "true") return;
+    input.dataset.initialized = "true";
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.commitPreviewPageInput();
+        input.blur();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        input.value = String(this.previewPageStatus.currentPage || 1);
+        input.blur();
+      }
+    });
+    input.addEventListener("change", () => this.commitPreviewPageInput());
+    input.addEventListener("wheel", event => {
+      if (document.activeElement === input) event.preventDefault();
+    }, { passive: false });
+    this.updatePreviewPageStatus(this.previewPageStatus);
+  }
+
+  private commitPreviewPageInput(): void {
+    const input = document.getElementById("preview-page-input") as HTMLInputElement | null;
+    if (!input || this.previewPageStatus.pageCount < 1) return;
+    const value = input.value.trim();
+    if (!/^\d+$/.test(value)) {
+      input.value = String(this.previewPageStatus.currentPage || 1);
+      return;
+    }
+    const requested = Number.parseInt(value, 10);
+    const pageNo = Math.max(1, Math.min(requested, this.previewPageStatus.pageCount));
+    input.value = String(pageNo);
+    this.previewFrame.scrollToPage(pageNo);
+  }
+
+  private updatePreviewPageStatus(status: PreviewPageStatus): void {
+    this.previewPageStatus = status;
+    const input = document.getElementById("preview-page-input") as HTMLInputElement | null;
+    const count = document.getElementById("preview-page-count");
+    if (input) {
+      input.disabled = status.pageCount < 1;
+      if (document.activeElement !== input) input.value = String(status.currentPage || 1);
+      input.setAttribute("aria-valuemin", "1");
+      input.setAttribute("aria-valuemax", String(Math.max(1, status.pageCount)));
+      input.setAttribute("aria-valuenow", String(status.currentPage || 1));
+    }
+    if (count) count.textContent = String(status.pageCount);
+  }
+
   private updatePreviewActionsToolbar(path: string | null): void {
     const previewActions = document.querySelector(".preview-actions");
     if (!previewActions) return;
@@ -3800,6 +3850,7 @@ export class TypsastraWorkspaceController {
     const syncBtn = document.getElementById("preview-forward-sync-btn");
     const recompileBtn = document.getElementById("preview-recompile-btn");
     const menuBtn = document.getElementById("preview-menu-btn");
+    document.querySelector<HTMLElement>(".preview-page-controls")?.classList.toggle("hidden", isImage);
 
     if (syncBtn) {
       if (showTypstOnly) syncBtn.classList.remove("hidden");
@@ -5935,6 +5986,7 @@ export class TypsastraWorkspaceController {
       this.revealCursorInPreviewManually();
     });
 
+    this.initializePreviewPageControls();
     this.updatePreviewZoomLabel();
     this.updateManualForwardSyncAction();
 

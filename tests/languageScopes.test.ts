@@ -145,6 +145,27 @@ describe("Typst language-scope resolver", () => {
     expect(await first).toBeNull();
     expect((await second)?.revision).toBe(2);
   });
+
+  test("does not materialize text for a superseded debounced request", async () => {
+    const received: string[] = [];
+    const client = new LanguageScopeClient(
+      request => {
+        received.push(request.text);
+        return Promise.resolve({ ...extraction(), revision: request.revision });
+      },
+      5,
+    );
+    let staleReads = 0;
+    const first = client.analyze("main.typ", 1, () => {
+      staleReads += 1;
+      return "stale";
+    });
+    const second = client.analyze("main.typ", 2, () => "current");
+    expect(await first).toBeNull();
+    expect((await second)?.revision).toBe(2);
+    expect(staleReads).toBe(0);
+    expect(received).toEqual(["current"]);
+  });
 });
 
 describe("language provider routing", () => {

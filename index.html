@@ -1795,6 +1795,20 @@
                             role="toolbar"
                             aria-label="Preview controls"
                         >
+                            <div class="preview-page-controls" aria-label="Preview page navigation">
+                                <input
+                                    id="preview-page-input"
+                                    class="preview-page-input"
+                                    type="text"
+                                    inputmode="numeric"
+                                    value="1"
+                                    role="spinbutton"
+                                    aria-label="Current preview page"
+                                    disabled
+                                />
+                                <span class="preview-page-separator" aria-hidden="true">/</span>
+                                <span id="preview-page-count" class="preview-page-count">0</span>
+                            </div>
                             <div class="preview-zoom-controls" aria-label="Preview zoom">
                                 <button
                                     id="preview-zoom-out-btn"

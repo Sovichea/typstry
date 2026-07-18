@@ -30,4 +30,19 @@ describe("cross-platform scrollbar design", () => {
     expect(source).not.toContain('className = "textLayer"');
     expect(source).toContain("hydratePageDimensions");
   });
+
+  test("uses immediate programmatic page jumps and reports the visible page", async () => {
+    const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
+    expect(source).toContain('behavior: "auto"');
+    expect(source).not.toContain('behavior: "smooth"');
+    expect(source).toContain("finishInstantPageJump");
+    expect(source).toContain("reportPageStatus");
+  });
+
+  test("provides editable page navigation in the shared preview toolbar", async () => {
+    const html = await Bun.file(new URL("../index.html", import.meta.url)).text();
+    expect(html).toContain('id="preview-page-input"');
+    expect(html).toContain('id="preview-page-count"');
+    expect(html).toContain('role="spinbutton"');
+  });
 });

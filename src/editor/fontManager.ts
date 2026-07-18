@@ -21,6 +21,7 @@ export class EditorFontManager {
   private unicodePreference: UnicodeFontPreference = "auto";
   private unicodePreferences: Record<string, UnicodeFontPreference> = {};
   private documentText = "";
+  private documentUpdateTimer: number | null = null;
   private activeCandidates: UnicodeFontCandidate[] = [];
   private appliedStack = "";
   private showSettingsAction = false;
@@ -64,8 +65,21 @@ export class EditorFontManager {
   }
 
   public updateDocument(text: string): void {
+    if (this.documentUpdateTimer !== null) {
+      window.clearTimeout(this.documentUpdateTimer);
+      this.documentUpdateTimer = null;
+    }
     this.documentText = text;
     this.refresh();
+  }
+
+  public scheduleDocumentUpdate(text: string, delay = 160): void {
+    this.documentText = text;
+    if (this.documentUpdateTimer !== null) window.clearTimeout(this.documentUpdateTimer);
+    this.documentUpdateTimer = window.setTimeout(() => {
+      this.documentUpdateTimer = null;
+      this.refresh();
+    }, delay);
   }
 
   private async refreshSystemFonts(): Promise<void> {

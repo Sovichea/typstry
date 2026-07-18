@@ -9,6 +9,11 @@ export type PreviewInteractionStatus = {
   reason?: string;
 };
 
+export type PreviewPageStatus = {
+  currentPage: number;
+  pageCount: number;
+};
+
 export type PreviewMemorySnapshot = {
   pdfGeneration: number;
   pdfBytes: number;
@@ -102,13 +107,16 @@ export class PreviewFrame {
   private firstRenderedGeneration = 0;
   private forwardRippleGeneration = 0;
   private zoomStartedAt: number | null = null;
+  private lastPageStatusKey = "";
+  private instantScrollTargetPage: number | null = null;
 
   constructor(
     private readonly pane: HTMLElement,
     private readonly onPreviewClick: (point: PreviewClickPoint) => void,
     private readonly onInteractionStatus?: (status: PreviewInteractionStatus) => void,
     private readonly onZoomChanged?: (zoomPercent: number) => void,
-    private readonly onPerformance?: (metric: Omit<PerformanceMetric, "recordedAt">) => void
+    private readonly onPerformance?: (metric: Omit<PerformanceMetric, "recordedAt">) => void,
+    private readonly onPageChanged?: (status: PreviewPageStatus) => void
   ) {
     this.pane.addEventListener("wheel", event => {
       if (event.ctrlKey) {
@@ -334,6 +342,7 @@ export class PreviewFrame {
       this.setupIframeInteractions();
       this.installPageObserver(iframe);
       this.restoreScrollAnchor(previousScroll);
+      this.reportPageStatus(this.visiblePageNumber());
       void this.hydratePageDimensions(pdfDoc, generation).catch(error => {
         if (generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
           console.warn("Failed to finish PDF page geometry discovery:", error);
@@ -592,6 +601,12 @@ export class PreviewFrame {
     const startedAt = performance.now();
     const view = this.iframe?.contentWindow;
     if (!view) return;
+    if (this.instantScrollTargetPage !== null) {
+      const pageNo = this.instantScrollTargetPage;
+      this.instantScrollTargetPage = null;
+      this.finishInstantPageJump(pageNo);
+      return;
+    }
     const wasIdle = this.motion.current().state === "idle";
     const snapshot = this.motion.noteScroll(view.scrollY, startedAt);
     if (wasIdle) {
@@ -602,6 +617,7 @@ export class PreviewFrame {
     this.renderScheduler.removeReason("settled-visible");
     this.renderScheduler.removeReason("directional-neighbor");
     const visiblePage = this.visiblePageNumber();
+    this.reportPageStatus(visiblePage);
     this.motionDestinationPage = snapshot.shouldPreRender
       ? this.pageNumberAtScrollTop(snapshot.projectedScrollTop)
       : visiblePage;
@@ -940,9 +956,13 @@ export class PreviewFrame {
   }
 
   public scrollToPage(pageNo: number): void {
-    this.iframe?.contentDocument
-      ?.querySelector(`.pdf-page-container[data-page-no="${pageNo}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const pageCount = Number(this.pdfDoc?.numPages ?? 0);
+    if (pageCount < 1 || !Number.isFinite(pageNo)) return;
+    const normalizedPage = Math.max(1, Math.min(Math.round(pageNo), pageCount));
+    const slot = this.iframe?.contentDocument
+      ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${normalizedPage}"]`);
+    if (!slot) return;
+    this.jumpToPreviewOffset(slot.offsetTop, normalizedPage);
   }
 
   public async revealDocumentPosition(position: { page_no: number; x: number; y: number }, options: { ripple?: boolean } = {}): Promise<void> {
@@ -954,10 +974,7 @@ export class PreviewFrame {
 
     const zoom = this.previewZoomPercent / 100;
     const targetY = slot.offsetTop + (position.y * zoom) - (view.innerHeight * 0.45);
-    view.scrollTo({
-      top: Math.max(0, targetY),
-      behavior: "smooth"
-    });
+    this.jumpToPreviewOffset(Math.max(0, targetY), position.page_no);
     if (options.ripple) {
       await this.showForwardSyncRippleAtDocumentPosition(position);
     }
@@ -978,6 +995,45 @@ export class PreviewFrame {
     const x = slotRect.left + (position.x * zoom);
     const y = slotRect.top + (position.y * zoom);
     this.renderForwardSyncRipple(doc, x, y);
+  }
+
+  private jumpToPreviewOffset(top: number, pageNo: number): void {
+    const view = this.iframe?.contentWindow;
+    if (!view) return;
+    this.instantScrollTargetPage = pageNo;
+    view.scrollTo({ top, behavior: "auto" });
+    this.finishInstantPageJump(pageNo);
+    window.setTimeout(() => {
+      if (this.instantScrollTargetPage !== pageNo) return;
+      this.instantScrollTargetPage = null;
+      this.finishInstantPageJump(pageNo);
+    }, 0);
+  }
+
+  private finishInstantPageJump(pageNo: number): void {
+    const view = this.iframe?.contentWindow;
+    if (!view) return;
+    this.motion.reset(view.scrollY, performance.now());
+    this.motionDestinationPage = pageNo;
+    this.motionStartedAt = null;
+    this.finalDecisionAt = performance.now();
+    this.renderScheduler.removeReason("decelerating-destination");
+    this.renderScheduler.removeReason("directional-neighbor");
+    this.cancelDistantPageRenders(pageNo, 2);
+    this.queueViewportFinalRenders("first-stable");
+    void this.pumpPageRenderQueue();
+    this.reportPageStatus(pageNo);
+  }
+
+  private reportPageStatus(currentPage: number): void {
+    const pageCount = Number(this.pdfDoc?.numPages ?? 0);
+    const normalizedPage = pageCount > 0
+      ? Math.max(1, Math.min(Math.round(currentPage), pageCount))
+      : 0;
+    const key = `${normalizedPage}:${pageCount}`;
+    if (key === this.lastPageStatusKey) return;
+    this.lastPageStatusKey = key;
+    this.onPageChanged?.({ currentPage: normalizedPage, pageCount });
   }
 
   private renderForwardSyncRipple(doc: Document, x: number, y: number): void {
@@ -1096,6 +1152,7 @@ export class PreviewFrame {
     this.pdfWorker = null;
     this.clearErrorOverlay();
     this.clearMessageHost();
+    this.reportPageStatus(0);
   }
 
   public setMessage(html: string): void {
@@ -1108,6 +1165,7 @@ export class PreviewFrame {
     void this.disposePdfDocument();
     this.clearErrorOverlay();
     this.clearMessageHost();
+    this.reportPageStatus(0);
     const host = document.createElement("div");
     host.className = "preview-message-host";
     host.innerHTML = html;

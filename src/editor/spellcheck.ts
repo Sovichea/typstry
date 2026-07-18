@@ -551,10 +551,17 @@ export class SpellcheckController {
     if (!editor || !this.documentKey) return;
     const documentKey = this.documentKey;
     const revision = this.revision;
-    const text = editor.state.doc.toString();
     const startedAt = performance.now();
     this.scopePending = true;
-    void this.languageScopeClient.analyze(documentKey, revision, text, this.rootLanguageContext)
+    // Materialize the complete document only after the language-scope debounce.
+    // Large documents otherwise incur a second full-text copy for every keypress,
+    // including requests that are superseded before native analysis begins.
+    void this.languageScopeClient.analyze(
+      documentKey,
+      revision,
+      () => editor.state.doc.toString(),
+      this.rootLanguageContext
+    )
       .then((scopes) => {
         if (!scopes || this.documentKey !== documentKey || this.revision !== revision) return;
         const previous = this.previousScopesForInvalidation;
