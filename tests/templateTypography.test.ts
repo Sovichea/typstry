@@ -10,9 +10,9 @@ import {
 } from "../src/editor/templateTypography";
 
 const config = {
-  latinFont: "MiSans Latin",
-  latinSizePt: 11,
-  fallbacks: [{ family: "MiSans Khmer", script: "khmer", scale: 1 }]
+  primary: { family: "MiSans Latin", script: "latin" },
+  baseSizePt: 11,
+  embedded: [{ family: "MiSans Khmer", script: "khmer", scale: 1 }]
 };
 
 describe("template typography", () => {

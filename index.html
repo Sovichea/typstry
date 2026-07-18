@@ -519,29 +519,21 @@
                                         <div
                                             class="toolbar-typography-option-header"
                                         >
-                                            <label>Latin font</label>
-                                            <label
-                                                class="toolbar-typography-enable"
-                                            >
-                                                <input
-                                                    id="toolbar-latin-enable"
-                                                    type="checkbox"
-                                                    checked
-                                                />
-                                                <span>Enable</span>
-                                            </label>
+                                            <label>Primary script</label>
                                         </div>
+                                        <select id="toolbar-primary-script"></select>
+                                        <label for="toolbar-primary-font">Primary font</label>
                                         <select
-                                            id="toolbar-latin-font"
+                                            id="toolbar-primary-font"
                                         ></select>
-                                        <label for="toolbar-latin-size"
+                                        <label for="toolbar-base-size"
                                             >Base size</label
                                         >
                                         <div
                                             class="toolbar-typography-unit-field"
                                         >
                                             <input
-                                                id="toolbar-latin-size"
+                                                id="toolbar-base-size"
                                                 type="number"
                                                 min="6"
                                                 max="96"
@@ -554,10 +546,10 @@
                                             class="toolbar-typography-divider"
                                         ></div>
                                         <div class="toolbar-typography-option-header">
-                                            <label>Script fallbacks</label>
-                                            <button id="toolbar-add-fallback" type="button">Add fallback</button>
+                                            <label>Embedded scripts</label>
+                                            <button id="toolbar-add-embedded" type="button">Add script</button>
                                         </div>
-                                        <div id="toolbar-font-fallbacks" class="toolbar-font-fallbacks"></div>
+                                        <div id="toolbar-embedded-fonts" class="toolbar-font-fallbacks"></div>
                                         <div class="toolbar-typography-actions">
                                             <button
                                                 id="toolbar-typography-apply"

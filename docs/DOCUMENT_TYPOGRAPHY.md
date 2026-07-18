@@ -1,15 +1,34 @@
 # Document typography
 
-Typsastra uses Typst font fallback stacks instead of regular-expression show rules. A managed document block has this shape:
+Typsastra models document fonts as one primary script and zero or more embedded
+scripts. The primary font leads an ordered Typst fallback stack; embedded fonts
+follow in their configured order. A managed document block has this shape:
 
 ```typst
 // typsastra:typography:start
-// typsastra:complex-font {"family":"MiSans Khmer","script":"khmer","scale":1.05}
-#set text(font: ("MiSans Latin", "MiSans Khmer"), size: 11pt)
+// typsastra:font-roles {"primary":{"family":"MiSans Latin","script":"latin"},"embedded":[{"family":"MiSans Khmer","script":"khmer","scale":1.05},{"family":"MiSans Arabic","script":"arabic","scale":1}]}
+#set text(font: ("MiSans Latin", "MiSans Khmer", "MiSans Arabic"), size: 11pt)
 // typsastra:typography:end
 ```
 
-The metadata comment is ignored by Typst. It lets Typsastra reproduce the preview-only scale while keeping the Typst source portable. Compiling the document outside Typsastra uses the original system font at its original scale.
+The metadata comment is ignored by Typst. It records which script owns each
+font role and lets Typsastra reproduce preview-only embedded-font scales while
+keeping the source portable. Compiling outside Typsastra uses the same ordered
+font stack with the original system fonts at their original scales.
+
+The primary script is not assumed to be Latin. A Khmer-first document can use
+Khmer as primary and add Latin and Arabic as embedded scripts. Automatic
+detection orders scripts by the number of matching characters, but the author
+can change the primary role and embedded order explicitly.
+
+## Why roles use an ordered stack
+
+Typst chooses the first font in the stack that contains each required glyph.
+The script metadata lets Typsastra offer compatible installed fonts and retain
+the author's intent. It does not reconstruct source text or force every script
+run through a show rule. A broad primary font may therefore supply glyphs for
+an embedded script when it already covers them; authors who require strict
+typeface separation should select a primary family with the intended coverage.
 
 ## Why Typsastra does not use a regex show rule
 
@@ -23,7 +42,9 @@ That changes source ownership in Typst's rendered frame. Inverse sync can then r
 
 ## Uniform scaling
 
-The typography toolbar accepts a uniform complex-script scale from `0.5` to `2.0`. A scale of `1.05` enlarges the font by five percent in both dimensions.
+The typography toolbar accepts a uniform embedded-script scale from `0.5` to
+`2.0`. A scale of `1.05` enlarges that embedded font by five percent in both
+dimensions. The primary font uses the configured base point size directly.
 
 When the scale differs from `1.0`, Typsastra:
 

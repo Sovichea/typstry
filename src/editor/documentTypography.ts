@@ -7,12 +7,17 @@ export type DocumentScript = {
 };
 
 export type DocumentTypography = {
-  latinFont: string | null;
-  latinSizePt: number;
-  fallbacks: DocumentFontFallback[];
+  primary: DocumentPrimaryFont | null;
+  baseSizePt: number;
+  embedded: DocumentEmbeddedFont[];
 };
 
-export type DocumentFontFallback = {
+export type DocumentPrimaryFont = {
+  script: string;
+  family: string;
+};
+
+export type DocumentEmbeddedFont = {
   script: string;
   family: string;
   scale: number;
@@ -28,6 +33,14 @@ export function typographyScaleChange(previousScale: number, nextScale: number):
 
 const blockStart = "// typsastra:typography:start";
 const blockEnd = "// typsastra:typography:end";
+
+export const latinDocumentScript: DocumentScript = {
+  id: "latin",
+  label: "Latin",
+  unicodeProperty: "Latin",
+  pattern: /\p{Script=Latin}/gu,
+  preferredFamilies: ["Calibri", "MiSans Latin", "Noto Sans"]
+};
 
 export const documentScripts: readonly DocumentScript[] = [
   { id: "khmer", label: "Khmer", unicodeProperty: "Khmer", pattern: /[\u1780-\u17ff\u19e0-\u19ff]/gu, preferredFamilies: ["MiSans Khmer", "Noto Sans Khmer"] },
@@ -54,6 +67,8 @@ export const documentScripts: readonly DocumentScript[] = [
   { id: "hangul", label: "Korean", unicodeProperty: "Hangul", pattern: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/gu, preferredFamilies: ["Noto Sans KR"] }
 ];
 
+export const typographyScripts: readonly DocumentScript[] = [latinDocumentScript, ...documentScripts];
+
 function countMatches(text: string, pattern: RegExp): number {
   pattern.lastIndex = 0;
   return [...text.matchAll(pattern)].length;
@@ -65,6 +80,14 @@ export function detectDocumentScript(text: string): DocumentScript | null {
 
 export function detectDocumentScripts(text: string): DocumentScript[] {
   return documentScripts
+    .map(script => ({ script, count: countMatches(text, script.pattern) }))
+    .filter(candidate => candidate.count > 0)
+    .sort((left, right) => right.count - left.count)
+    .map(candidate => candidate.script);
+}
+
+export function detectTypographyScripts(text: string): DocumentScript[] {
+  return typographyScripts
     .map(script => ({ script, count: countMatches(text, script.pattern) }))
     .filter(candidate => candidate.count > 0)
     .sort((left, right) => right.count - left.count)
@@ -93,21 +116,25 @@ function decimal(value: number): string {
 
 export function renderTypographyBlock(config: DocumentTypography): string {
   const lines = [blockStart];
-  const fallbacks = config.fallbacks.map(fallback => ({
-    family: fallback.family,
-    script: fallback.script,
-    scale: Math.max(0.5, Math.min(2, fallback.scale))
+  const primary = config.primary ? {
+    family: config.primary.family,
+    script: config.primary.script
+  } : null;
+  const embedded = config.embedded.map(font => ({
+    family: font.family,
+    script: font.script,
+    scale: Math.max(0.5, Math.min(2, font.scale))
   }));
-  if (fallbacks.length > 0) {
-    lines.push(`// typsastra:font-fallbacks ${JSON.stringify(fallbacks)}`);
+  if (primary || embedded.length > 0) {
+    lines.push(`// typsastra:font-roles ${JSON.stringify({ primary, embedded })}`);
   }
-  const fonts = [config.latinFont, ...fallbacks.map(fallback => fallback.family)]
-    .filter((font): font is string => !!font);
+  const fonts = [...new Set([primary?.family, ...embedded.map(font => font.family)]
+    .filter((font): font is string => !!font))];
   if (fonts.length > 0) {
     const fontValue = fonts.length === 1
       ? `"${escapeTypstString(fonts[0])}"`
       : `(${fonts.map(font => `"${escapeTypstString(font)}"`).join(", ")})`;
-    lines.push(`#set text(font: ${fontValue}, size: ${decimal(config.latinSizePt)}pt)`);
+    lines.push(`#set text(font: ${fontValue}, size: ${decimal(config.baseSizePt)}pt)`);
   }
   lines.push(blockEnd, "");
   return lines.join("\n");
@@ -118,25 +145,40 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
   const end = start >= 0 ? text.indexOf(blockEnd, start) : -1;
   if (start < 0 || end < 0) return null;
   const block = text.slice(start, end);
+  const roleMetadata = /\/\/ typsastra:font-roles (\{[^\r\n]+\})/.exec(block);
   const metadata = /\/\/ typsastra:font-fallbacks (\[[^\r\n]+\])/.exec(block);
   const legacyMetadata = /\/\/ typsastra:complex-font (\{[^\r\n]+\})/.exec(block);
-  let fallbacks: DocumentFontFallback[] = [];
+  const validScript = (script: unknown): script is string =>
+    typeof script === "string" && typographyScripts.some(candidate => candidate.id === script);
+  const parseEmbedded = (value: unknown): DocumentEmbeddedFont[] => !Array.isArray(value) ? [] : value.flatMap(item => {
+    if (!item || typeof item !== "object") return [];
+    const candidate = item as Partial<DocumentEmbeddedFont>;
+    if (typeof candidate.family !== "string" || !validScript(candidate.script)) return [];
+    return [{
+      family: candidate.family,
+      script: candidate.script,
+      scale: typeof candidate.scale === "number" && Number.isFinite(candidate.scale)
+        ? Math.max(0.5, Math.min(2, candidate.scale))
+        : 1
+    }];
+  });
+  let explicitPrimary: DocumentPrimaryFont | null | undefined;
+  let fallbacks: DocumentEmbeddedFont[] = [];
   try {
-    const raw: unknown = metadata ? JSON.parse(metadata[1]) : legacyMetadata ? [JSON.parse(legacyMetadata[1])] : [];
-    if (!Array.isArray(raw)) return null;
-    fallbacks = raw.flatMap(item => {
-      if (!item || typeof item !== "object") return [];
-      const candidate = item as Partial<DocumentFontFallback>;
-      if (typeof candidate.family !== "string" || typeof candidate.script !== "string") return [];
-      if (!documentScripts.some(script => script.id === candidate.script)) return [];
-      return [{
-        family: candidate.family,
-        script: candidate.script,
-        scale: typeof candidate.scale === "number" && Number.isFinite(candidate.scale)
-          ? Math.max(0.5, Math.min(2, candidate.scale))
-          : 1
-      }];
-    });
+    if (roleMetadata) {
+      const roles = JSON.parse(roleMetadata[1]) as { primary?: unknown; embedded?: unknown };
+      if (roles.primary === null) explicitPrimary = null;
+      else if (roles.primary && typeof roles.primary === "object") {
+        const candidate = roles.primary as Partial<DocumentPrimaryFont>;
+        explicitPrimary = typeof candidate.family === "string" && validScript(candidate.script)
+          ? { family: candidate.family, script: candidate.script }
+          : null;
+      }
+      fallbacks = parseEmbedded(roles.embedded);
+    } else {
+      const raw: unknown = metadata ? JSON.parse(metadata[1]) : legacyMetadata ? [JSON.parse(legacyMetadata[1])] : [];
+      fallbacks = parseEmbedded(raw);
+    }
   } catch { return null; }
   const stack = block.match(/#set text\(font: \(([^\r\n]+)\), size: (-?\d+(?:\.\d+)?)pt\)/);
   const single = block.match(/#set text\(font: "((?:\\.|[^"])*)", size: (-?\d+(?:\.\d+)?)pt\)/);
@@ -145,7 +187,7 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
   const legacyScript = legacyComplex
     ? documentScripts.find(candidate => candidate.unicodeProperty === legacyComplex[1])
     : null;
-  const latinSizePt = Number(stack?.[2] ?? single?.[2] ?? 11);
+  const baseSizePt = Number(stack?.[2] ?? single?.[2] ?? 11);
   const stackFonts = stack
     ? [...stack[1].matchAll(/"((?:\\.|[^"])*)"/g)].map(match => unescapeTypstString(match[1]))
     : [];
@@ -156,19 +198,25 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
     fallbacks = [{
       family: unescapeTypstString(legacyComplex[2]),
       script: legacyScript.id,
-      scale: Math.max(0.5, Math.min(2, (latinSizePt + legacyAdjustment) / latinSizePt))
+      scale: Math.max(0.5, Math.min(2, (baseSizePt + legacyAdjustment) / baseSizePt))
     }];
   }
   if (fallbacks.length === 0 && stackFonts.length > 1) {
     fallbacks = [{ family: stackFonts[1], script: documentScripts[0].id, scale: 1 }];
   }
-  const singleFont = single ? unescapeTypstString(single[1]) : null;
-  const latinFont = stackFonts.length > fallbacks.length
-    ? stackFonts[0]
-    : singleFont && !fallbacks.some(fallback => fallback.family === singleFont)
-      ? singleFont
-      : null;
-  return { latinFont, latinSizePt, fallbacks };
+  const firstFont = stackFonts[0] ?? (single ? unescapeTypstString(single[1]) : null);
+  let primary = explicitPrimary;
+  if (primary === undefined && firstFont) {
+    const matchingFallback = fallbacks.find(font => font.family === firstFont);
+    primary = matchingFallback
+      ? { script: matchingFallback.script, family: firstFont }
+      : { script: "latin", family: firstFont };
+    if (matchingFallback) fallbacks = fallbacks.filter(font => font !== matchingFallback);
+  }
+  if (primary === undefined) primary = null;
+  const embedded = fallbacks.filter(font => font.script !== primary?.script);
+  if (!primary && embedded.length === 0) return null;
+  return { primary, baseSizePt, embedded };
 }
 
 export function typographyEdit(text: string, config: DocumentTypography): TypographyEdit {
