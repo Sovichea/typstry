@@ -295,6 +295,7 @@ export class TypsastraWorkspaceController {
 
   private editorInstance!: EditorView;
   private isComposing = false;
+  private readonly performanceSummaryCounts = new Map<PerformanceMetric["name"], number>();
   private readonly performanceDiagnostics = new PerformanceDiagnostics(metric => this.publishPerformanceMetric(metric));
   private readonly editorFontManager = new EditorFontManager(() => this.editorInstance);
   private readonly spellcheckController = new SpellcheckController(
@@ -4398,6 +4399,20 @@ export class TypsastraWorkspaceController {
       source: "performance",
       message: `${metric.name}: ${value}${metric.detail ? ` (${JSON.stringify(metric.detail)})` : ""}`
     });
+    if (metric.name.startsWith("preview.") && metric.milliseconds !== undefined) {
+      const count = (this.performanceSummaryCounts.get(metric.name) ?? 0) + 1;
+      this.performanceSummaryCounts.set(metric.name, count);
+      if (count % 20 === 0) {
+        const summary = this.performanceDiagnostics.summary(metric.name);
+        if (summary) {
+          this.appendDeveloperLog({
+            kind: "info",
+            source: "performance",
+            message: `${metric.name} rolling summary: n=${summary.samples}; p50=${summary.p50.toFixed(1)} ms; p95=${summary.p95.toFixed(1)} ms; max=${summary.maximum.toFixed(1)} ms`
+          });
+        }
+      }
+    }
   }
 
   private async logMemoryDiagnostics(
@@ -4457,7 +4472,7 @@ export class TypsastraWorkspaceController {
         `jsHeap=${heap?.usedJSHeapSize === undefined ? "unavailable" : `${mib(heap.usedJSHeapSize)} MiB (${delta(heap.usedJSHeapSize, previous?.jsHeapBytes)})`}`,
         `jsHeapTotal=${heap?.totalJSHeapSize === undefined ? "unavailable" : `${mib(heap.totalJSHeapSize)} MiB`}`,
         `pdf=${mib(preview.pdfBytes)} MiB/${preview.pdfPages} pages/gen ${preview.pdfGeneration}`,
-        `canvas=${preview.residentCanvases} (${mib(preview.canvasPixels * 4)} MiB estimated RGBA)`,
+        `finalCanvas=${preview.residentFinalCanvases}; mountedCanvas=${preview.residentCanvases} (${mib(preview.canvasPixels * 4)} MiB estimated RGBA)`,
         `fontFaces=${preview.fontFaces}`,
         `activeRenders=${preview.activeRenders}; pdfLoading=${preview.loading}`,
         `lastPdfBase64=${mib(this.lastPdfBase64.length * 2)} MiB estimated UTF-16`,

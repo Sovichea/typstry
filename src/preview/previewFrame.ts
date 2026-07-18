@@ -14,6 +14,7 @@ export type PreviewMemorySnapshot = {
   pdfBytes: number;
   pdfPages: number;
   residentCanvases: number;
+  residentFinalCanvases: number;
   canvasPixels: number;
   fontFaces: number;
   activeRenders: number;
@@ -21,7 +22,17 @@ export type PreviewMemorySnapshot = {
 };
 
 import { PERFORMANCE_BUDGETS, type PerformanceMetric } from "../performance/diagnostics";
-import { pageDimensionsChanged, pagesToEvict } from "./virtualization";
+import { pageDimensionsChanged, pagesToEvict, visiblePageIndexes } from "./virtualization";
+import { PreviewMotionController } from "./previewMotion";
+import {
+  PreviewRenderScheduler,
+  type PreviewRenderReason,
+  type PreviewRenderRequest
+} from "./previewRenderScheduler";
+import {
+  PreviewPageRenderOwnership,
+  type CleanablePdfPage
+} from "./previewPageRenderOwnership";
 import {
   TYPSASTRA_GREEN,
   TYPSASTRA_GREEN_RIPPLE_FILL,
@@ -44,7 +55,7 @@ type ActivePageRender = {
   generation: number;
   renderKey: string;
   task: { cancel(): void } | null;
-  page: { cleanup(): void } | null;
+  page: CleanablePdfPage | null;
   canvas: HTMLCanvasElement | null;
   canvasCommitted: boolean;
 };
@@ -75,11 +86,17 @@ export class PreviewFrame {
   private pdfDoc: any = null;
   private observer: IntersectionObserver | null = null;
   private pageDimensions = new Map<number, PageDimensions>();
+  private pageSlots: HTMLElement[] = [];
   private activeRenders = new Map<number, ActivePageRender>();
-  private queuedPageRenders = new Set<number>();
-  private renderQueueRunning = false;
-  private previewScrolling = false;
-  private scrollResumeTimer: number | null = null;
+  private readonly pageRenderOwnership = new PreviewPageRenderOwnership<CleanablePdfPage>();
+  private readonly renderScheduler = new PreviewRenderScheduler();
+  private readonly motion = new PreviewMotionController();
+  private renderDispatching = false;
+  private activeRenderLanes = 0;
+  private motionFrame: number | null = null;
+  private motionDestinationPage = 1;
+  private motionStartedAt: number | null = null;
+  private finalDecisionAt: number | null = null;
   private pdfGeneration = 0;
   private currentPdfBytes = 0;
   private firstRenderedGeneration = 0;
@@ -181,6 +198,7 @@ export class PreviewFrame {
       pdfBytes: this.currentPdfBytes,
       pdfPages: Number(this.pdfDoc?.numPages ?? 0),
       residentCanvases: canvases.length,
+      residentFinalCanvases: iframeDoc?.querySelectorAll(".pdf-page-canvas").length ?? 0,
       canvasPixels: canvases.reduce((total, canvas) => total + canvas.width * canvas.height, 0),
       fontFaces,
       activeRenders: this.activeRenders.size,
@@ -273,12 +291,12 @@ export class PreviewFrame {
         data: bytes,
         worker: this.pdfWorker as InstanceType<typeof pdfjs.PDFWorker>,
         ownerDocument: iframeDoc,
-        // WebView2 can retain native resources for dynamically installed
-        // FontFace objects after the PDF document has been destroyed. Render
-        // embedded glyphs as paths instead, which keeps repeated live-preview
-        // refreshes from growing the renderer working set.
-        disableFontFace: true,
+        // Browser FontFace rendering is substantially faster than rebuilding
+        // every embedded glyph from PDF path primitives. Page and document
+        // disposal below bound the lifetime of these resources.
+        disableFontFace: false,
         useSystemFonts: false,
+        enableHWA: true,
         cMapUrl: "/cmaps/",
         cMapPacked: true,
         standardFontDataUrl: "/standard_fonts/"
@@ -362,6 +380,7 @@ export class PreviewFrame {
     if (this.iframe) {
       releaseCanvasResources(this.iframe.contentDocument?.documentElement ?? null);
       this.iframe.remove();
+      this.pageSlots = [];
     }
     const iframe = document.createElement("iframe");
     iframe.className = "preview-frame";
@@ -416,6 +435,7 @@ export class PreviewFrame {
         slot.remove();
       }
     }
+    this.pageSlots = [...viewer.querySelectorAll<HTMLElement>(":scope > .pdf-page-container")];
     this.layoutPageSlots({ preserveExistingPages });
   }
 
@@ -473,8 +493,8 @@ export class PreviewFrame {
   }
 
   private async waitForScrollingToStop(pdfDoc: any, generation: number): Promise<void> {
-    while (this.previewScrolling && generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
-      await delay(40);
+    while (this.motion.current().state !== "idle" && generation === this.pdfGeneration && this.pdfDoc === pdfDoc) {
+      await delay(16);
     }
   }
 
@@ -495,11 +515,10 @@ export class PreviewFrame {
     this.observer = new Observer(entries => {
       for (const entry of entries) {
         const pageNo = Number((entry.target as HTMLElement).dataset.pageNo);
-        if (entry.isIntersecting) this.queuePageRender(pageNo);
-        else this.unrenderPage(pageNo);
+        if (entry.isIntersecting) this.queuePageRender(pageNo, 2, "directional-neighbor");
       }
     }, { root: null, rootMargin: "1000px 0px 1000px 0px", threshold: 0 });
-    doc.querySelectorAll(".pdf-page-container").forEach(slot => this.observer?.observe(slot));
+    this.pageSlots.forEach(slot => this.observer?.observe(slot));
   }
 
   private renderVisiblePages(): void {
@@ -509,68 +528,195 @@ export class PreviewFrame {
     for (const slot of doc.querySelectorAll<HTMLElement>(".pdf-page-container")) {
       const rect = slot.getBoundingClientRect();
       if (rect.bottom >= -1000 && rect.top <= viewportHeight + 1000) {
-        this.queuePageRender(Number(slot.dataset.pageNo));
+        this.queuePageRender(Number(slot.dataset.pageNo), 2, "directional-neighbor");
       }
     }
   }
 
-  private queuePageRender(pageNo: number): void {
-    if (!Number.isFinite(pageNo) || this.activeRenders.has(pageNo)) return;
+  private queuePageRender(
+    pageNo: number,
+    priority = 2,
+    reason: PreviewRenderReason = "directional-neighbor"
+  ): void {
+    if (!Number.isFinite(pageNo) || pageNo < 1 || pageNo > Number(this.pdfDoc?.numPages ?? 0)) return;
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
-    if (!slot || slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration)) return;
-    this.queuedPageRenders.add(pageNo);
-    if (!this.previewScrolling) void this.pumpPageRenderQueue();
+    if (!slot) return;
+    if (slot.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration)) return;
+    if (this.activeRenders.has(pageNo) && reason !== "settled-visible") return;
+    const result = this.renderScheduler.enqueue({
+      generation: this.pdfGeneration,
+      pageNo,
+      priority,
+      reason
+    });
+    if (result === "promoted") this.recordEvent("preview.render-promote", { pageNo });
+    const motion = this.motion.current();
+    if (motion.state !== "moving" || reason === "decelerating-destination") {
+      void this.pumpPageRenderQueue();
+    }
   }
 
-  private async pumpPageRenderQueue(): Promise<void> {
-    if (this.renderQueueRunning) return;
-    this.renderQueueRunning = true;
+  private pumpPageRenderQueue(): void {
+    if (this.renderDispatching) return;
+    this.renderDispatching = true;
     try {
-      while (!this.previewScrolling && this.queuedPageRenders.size > 0) {
-        const pageNo = this.nextQueuedPage();
-        if (pageNo === null) break;
-        this.queuedPageRenders.delete(pageNo);
-        await this.renderPage(pageNo, this.pdfGeneration);
-        await nextTurn();
+      while (this.activeRenderLanes < this.renderLaneLimit() && this.renderScheduler.size > 0) {
+        const motion = this.motion.current();
+        const request = this.renderScheduler.take(candidate => {
+          if (this.activeRenders.has(candidate.pageNo)) return false;
+          if (motion.state === "moving") {
+            return motion.shouldPreRender && candidate.reason === "decelerating-destination";
+          }
+          return motion.state !== "settling"
+            || candidate.reason === "decelerating-destination"
+            || candidate.reason === "settled-visible";
+        });
+        if (!request) break;
+        this.activeRenderLanes += 1;
+        void this.renderPage(request).finally(() => {
+          this.activeRenderLanes = Math.max(0, this.activeRenderLanes - 1);
+          void nextTurn().then(() => this.pumpPageRenderQueue());
+        });
       }
     } finally {
-      this.renderQueueRunning = false;
-      if (!this.previewScrolling && this.queuedPageRenders.size > 0) {
-        void this.pumpPageRenderQueue();
-      }
+      this.renderDispatching = false;
     }
   }
 
-  private nextQueuedPage(): number | null {
-    const doc = this.iframe?.contentDocument;
-    const viewportCenter = (this.iframe?.clientHeight ?? 0) / 2;
-    let closest: { pageNo: number; distance: number } | null = null;
-    for (const pageNo of this.queuedPageRenders) {
-      const slot = doc?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
-      if (!slot) continue;
-      const rect = slot.getBoundingClientRect();
-      const distance = Math.abs(rect.top + rect.height / 2 - viewportCenter);
-      if (!closest || distance < closest.distance) closest = { pageNo, distance };
-    }
-    return closest?.pageNo ?? this.queuedPageRenders.values().next().value ?? null;
+  private renderLaneLimit(): number {
+    return this.motion.current().state === "moving" ? 1 : 2;
   }
 
   private deferPageRenderingDuringScroll(): void {
-    if (!this.previewScrolling) {
-      this.previewScrolling = true;
-      this.cancelActivePageRenders();
+    const startedAt = performance.now();
+    const view = this.iframe?.contentWindow;
+    if (!view) return;
+    const wasIdle = this.motion.current().state === "idle";
+    const snapshot = this.motion.noteScroll(view.scrollY, startedAt);
+    if (wasIdle) {
+      this.motionStartedAt = startedAt;
+      this.finalDecisionAt = null;
     }
-    if (this.scrollResumeTimer !== null) window.clearTimeout(this.scrollResumeTimer);
-    this.scrollResumeTimer = window.setTimeout(() => {
-      this.scrollResumeTimer = null;
-      this.previewScrolling = false;
-      this.renderVisiblePages();
-      void this.pumpPageRenderQueue();
-    }, 120);
+    this.renderScheduler.removeReason("decelerating-destination");
+    this.renderScheduler.removeReason("settled-visible");
+    this.renderScheduler.removeReason("directional-neighbor");
+    const visiblePage = this.visiblePageNumber();
+    this.motionDestinationPage = snapshot.shouldPreRender
+      ? this.pageNumberAtScrollTop(snapshot.projectedScrollTop)
+      : visiblePage;
+    this.cancelDistantPageRenders(this.motionDestinationPage, 2);
+    if (snapshot.shouldPreRender) {
+      this.recordEvent("preview.deceleration-prerender", {
+        visiblePage,
+        projectedPage: this.motionDestinationPage,
+        velocity: Math.round(snapshot.velocity * 1000) / 1000,
+        acceleration: Math.round(snapshot.acceleration * 10000) / 10000,
+        samples: snapshot.deceleratingSamples
+      });
+      this.queuePageRender(this.motionDestinationPage, 0, "decelerating-destination");
+    }
+    if (this.motionFrame === null) this.motionFrame = requestAnimationFrame(timestamp => this.samplePreviewMotion(timestamp));
+    this.recordMetric("preview.motion-handler", performance.now() - startedAt, {
+      pageNo: this.motionDestinationPage,
+      velocity: Math.round(snapshot.velocity * 1000) / 1000
+    });
   }
 
-  private async renderPage(pageNo: number, generation: number): Promise<void> {
+  private samplePreviewMotion(timestamp: number): void {
+    this.motionFrame = null;
+    const view = this.iframe?.contentWindow;
+    if (!view) return;
+    const snapshot = this.motion.sampleFrame(view.scrollY, timestamp);
+    this.motionDestinationPage = snapshot.shouldPreRender
+      ? this.pageNumberAtScrollTop(snapshot.projectedScrollTop)
+      : this.visiblePageNumber();
+    if (snapshot.firstStableFrame) {
+      const settledAt = performance.now();
+      if (this.motionStartedAt !== null) {
+        this.recordMetric("preview.motion-settle", settledAt - this.motionStartedAt, {
+          pageNo: this.motionDestinationPage
+        });
+      }
+      const destinationAlreadyFinal = this.iframe?.contentDocument
+        ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${this.motionDestinationPage}"]`)
+        ?.dataset.renderKey === this.currentPageRenderKey(this.pdfGeneration);
+      this.finalDecisionAt = destinationAlreadyFinal ? null : settledAt;
+      this.queueViewportFinalRenders("first-stable");
+    }
+    if (snapshot.becameIdle) {
+      this.queueViewportFinalRenders("idle-confirmation");
+      this.motionStartedAt = null;
+      void this.pumpPageRenderQueue();
+      return;
+    }
+    this.motionFrame = requestAnimationFrame(nextTimestamp => this.samplePreviewMotion(nextTimestamp));
+  }
+
+  private queueViewportFinalRenders(trigger: "first-stable" | "idle-confirmation"): void {
+    const visiblePages = this.viewportPageNumbers();
+    this.recordEvent("preview.destination-final-queue", {
+      pageNo: this.motionDestinationPage,
+      visiblePages: visiblePages.length,
+      trigger
+    });
+    for (const pageNo of visiblePages) {
+      this.queuePageRender(
+        pageNo,
+        pageNo === this.motionDestinationPage ? 0 : 1,
+        "settled-visible"
+      );
+    }
+  }
+
+  private visiblePageNumber(): number {
+    return this.pageNumberAtScrollTop(this.iframe?.contentWindow?.scrollY ?? 0);
+  }
+
+  private pageNumberAtScrollTop(scrollTop: number): number {
+    if (this.pageSlots.length === 0) return 1;
+    const view = this.iframe?.contentWindow;
+    const target = scrollTop + (view?.innerHeight ?? this.iframe?.clientHeight ?? 0) / 2;
+    let low = 0;
+    let high = this.pageSlots.length - 1;
+    while (low <= high) {
+      const middle = (low + high) >>> 1;
+      const slot = this.pageSlots[middle];
+      const top = slot.offsetTop;
+      const bottom = top + slot.offsetHeight;
+      if (target < top) high = middle - 1;
+      else if (target > bottom) low = middle + 1;
+      else return Number(slot.dataset.pageNo) || middle + 1;
+    }
+    const candidates = [high, low]
+      .filter(index => index >= 0 && index < this.pageSlots.length)
+      .map(index => {
+        const slot = this.pageSlots[index];
+        return {
+          pageNo: Number(slot.dataset.pageNo) || index + 1,
+          distance: Math.abs(slot.offsetTop + slot.offsetHeight / 2 - target)
+        };
+      })
+      .sort((left, right) => left.distance - right.distance);
+    return candidates[0]?.pageNo ?? 1;
+  }
+
+  private viewportPageNumbers(): number[] {
+    if (this.pageSlots.length === 0) return [];
+    const view = this.iframe?.contentWindow;
+    const viewportTop = view?.scrollY ?? 0;
+    const viewportHeight = view?.innerHeight ?? this.iframe?.clientHeight ?? 0;
+    return visiblePageIndexes(
+      this.pageSlots.length,
+      index => this.pageSlots[index].offsetTop,
+      index => this.pageSlots[index].offsetHeight,
+      viewportTop,
+      viewportHeight
+    ).map(index => Number(this.pageSlots[index].dataset.pageNo) || index + 1);
+  }
+
+  private async renderPage(request: PreviewRenderRequest): Promise<void> {
+    const { pageNo, generation } = request;
     if (!this.pdfDoc || generation !== this.pdfGeneration || this.activeRenders.has(pageNo)) return;
     const doc = this.iframe?.contentDocument;
     const slot = doc?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`);
@@ -591,6 +737,7 @@ export class PreviewFrame {
     try {
       const page = await this.pdfDoc.getPage(pageNo);
       active.page = page;
+      this.pageRenderOwnership.retain(page);
       if (!this.renderIsCurrent(pageNo, active, slot)) return;
 
       const cssScale = this.previewZoomPercent / 100;
@@ -603,9 +750,7 @@ export class PreviewFrame {
       canvas.width = Math.max(1, Math.floor(renderViewport.width));
       canvas.height = Math.max(1, Math.floor(renderViewport.height));
 
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context) throw new Error("Canvas rendering is unavailable.");
-      const task = page.render({ canvasContext: context, viewport: renderViewport });
+      const task = page.render({ canvas, viewport: renderViewport });
       active.task = task;
       const canvasStartedAt = performance.now();
       await task.promise;
@@ -616,10 +761,9 @@ export class PreviewFrame {
         milliseconds: performance.now() - canvasStartedAt,
         detail: { pageNo, zoomPercent: this.previewZoomPercent }
       });
-      replaceElementChildren(slot, canvas);
+      this.commitFinalCanvas(slot, canvas);
       active.canvasCommitted = true;
       slot.dataset.renderKey = renderKey;
-      delete slot.dataset.renderGeneration;
 
       const annotationStartedAt = performance.now();
       const annotationLinks = await this.renderAnnotationLinks(page, cssViewport, doc);
@@ -630,10 +774,13 @@ export class PreviewFrame {
         detail: { pageNo, linkCount: annotationLinks.length }
       });
 
-      replaceElementChildren(slot, canvas, ...annotationLinks);
+      this.commitFinalCanvas(slot, canvas, annotationLinks);
       slot.dataset.renderKey = renderKey;
-      delete slot.dataset.renderGeneration;
       this.trimResidentPages(pageNo);
+      if (pageNo === this.motionDestinationPage && this.finalDecisionAt !== null) {
+        this.recordMetric("preview.destination-final-commit", performance.now() - this.finalDecisionAt, { pageNo });
+        this.finalDecisionAt = null;
+      }
       const isFirstRenderedPage = this.firstRenderedGeneration !== generation;
       if (isFirstRenderedPage) this.firstRenderedGeneration = generation;
       this.onPerformance?.({
@@ -655,7 +802,7 @@ export class PreviewFrame {
       }
     } finally {
       if (this.activeRenders.get(pageNo) === active) this.activeRenders.delete(pageNo);
-      active.page?.cleanup();
+      if (active.page) this.pageRenderOwnership.release(active.page);
       if (active.canvas && !active.canvasCommitted) releaseCanvas(active.canvas);
     }
   }
@@ -696,16 +843,31 @@ export class PreviewFrame {
     return `${generation}:${this.previewZoomPercent}:${outputScale}`;
   }
 
-  private unrenderPage(pageNo: number): void {
-    this.queuedPageRenders.delete(pageNo);
+  private commitFinalCanvas(slot: HTMLElement, canvas: HTMLCanvasElement, annotations: HTMLElement[] = []): void {
+    for (const child of [...slot.children]) {
+      if (child === canvas) continue;
+      releaseCanvasResources(child);
+      child.remove();
+    }
+    if (!canvas.isConnected) slot.append(canvas);
+    for (const annotation of annotations) slot.append(annotation);
+  }
+
+  private releaseFinalPage(pageNo: number): void {
+    this.renderScheduler.remove(this.pdfGeneration, pageNo);
     const active = this.activeRenders.get(pageNo);
-    active?.task?.cancel();
-    active?.page?.cleanup();
-    this.activeRenders.delete(pageNo);
+    if (active) {
+      active.task?.cancel();
+      this.recordEvent("preview.render-cancel", { pageNo });
+      this.activeRenders.delete(pageNo);
+    }
     const slot = this.iframe?.contentDocument
       ?.querySelector<HTMLElement>(`.pdf-page-container[data-page-no="${pageNo}"]`)
     if (!slot) return;
-    replaceElementChildren(slot);
+    for (const child of [...slot.children]) {
+      releaseCanvasResources(child);
+      child.remove();
+    }
     delete slot.dataset.renderKey;
   }
 
@@ -721,25 +883,42 @@ export class PreviewFrame {
     const rendered = this.renderedPageNumbers();
     if (rendered.length <= PERFORMANCE_BUDGETS.maxResidentPdfPages) return;
     pagesToEvict(rendered, focusPage, PERFORMANCE_BUDGETS.maxResidentPdfPages)
-      .forEach(pageNo => this.unrenderPage(pageNo));
+      .forEach(pageNo => this.releaseFinalPage(pageNo));
   }
 
   private cancelAllPageRenders(): void {
-    this.queuedPageRenders.clear();
-    this.previewScrolling = false;
-    if (this.scrollResumeTimer !== null) {
-      window.clearTimeout(this.scrollResumeTimer);
-      this.scrollResumeTimer = null;
-    }
+    this.renderScheduler.clear();
+    if (this.motionFrame !== null) cancelAnimationFrame(this.motionFrame);
+    this.motionFrame = null;
+    this.motion.reset(this.iframe?.contentWindow?.scrollY ?? 0, performance.now());
+    this.motionStartedAt = null;
+    this.finalDecisionAt = null;
     this.cancelActivePageRenders();
   }
 
   private cancelActivePageRenders(): void {
     for (const [pageNo, render] of this.activeRenders) {
       render.task?.cancel();
-      render.page?.cleanup();
+      this.recordEvent("preview.render-cancel", { pageNo });
       this.activeRenders.delete(pageNo);
     }
+  }
+
+  private cancelDistantPageRenders(focusPage: number, radius: number): void {
+    for (const [pageNo, render] of this.activeRenders) {
+      if (Math.abs(pageNo - focusPage) <= radius) continue;
+      render.task?.cancel();
+      this.recordEvent("preview.render-cancel", { pageNo });
+      this.activeRenders.delete(pageNo);
+    }
+  }
+
+  private recordMetric(name: PerformanceMetric["name"], milliseconds: number, detail: Record<string, string | number | boolean>): void {
+    this.onPerformance?.({ name, milliseconds, detail });
+  }
+
+  private recordEvent(name: PerformanceMetric["name"], detail: Record<string, string | number | boolean>): void {
+    this.onPerformance?.({ name, detail });
   }
 
   private async disposePdfDocument(): Promise<void> {
@@ -757,6 +936,7 @@ export class PreviewFrame {
       try { await pendingLoadingTask.destroy(); } catch {}
     }
     this.pageDimensions.clear();
+    this.pageSlots = [];
   }
 
   public scrollToPage(pageNo: number): void {
@@ -846,8 +1026,13 @@ export class PreviewFrame {
     this.syncTheme();
     if (doc.documentElement.dataset.typsastraInteractions === "true") return;
     doc.documentElement.dataset.typsastraInteractions = "true";
+    this.motion.reset(this.iframe?.contentWindow?.scrollY ?? 0, performance.now());
     this.debugInverse(`Interaction listener installed: readyState=${doc.readyState}, url=${doc.URL || "(empty)"}.`);
     doc.addEventListener("contextmenu", event => event.preventDefault());
+    doc.addEventListener("pointerdown", () => this.motion.setPointerDown(true), true);
+    this.iframe?.contentWindow?.addEventListener("pointerup", () => this.motion.setPointerDown(false), true);
+    this.iframe?.contentWindow?.addEventListener("pointercancel", () => this.motion.setPointerDown(false), true);
+    this.iframe?.contentWindow?.addEventListener("blur", () => this.motion.setPointerDown(false));
     doc.addEventListener("click", event => {
       const target = event.target as Element | null;
       const slot = target?.closest<HTMLElement>(".pdf-page-container");

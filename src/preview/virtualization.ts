@@ -23,3 +23,40 @@ export function pageDimensionsChanged(
     || Math.abs(previous.width - next.width) > tolerance
     || Math.abs(previous.height - next.height) > tolerance;
 }
+
+export function visiblePageIndexes(
+  pageCount: number,
+  pageTop: (index: number) => number,
+  pageHeight: (index: number) => number,
+  viewportTop: number,
+  viewportHeight: number
+): number[] {
+  if (pageCount <= 0 || viewportHeight <= 0) return [];
+  const viewportBottom = viewportTop + viewportHeight;
+  let low = 0;
+  let high = pageCount - 1;
+  let first = pageCount;
+  while (low <= high) {
+    const middle = (low + high) >>> 1;
+    if (pageTop(middle) + pageHeight(middle) > viewportTop) {
+      first = middle;
+      high = middle - 1;
+    } else {
+      low = middle + 1;
+    }
+  }
+
+  const visible: Array<{ index: number; pixels: number }> = [];
+  for (let index = first; index < pageCount; index += 1) {
+    const top = pageTop(index);
+    if (top >= viewportBottom) break;
+    const bottom = top + pageHeight(index);
+    visible.push({
+      index,
+      pixels: Math.max(0, Math.min(bottom, viewportBottom) - Math.max(top, viewportTop))
+    });
+  }
+  return visible
+    .sort((left, right) => right.pixels - left.pixels || left.index - right.index)
+    .map(page => page.index);
+}

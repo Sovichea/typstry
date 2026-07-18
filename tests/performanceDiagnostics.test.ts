@@ -16,6 +16,20 @@ describe("performance diagnostics", () => {
     expect(samples).toEqual([4, 1, 3, 2, 100]);
   });
 
+  test("reports bounded rolling summaries by metric", () => {
+    const diagnostics = new PerformanceDiagnostics();
+    for (const milliseconds of [4, 1, 3, 2, 100]) {
+      diagnostics.record({ name: "preview.motion-handler", milliseconds });
+    }
+    expect(diagnostics.summary("preview.motion-handler")).toEqual({
+      samples: 5,
+      p50: 3,
+      p95: 100,
+      maximum: 100
+    });
+    expect(diagnostics.summary("preview.motion-settle")).toBeNull();
+  });
+
   test("keeps resident PDF pages and queued language work explicitly bounded", () => {
     expect(PERFORMANCE_BUDGETS.maxResidentPdfPages).toBeLessThanOrEqual(7);
     expect(PERFORMANCE_BUDGETS.maxQueuedLanguageRequests).toBe(1);

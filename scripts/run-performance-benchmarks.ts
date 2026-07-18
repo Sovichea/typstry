@@ -8,7 +8,7 @@ import { PERFORMANCE_BUDGETS } from "../src/performance/diagnostics";
 
 const root = process.cwd();
 const output = join(root, "artifacts", "performance");
-const fixtures = ["01-page", "30-pages", "100-pages"] as const;
+const fixtures = ["01-page", "20-pages-interaction", "30-pages", "100-pages"] as const;
 const compileIterations = 5;
 const incrementalIterations = 10;
 
@@ -151,6 +151,7 @@ const report = {
 };
 
 const one = report.compile.warm["01-page"];
+const interaction = report.compile.warm["20-pages-interaction"];
 const thirty = report.compile.warm["30-pages"];
 const hundred = report.compile.warm["100-pages"];
 const spellcheck = report.incrementalSpellcheck.timing;
@@ -182,6 +183,7 @@ Each warm compiler result contains ${compileIterations} fresh Typst CLI processe
 | Workload | Minimum | Median | p95 / maximum |
 |---|---:|---:|---:|
 | One-page compile | ${one.minimumMs.toFixed(2)} ms | ${one.medianMs.toFixed(2)} ms | ${one.p95Ms.toFixed(2)} ms |
+| 20-page multilingual interaction fixture compile | ${interaction.minimumMs.toFixed(2)} ms | ${interaction.medianMs.toFixed(2)} ms | ${interaction.p95Ms.toFixed(2)} ms |
 | 30-page compile | ${thirty.minimumMs.toFixed(2)} ms | ${thirty.medianMs.toFixed(2)} ms | ${thirty.p95Ms.toFixed(2)} ms |
 | 100-page compile | ${hundred.minimumMs.toFixed(2)} ms | ${hundred.medianMs.toFixed(2)} ms | ${hundred.p95Ms.toFixed(2)} ms |
 | 1,000 incremental range calculations | ${spellcheck.minimumMs.toFixed(2)} ms | ${spellcheck.medianMs.toFixed(2)} ms | ${spellcheck.p95Ms.toFixed(2)} ms |

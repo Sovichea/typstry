@@ -6,7 +6,7 @@ Ship Typsastra v1.0 as a dependable, complex-script-first research writing envir
 
 This plan complements the [complex-script-first implementation plan](./COMPLEX_SCRIPT_FIRST_IMPLEMENTATION_PLAN.md). That plan owns editor, language-provider, preview, and research-workflow architecture. This document owns only the remaining product work and release gates required for v1.0.
 
-The [PDF preview interaction implementation plan](./PDF_PREVIEW_INTERACTION_IMPLEMENTATION_PLAN.md) owns the remaining v1.0 gesture-scroll and scrollbar-release work. Its bounded draft-cache, render-priority, memory, and qualification gates are part of the v1.0 release gate.
+The [PDF preview interaction implementation plan](./PDF_PREVIEW_INTERACTION_IMPLEMENTATION_PLAN.md) owns the remaining v1.0 gesture-scroll and scrollbar-release work. Its bounded render concurrency, final-canvas residency, memory, and qualification gates are part of the v1.0 release gate.
 
 ## Release principles
 

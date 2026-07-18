@@ -65,7 +65,7 @@ Make Typsastra's document-engineering strengths easier to discover while adding 
 - A New Project wizard for blank, technical report, IEEE-style research paper, thesis, and book projects.
 - Crash-safe saving, persisted-state migrations, recovery, accessibility, installer verification, and cross-platform release gates.
 - Stability, bug fixes, data safety, and Khmer/complex-script regressions take priority over additional features.
-- Gesture scrolling and scrollbar-drag release meet the bounded draft-cache and visible-page latency gates in the [PDF preview interaction implementation plan](./PDF_PREVIEW_INTERACTION_IMPLEMENTATION_PLAN.md).
+- Gesture scrolling and scrollbar-drag release meet the visible-page latency, bounded-concurrency, and canvas-residency gates in the [PDF preview interaction implementation plan](./PDF_PREVIEW_INTERACTION_IMPLEMENTATION_PLAN.md).
 
 The detailed tasks and acceptance criteria are in the [v1.0 release implementation plan](./V1_RELEASE_IMPLEMENTATION_PLAN.md).
 

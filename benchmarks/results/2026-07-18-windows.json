@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-18T05:14:02.171Z",
+  "scope": "CLI compiler, incremental-range calculation, and built frontend artifacts; not total desktop runtime",
+  "source": {
+    "gitRevision": "d235150",
+    "workingTreeDirty": true
+  },
+  "machine": {
+    "platform": "win32",
+    "architecture": "x64",
+    "operatingSystem": "Windows_NT 10.0.26200",
+    "cpu": "Intel(R) Core(TM) Ultra 7 155H",
+    "logicalCpuCount": 22,
+    "totalMemoryBytes": 16507727872
+  },
+  "tools": {
+    "bun": "1.3.14",
+    "typst": "typst 0.15.0 (3ae52774)",
+    "tinymistPackage": "0.12.16"
+  },
+  "budgets": {
+    "usableEditorMs": 2500,
+    "providerInitializationMs": 2500,
+    "firstDiagnosticMs": 3000,
+    "previewCompileOnePageMs": 2000,
+    "previewFirstPageMs": 1000,
+    "visiblePageRenderMs": 500,
+    "zoomSettleMs": 750,
+    "previewMotionHandlerP95Ms": 8,
+    "finalDestinationPageP95Ms": 500,
+    "compilerRecoveryMs": 3000,
+    "spellcheckP95Ms": 100,
+    "suggestionP95Ms": 50,
+    "maxResidentPdfPages": 7,
+    "maxQueuedLanguageRequests": 1,
+    "maxRecordedMetrics": 1000
+  },
+  "compile": {
+    "iterationsPerFixture": 5,
+    "firstProcessOnePageMs": 535.78,
+    "warm": {
+      "01-page": {
+        "samples": [298.27, 297.24, 313.11, 304.73, 297.74],
+        "minimumMs": 297.24,
+        "medianMs": 298.27,
+        "p95Ms": 313.11,
+        "maximumMs": 313.11
+      },
+      "20-pages-interaction": {
+        "samples": [375.79, 356.22, 404.61, 333.95, 335.84],
+        "minimumMs": 333.95,
+        "medianMs": 356.22,
+        "p95Ms": 404.61,
+        "maximumMs": 404.61
+      },
+      "30-pages": {
+        "samples": [357.43, 350.87, 378.95, 402.24, 381.45],
+        "minimumMs": 350.87,
+        "medianMs": 378.95,
+        "p95Ms": 402.24,
+        "maximumMs": 402.24
+      },
+      "100-pages": {
+        "samples": [474.7, 474.24, 455.33, 470.26, 463.31],
+        "minimumMs": 455.33,
+        "medianMs": 470.26,
+        "p95Ms": 474.7,
+        "maximumMs": 474.7
+      }
+    }
+  },
+  "incrementalSpellcheck": {
+    "documentUtf16": 100000,
+    "editsPerIteration": 1000,
+    "iterations": 10,
+    "timing": {
+      "samples": [35.8, 18.51, 17.2, 17.87, 22.46, 18.29, 16.75, 18.51, 15.16, 22.9],
+      "minimumMs": 15.16,
+      "medianMs": 18.29,
+      "p95Ms": 35.8,
+      "maximumMs": 35.8
+    },
+    "maximumSubmittedUtf16": 32
+  },
+  "artifacts": {
+    "frontendDistBytes": 4094829
+  },
+  "limitations": [
+    "The first-process compile does not clear operating-system filesystem caches.",
+    "Typst CLI process timings are not equivalent to in-app Tinymist preview latency.",
+    "Frontend dist size is not installer size.",
+    "Desktop, WebView, PDF renderer, GPU, and Tinymist memory are not measured by this harness."
+  ]
+}
