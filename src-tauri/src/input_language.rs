@@ -85,11 +85,13 @@ fn platform_input_language() -> InputLanguageStatus {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn platform_input_language() -> InputLanguageStatus {
+    let language_tag = std::env::var("LANG")
+        .ok()
+        .and_then(|value| normalize_tag(&value));
+    let reliable = language_tag.is_some();
     InputLanguageStatus {
-        language_tag: std::env::var("LANG")
-            .ok()
-            .and_then(|value| normalize_tag(&value)),
-        reliability: "unmapped",
+        language_tag,
+        reliability: if reliable { "reliable" } else { "unmapped" },
         source: "linux-locale-fallback",
     }
 }
