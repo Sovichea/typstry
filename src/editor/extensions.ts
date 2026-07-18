@@ -1,6 +1,6 @@
 import { Extension, Compartment, EditorState, StateEffect, RangeSetBuilder, Prec } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, WidgetType } from "@codemirror/view";
+import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, insertTab } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
 import { baseEditorLayoutTheme, editorFontTheme, typstColorHighlighting, typstFontHighlighting, typstFunctionHighlighting, typstSemanticHighlighting, typstVariableHighlighting } from "./themes";
@@ -183,34 +183,16 @@ export const ctrlClickLinkPlugin = ViewPlugin.fromClass(class {
   }
 });
 
-
-class InvisibleBlockWidget extends WidgetType {
-  toDOM() {
-    const span = document.createElement("span");
-    span.className = "cm-invisible-block-widget";
-    return span;
-  }
-  eq(_other: InvisibleBlockWidget) { return true; }
-  ignoreEvent() { return false; }
-}
-
-class ZWSWidget extends WidgetType {
-  toDOM() {
-    const span = document.createElement("span");
-    span.className = "cm-zws-widget";
-    return span;
-  }
-  eq(_other: ZWSWidget) { return true; }
-  ignoreEvent() { return false; }
-}
-
-const zwsDecoration = Decoration.widget({
-  widget: new ZWSWidget(),
-  side: -1
+const zwsMark = Decoration.mark({
+  class: "cm-zws-mark"
 });
 
-const invisibleBlockDecoration = Decoration.replace({
-  widget: new InvisibleBlockWidget()
+const invisibleBlockMark = Decoration.mark({
+  class: "cm-invisible-block-mark"
+});
+
+const trailingSpaceDecoration = Decoration.mark({
+  class: "cm-trailing-space-mark"
 });
 
 const showZeroWidthSpacesPlugin = ViewPlugin.fromClass(class {
@@ -235,9 +217,9 @@ const showZeroWidthSpacesPlugin = ViewPlugin.fromClass(class {
       for (let i = 0; i < text.length; i++) {
         const char = text[i];
         if (char === "\u200b" || char === "\u200c") {
-          ranges.push({ from: from + i, to: from + i + 1, deco: zwsDecoration });
+          ranges.push({ from: from + i, to: from + i + 1, deco: zwsMark });
         } else if (char === "\u00ad" || char === "\u200d" || char === "\u200e" || char === "\u200f" || char === "\u2060") {
-          ranges.push({ from: from + i, to: from + i + 1, deco: invisibleBlockDecoration });
+          ranges.push({ from: from + i, to: from + i + 1, deco: invisibleBlockMark });
         }
       }
 
@@ -249,8 +231,8 @@ const showZeroWidthSpacesPlugin = ViewPlugin.fromClass(class {
           const trailingTo = line.to;
           const start = Math.max(trailingFrom, from);
           const end = Math.min(trailingTo, to);
-          for (let pos = start; pos < end; pos++) {
-            ranges.push({ from: pos, to: pos + 1, deco: invisibleBlockDecoration });
+          if (start < end) {
+            ranges.push({ from: start, to: end, deco: trailingSpaceDecoration });
           }
         }
         if (line.to >= to || line.number >= view.state.doc.lines) break;

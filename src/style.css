@@ -2977,11 +2977,11 @@ button.welcome-item:disabled {
   text-underline-offset: 3px;
 }
 
-.cm-zws-widget {
+.cm-zws-mark::before {
+  content: "";
   display: inline-block;
   width: 4px;
   height: 4px;
-  line-height: 1;
   background-color: var(--editor-cursor-contrast-color, #ef4444);
   border-radius: 50%;
   vertical-align: middle;
@@ -2989,18 +2989,24 @@ button.welcome-item:disabled {
   opacity: 0.7;
 }
 
-.cm-invisible-block-widget {
+.cm-invisible-block-mark::before {
+  content: "";
   display: inline-block;
   width: 1ch;
-  height: 1em;
-  max-height: 1em;
-  line-height: 1;
+  height: 0.85em;
   background-color: color-mix(in srgb, var(--editor-cursor-contrast-color, #ef4444) 52%, transparent);
   border: 1px solid color-mix(in srgb, var(--editor-cursor-contrast-color, #ef4444) 70%, transparent);
   border-radius: 2px;
-  vertical-align: -0.08em;
+  vertical-align: middle;
   box-sizing: border-box;
   opacity: 0.8;
+  margin: 0 1px;
+}
+
+.cm-trailing-space-mark {
+  background-color: color-mix(in srgb, var(--editor-cursor-contrast-color, #ef4444) 52%, transparent);
+  border: 1px solid color-mix(in srgb, var(--editor-cursor-contrast-color, #ef4444) 70%, transparent);
+  border-radius: 2px;
 }
 
 .cm-tooltip-autocomplete {
