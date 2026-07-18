@@ -14,7 +14,8 @@ Available packages:
 - Linux: `.AppImage` and `.deb`
 - macOS: experimental build
 
-Typsastra is currently beta software. The latest public release is v0.4.1.
+Typsastra is currently beta software. The latest public release is v0.4.1;
+the main branch is the v0.5.0 development line.
 
 [![Release](https://img.shields.io/github/v/release/Sovichea/typsastra?include_prereleases)](https://github.com/Sovichea/typsastra/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -102,10 +103,14 @@ Typsastra also treats a document as a project rather than an isolated file. A re
 - Lao language support with ICU4X word segmentation and optional `lo_LA` Hunspell dictionary.
 - English spellcheck bundled by default, with optional Hunspell-compatible dictionaries for additional languages.
 - Independent controls for script-aware editing, spellcheck, and typing suggestions.
+- Typst language-scope-aware spellcheck with keyboard-language-aware completion.
 - Tinymist diagnostics and managed Typst tooling.
-- Virtualized PDF preview designed for long documents and constrained memory use.
+- Hardware-accelerated, virtualized PDF preview designed for responsive long-document scrolling and constrained memory use.
+- Direct in-app PDF viewing with editable current-page navigation.
 - Main-document preview workflows for multi-file projects.
 - Explicit source-to-preview navigation through the preview toolbar or keyboard shortcut.
+- Portable `.typsastra` workspace state, lazy restored tabs, and confirmation before loading large files.
+- Searchable recent-project history, signed update detection, and explicit Tinymist lifecycle management.
 - Workspace support for templates, chapters, includes, bibliography files, figures, and external assets.
 - Contributor framework for adding new complex-script languages without modifying core editor code.
 
@@ -144,8 +149,8 @@ switching never move the preview unexpectedly. To reveal the editor cursor in
 the preview, use the **Reveal Cursor in Preview** button in the preview toolbar,
 or press:
 
-- Windows and Linux: `Ctrl+Alt+P`
-- macOS: `Cmd+Option+P`
+- Windows and Linux: `Alt+Enter`
+- macOS: `Option+Enter`
 
 Tinymist currently resolves this action to the correct PDF page and source line,
 with the preview ripple appearing at the beginning of that line. Exact horizontal
@@ -190,7 +195,7 @@ Typsastra downloads and manages Tinymist for preview and diagnostics. A separate
 - [Research-document workflows](./docs/RESEARCH_DOCUMENT_WORKFLOWS.md)
 - [Reliability and performance gates](./docs/PERFORMANCE_GATES.md)
 - [Published benchmark results](./docs/BENCHMARKS.md)
-- [Typsastra v0.4.1 release notes](./docs/RELEASE_NOTES_V0.4.1.md)
+- [Draft Typsastra v0.5.0 release notes](./docs/RELEASE_NOTES_V0.5.0.md)
 
 ## Contributing a language
 

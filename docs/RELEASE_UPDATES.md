@@ -53,7 +53,7 @@ Run the desktop application with a simulated newer version:
 bun run tauri:dev:update
 ```
 
-This opens the normal development application with an `Update v0.5.0` badge.
+This opens the normal development application with an `Update v0.6.0` badge.
 Clicking it exercises the production confirmation dialog, unsaved-change warning,
 and download/install progress states. The final step reports completion without
 downloading an installer, closing the development process, or modifying the

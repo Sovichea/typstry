@@ -106,7 +106,12 @@ This file serves as a consolidated reference for the architectural decisions, pa
 - Lao is the second portability implementation: installed `lo_LA` Hunspell data is tokenized by ICU4X and advertised as experimental enhanced support. Lao uses the Unicode editing baseline and registers no script policy, so Khmer ownership and behavior remain unchanged. See `LAO_LANGUAGE_SUPPORT.md`.
 - If that chapter's main document applies a local `#show: function.with(...)` template, `prepareTemplateAwarePreview()` maintains a hidden workspace-root entry that imports the template and includes the chapter. Managed preview files are excluded from dependency scanning and removed on project boundaries.
 - Standalone chapter entries install targeted `show ref.where(...)` placeholders for references whose labels are outside the chapter. The active chapter is still pinned to its real main document for LSP completion; placeholder-managed missing-label diagnostics are filtered without altering source.
-- Pinning main-file context is a lifecycle operation: open the chapter, execute `tinymist.pinMain`, clear stale diagnostics, and send a new versioned `didChange`. Repeat after preview startup/restart because Tinymist can replace compiler context.
+- Changing the configured main file is a process lifecycle operation: cancel
+  stale render preparation, terminate the existing Tinymist process, clear open
+  documents, diagnostics, preview tasks, and source-map sockets, then start a
+  fresh process for the new document graph. Ordinary tab activation within the
+  same main-document project may reuse the process and execute `tinymist.pinMain`
+  followed by a versioned `didChange`.
 - Forward sync sends the source location directly to the matching preview task. Inverse sync honors the URI reported by Tinymist and switches source files before placing a collapsed cursor.
 
 ### E. WYSIWYM Mode

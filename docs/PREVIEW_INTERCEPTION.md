@@ -26,6 +26,9 @@ Forward sync starts only from the explicit **Reveal Cursor in Preview** toolbar
 action or its keyboard shortcut. Cursor movement and tab activation never
 request preview scrolling.
 
+- Windows and Linux: `Alt+Enter`
+- macOS: `Option+Enter`
+
 1. Typsastra maps the editor cursor to the source file that Tinymist sees. If Khmer render preparation is active, this may be a generated cache file.
 2. Typsastra sends a `panelScrollTo` request to a Tinymist source-map preview task.
    If the exact cursor boundary is not mappable, it tries a bounded set of

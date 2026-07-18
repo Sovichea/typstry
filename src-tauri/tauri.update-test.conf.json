@@ -1,5 +1,5 @@
 {
   "build": {
-    "devUrl": "http://127.0.0.1:1420/?test-app-update=0.5.0"
+    "devUrl": "http://127.0.0.1:1420/?test-app-update=0.6.0"
   }
 }

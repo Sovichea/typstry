@@ -1,26 +1,29 @@
 # Roadmap
 
-## v0.4.x — stabilization
+## v0.4.x — completed stabilization line
 
-The v0.4.x line builds on the current feature set. Its priorities are:
+The v0.4.x line built on the existing feature set. Its priorities were:
 
 - Bug fixes and regression prevention, especially for Unicode, Khmer, project workflows, preview, and data safety.
 - Performance, responsiveness, memory use, and startup/build optimization.
 - A limited number of minor features that extend existing workflows without introducing a new architectural track.
 - No major editor subsystem or broad language-support expansion; larger features move to v0.5.0 or later.
 
-## v0.5.0 — right-to-left writing
+The last public release in this line is v0.4.1. Development after that tag is
+assigned to v0.5.0 because it introduces new subsystems and intentional pre-1.0
+format changes rather than another stabilization patch.
 
-Introduce first-class right-to-left (RTL) editing as the next major Unicode-writing milestone, covering Arabic-family scripts, Hebrew, and mixed-direction research documents.
+## v0.5.0 — multilingual foundations
 
-- Establish an RTL conformance suite before adding custom behavior, including Arabic and Hebrew prose, combining marks, selections, cursor movement, deletion, search, copy/paste, and multi-cursor edits.
-- Support automatic, LTR, and RTL paragraph direction without reimplementing the Unicode Bidirectional Algorithm.
-- Make mixed-direction content reliable when RTL prose contains Latin citations, URLs, numbers, equations, and Typst syntax.
-- Add direction-aware alignment and editor controls, plus explicit Unicode direction-isolate commands for ambiguous mixed-direction text.
-- Verify diagnostics, completion, spellcheck ranges, source navigation, and editor-to-preview synchronization under bidi layout.
-- Keep text direction, script-specific editing policies, language tools, and Typst rendering as separate architectural concerns.
-- Add RTL-aware font coverage and recommendations without changing the user's chosen typography automatically.
-- Preserve Khmer, Lao, other complex-script, and ordinary LTR editing behavior through regression tests.
+The current development line has completed the foundations needed for broader
+multilingual work:
+
+- Typst language-scope-aware spellcheck with fail-closed provider warnings.
+- Keyboard-language-aware word completion and scoped terminology.
+- Hardware-accelerated, motion-aware PDF rendering with immediate page jumps.
+- Portable workspace state, lazy restored tabs, and guarded large-file loading.
+- Font-free schema-v2 project archives and explicit Tinymist process lifecycle.
+- Signed update detection, recent-project search, pane keyboard navigation, and cross-platform application refinements.
 
 ## v0.6.0 — research productivity and discoverability
 
@@ -36,8 +39,21 @@ Make Typsastra's document-engineering strengths easier to discover while adding 
 - Improve feature visibility with short demonstrations of complex-script editing, included-file preview ownership, source synchronization, language installation, long-document virtualization, and compiler-failure recovery.
 - Add an onboarding project that deliberately demonstrates Khmer and mixed-script editing, Unicode-safe navigation, project structure, bibliography/figure relationships, and preview behavior.
 
-- [ ] **v0.9.0 prerelease:** Rebuild and re-enable automatic forward sync only after rapid-click, long-paragraph, included-file, persistent data-plane, timeout, and source-offset reliability tests pass. Explicit toolbar/keyboard forward sync is available; cursor-driven scrolling remains disabled before this milestone.
-- [ ] Improve manual forward sync beyond Tinymist's current page-and-line result when the compiler can provide a reliable exact cursor x/y coordinate; do not use PDF text matching as a fallback.
+## v0.9.0 — pre-release hardening and right-to-left writing
+
+Introduce first-class right-to-left (RTL) editing as a pre-release milestone
+covering Arabic-family scripts, Hebrew, and mixed-direction research documents.
+
+- Establish an RTL conformance suite before adding custom behavior, including Arabic and Hebrew prose, combining marks, selections, cursor movement, deletion, search, copy/paste, and multi-cursor edits.
+- Support automatic, LTR, and RTL paragraph direction without reimplementing the Unicode Bidirectional Algorithm.
+- Make mixed-direction content reliable when RTL prose contains Latin citations, URLs, numbers, equations, and Typst syntax.
+- Add direction-aware alignment and editor controls, plus explicit Unicode direction-isolate commands for ambiguous mixed-direction text.
+- Verify diagnostics, completion, spellcheck ranges, source navigation, and editor-to-preview synchronization under bidi layout.
+- Keep text direction, script-specific editing policies, language tools, and Typst rendering as separate architectural concerns.
+- Add RTL-aware font coverage and recommendations without changing the user's chosen typography automatically.
+- Preserve Khmer, Lao, other complex-script, and ordinary LTR editing behavior through regression tests.
+- Rebuild and re-enable automatic forward sync only after rapid-click, long-paragraph, included-file, persistent data-plane, timeout, and source-offset reliability tests pass. Explicit toolbar/keyboard forward sync remains available before this milestone.
+- Improve manual forward sync beyond Tinymist's current page-and-line result when the compiler can provide a reliable exact cursor x/y coordinate; do not use PDF text matching as a fallback.
 
 ## Completed
 
@@ -57,10 +73,18 @@ Make Typsastra's document-engineering strengths easier to discover while adding 
 - Writable Unicode-focused example workspace.
 - GitHub Actions workflow for automated builds.
 - Linux build verification.
+- Scope-aware multilingual spellcheck and keyboard-language completion.
+- Searchable recent-project history with bounded workspace restoration.
+- Direct PDF viewing and hardware-accelerated, motion-aware PDF preview.
+- Signed update detection, About information, and macOS traffic-light controls.
+- Portable `.typsastra` state and font-free schema-v2 project archives.
+- Explicit Tinymist termination and restart across project ownership changes.
 
 ## v1.0 priorities
 
-- Version-bound `.typsastra` project export with all exact render fonts embedded, secure project import, project-local font loading, and installer-registered double-click import using the Typsastra icon.
+- Version-bound, font-free `.typsastra` project export with secure import,
+  explicit external-font requirements, and installer-registered double-click
+  import using the Typsastra icon.
 - Per-workspace managed toolchain selection with an explicit compatibility warning when overridden.
 - A New Project wizard for blank, technical report, IEEE-style research paper, thesis, and book projects.
 - Crash-safe saving, persisted-state migrations, recovery, accessibility, installer verification, and cross-platform release gates.
@@ -90,4 +114,6 @@ The long-term research tasks and gates are in the [v2 implementation plan](./V2_
 
 ## Current release status
 
-Typsastra is beta software. The latest public release is v0.4.1.
+Typsastra is beta software. The latest public release is v0.4.1. The main branch
+is the v0.5.0 development line; see the
+[draft release notes](./RELEASE_NOTES_V0.5.0.md).

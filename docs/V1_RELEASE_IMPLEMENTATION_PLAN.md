@@ -385,7 +385,8 @@ Post-v1.0 work is tracked separately:
 ## Recommended priority order
 
 1. Finish `V1-S` foundations that protect user data.
-2. Implement the versioned archive contract, secure import preflight, and self-contained font packaging.
+2. Maintain the versioned font-free archive contract, secure import preflight,
+   and explicit external-font dependency reporting.
 3. Implement workspace-bound toolchain selection and download flow.
 4. Complete transactional import/export, file association, and cross-platform tests.
 5. Implement the shared new-project service and blank template.

@@ -5,7 +5,11 @@ Revision: `d235150` (working tree had uncommitted changes)
 
 ## Scope
 
-This report measures CLI compiler process time, incremental spellcheck-range calculation, and built frontend artifact size. It does **not** claim to measure total Typsastra desktop memory, end-to-end WebView preview latency, gesture smoothness, or scrollbar-release latency.
+The automated report measures CLI compiler process time, incremental
+spellcheck-range calculation, and built frontend artifact size. A separate
+manual observation below records desktop memory behavior; it is not produced by
+the benchmark harness. The report does **not** claim automated end-to-end WebView
+preview latency, gesture smoothness, or scrollbar-release timing.
 
 ## Machine and tools
 
@@ -60,6 +64,37 @@ The v1.0 targets remain:
 
 Manual Windows/WebView2 A/B qualification selected PDF.js hardware acceleration with direct canvas ownership and browser FontFace rendering. It was materially faster than path-based embedded-glyph rendering. Gesture deceleration, split-page settle rendering, and native scrollbar-release fallback were then qualified interactively. This is observational qualification, not a published timing benchmark.
 
+## Manual 200-page memory observation
+
+On the same Windows development machine, the same approximately 200-page Typst
+document was opened in the Typsastra development build and in the local Visual
+Studio Code/Tinymist SVG-preview setup. Windows Task Manager working-set values
+were recorded after compilation and during the following idle observation.
+
+| Observation | Application / renderer | Tinymist | Development server | Approximate total |
+|---|---:|---:|---:|---:|
+| Typsastra peak capture | 613.8 MiB | 214.4 MiB | 433.4 MiB | 1,261.6 MiB |
+| Typsastra later capture | 528.4 MiB | 214.2 MiB | 303.7 MiB | 1,046.3 MiB |
+| Typsastra later capture, excluding dev server | 528.4 MiB | 214.2 MiB | — | 742.6 MiB |
+| VS Code initial capture | 887.7 MiB | 423.7 MiB | included in VS Code group | 1,311.4 MiB |
+| VS Code later capture | 4,227.8 MiB | 265.0 MiB | included in VS Code group | 4,492.8 MiB |
+| VS Code final capture | 4,534.8 MiB | 263.0 MiB | included in VS Code group | 4,797.8 MiB |
+
+Typsastra's application/WebView working set fell after its peak while Tinymist
+remained close to 214 MiB. The observed VS Code process group continued growing
+through the final capture and did not reach a stable idle value. Its final
+combined observation was about 6.5 times Typsastra's later production-equivalent
+total, which excludes the Vite/Node development server.
+
+This comparison is evidence for the bounded PDF-canvas architecture on this
+fixture and machine, not a universal VS Code claim. The VS Code process group
+includes the user's installed extensions, Task Manager reports working set rather
+than a controlled private-byte process tree, input timing was not automated, and
+no raw sampling trace was captured. A separate 500-page stress attempt reached
+approximately 7 GiB in the observed VS Code environment and crashed before it
+settled; that attempt is recorded only as a stress observation, not a comparable
+benchmark result.
+
 ## Comparison with the 2026-07-13 run
 
 The current run is slower for the CLI fixtures and slightly faster for median incremental-range calculation. These are separate five-sample runs on a non-isolated development machine, so the differences should not be attributed to the preview scheduler implementation.
@@ -76,7 +111,8 @@ The current run is slower for the CLI fixtures and slightly faster for median in
 - The first-process compile does not clear operating-system filesystem caches.
 - Typst CLI process timings are not equivalent to in-app Tinymist preview latency.
 - Frontend `dist/` size is not installer size.
-- Desktop, WebView, PDF renderer, GPU, and Tinymist memory are not measured by this harness.
+- Desktop, WebView, PDF renderer, GPU, and Tinymist memory are not measured by
+  the automated harness. The manual table above is a Task Manager observation.
 - The working tree contained the preview interaction implementation being measured but had not yet been committed.
 
 ## Reproduce
