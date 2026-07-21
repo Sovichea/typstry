@@ -1776,6 +1776,60 @@ body.typsastra-resizing #input-container-wrapper::after {
   border-bottom: 1px solid var(--ui-border);
 }
 
+.document-typography-script-cell {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+}
+
+.document-typography-drag-handle {
+  position: relative;
+  width: 24px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ui-header-text);
+  background: transparent;
+  cursor: grab;
+}
+
+.document-typography-drag-handle::before {
+  content: "";
+  position: absolute;
+  inset: 7px 6px;
+  background: radial-gradient(circle, currentColor 1.25px, transparent 1.5px) 0 0 / 5px 5px;
+}
+
+.document-typography-drag-handle:hover,
+.document-typography-drag-handle:focus-visible {
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+  background: var(--ui-hover);
+}
+
+.document-typography-drag-handle:active {
+  cursor: grabbing;
+}
+
+.toolbar-font-fallback-row.is-dragging {
+  opacity: 0.55;
+  background: color-mix(in srgb, var(--ui-accent-color) 10%, transparent);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .document-typography-dialog {
   width: min(880px, 100%);
   height: min(620px, calc(100vh - 48px));
@@ -1952,6 +2006,10 @@ body.typsastra-resizing #input-container-wrapper::after {
     font-size: 9px;
     font-weight: 650;
     text-transform: uppercase;
+  }
+
+  .document-typography-script-cell::before {
+    grid-column: 1 / -1;
   }
 
   .document-typography-cell:nth-child(2),

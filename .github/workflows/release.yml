@@ -57,6 +57,19 @@ jobs:
         run: |
           bun -e 'const fs = require("fs"); const file = "src-tauri/tauri.conf.json"; const config = JSON.parse(fs.readFileSync(file, "utf8")); config.bundle.createUpdaterArtifacts = true; fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");'
 
+      - name: Load Versioned Release Notes
+        id: release-notes
+        shell: bash
+        run: |
+          version="$(bun -e 'console.log(require("./package.json").version)')"
+          notes="docs/RELEASE_NOTES_V${version}.md"
+          test -f "$notes"
+          {
+            echo 'body<<TYPSASTRA_RELEASE_NOTES'
+            cat "$notes"
+            echo 'TYPSASTRA_RELEASE_NOTES'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -66,7 +79,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'Typsastra v__VERSION__'
-          releaseBody: 'Typsastra v__VERSION__: a complex-script-first Typst environment for research and long-form multilingual writing. Khmer is the first deeply supported language.'
+          releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           tauriScript: bun run tauri

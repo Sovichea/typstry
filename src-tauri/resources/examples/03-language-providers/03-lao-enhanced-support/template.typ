@@ -1,6 +1,12 @@
 #let lao_document(body) = {
   // typsastra:typography:start
-  set text(font: ("New Computer Modern", "Noto Sans Lao", "Phetsarath OT"), size: 11pt)
+  set text(
+    font: (
+      (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+      (name: "Noto Sans Lao", covers: regex("\p{scx=Lao}")),
+    ),
+    size: 11pt,
+  )
   // typsastra:typography:end
   
   set page(

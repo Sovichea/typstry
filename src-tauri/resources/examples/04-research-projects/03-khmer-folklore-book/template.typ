@@ -2,7 +2,13 @@
 
 #let khmer_folklore_book(body) = {
   // typsastra:typography:start
-  set text(font: ("New Computer Modern", "MiSans Khmer"), size: 11pt)
+  set text(
+    font: (
+      (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+      (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+    ),
+    size: 11pt,
+  )
   // typsastra:typography:end
 
   set page(

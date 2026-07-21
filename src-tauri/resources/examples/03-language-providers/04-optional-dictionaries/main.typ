@@ -1,21 +1,26 @@
 #set document(title: "Optional Language Providers")
 #set page(margin: 24mm)
-#set text(font: "New Computer Modern", lang: "en", size: 11pt)
+// typsastra:typography:start
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"fr-FR"},{"family":"MiSans Arabic","script":"arabic","scale":1,"language":"ar"}]
+#set text(
+  font: (
+    (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+    (name: "MiSans Arabic", covers: regex("\p{scx=Arabic}")),
+  ),
+  size: 11pt,
+)
+// typsastra:typography:end
 
 = Optional language providers
 
-English and Khmer are bundled. French, Spanish, Arabic, Lao spellcheck, and
-other catalog entries are optional downloads.
+This document assigns French to the Latin script and Arabic to the Arabic
+script. Both providers are optional downloads. Open Document Typography to see
+their availability, then use Language Providers settings to install them.
 
 #text(lang: "fr")[Le français reste vérifié uniquement par le fournisseur français.]
 
-#text(lang: "es")[El español requiere su propio proveedor instalado.]
-
 #text(lang: "ar", dir: rtl)[هذا النص يحتاج إلى مزود اللغة العربية.]
 
-#text(lang: "eo")[Ĉi tiu amplekso montras averton kiam provizanto ne disponeblas.]
-
-When a matching provider is unavailable, Typsastra disables spellcheck only in
-that explicit scope. It highlights the `lang` declaration and overlays a warning
-on its line number. Activate the warning to open Language Tools. Typsastra never
-silently substitutes an English dictionary for French or Spanish.
+When an assigned provider is unavailable, Typsastra leaves that script
+unchecked. It never substitutes another same-script dictionary. To test Spanish
+instead, change the Latin language assignment to Spanish in Document Typography.

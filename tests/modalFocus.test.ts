@@ -22,5 +22,9 @@ describe("modal focus navigation", () => {
     expect(html).toContain('id="document-typography-overlay"');
     expect(html).toContain('aria-labelledby="document-typography-title"');
     expect(html).toContain('id="toolbar-typography-apply"');
+    expect(html).toContain('id="document-typography-order-status"');
+    const source = await Bun.file(new URL("../src/editor/toolbarController.ts", import.meta.url)).text();
+    expect(source).toContain('data-typography-drag-handle');
+    expect(source).toContain('event.key === "ArrowUp"');
   });
 });

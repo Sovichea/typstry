@@ -5,7 +5,14 @@
   body,
 ) = {
   // typsastra:typography:start
-  set text(font: ("New Computer Modern", "MiSans Khmer"), size: 11pt)
+  set text(
+    font: (
+      (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+      (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+      (name: "MiSans Arabic", covers: regex("\p{scx=Arabic}")),
+    ),
+    size: 11pt,
+  )
   // typsastra:typography:end
   set document(title: title, author: author)
   set page(

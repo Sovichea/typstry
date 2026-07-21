@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -7,6 +7,14 @@ function findMainFiles(directory: string): string[] {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) return findMainFiles(path);
     return entry.isFile() && entry.name === "main.typ" ? [path] : [];
+  });
+}
+
+function findTypFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return findTypFiles(path);
+    return entry.isFile() && entry.name.endsWith(".typ") ? [path] : [];
   });
 }
 
@@ -22,6 +30,19 @@ const failures: string[] = [];
 
 try {
   const mainFiles = findMainFiles(root).sort();
+  for (const source of mainFiles) {
+    const contents = readFileSync(source, "utf8");
+    if (!contents.includes("typsastra:document-scripts")) {
+      failures.push(`${relative(root, source).replaceAll("\\", "/")}\nMissing current typsastra:document-scripts metadata.`);
+    }
+  }
+  for (const source of findTypFiles(root)) {
+    const contents = readFileSync(source, "utf8");
+    const managedBlocks = contents.match(/typsastra:typography:start[\s\S]*?typsastra:typography:end/g) ?? [];
+    if (managedBlocks.some(block => /\bset text\s*\(/.test(block) && !block.includes("scx="))) {
+      failures.push(`${relative(root, source).replaceAll("\\", "/")}\nManaged typography still uses a legacy unrestricted font stack.`);
+    }
+  }
   for (const source of mainFiles) {
     const relativePath = relative(root, source).replaceAll("\\", "/");
     const outputName = relativePath.replaceAll("/", "__").replace(/\.typ$/, ".pdf");

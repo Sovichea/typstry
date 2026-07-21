@@ -5,6 +5,8 @@ multilingual foundations introduced in v0.5.0. It makes those workflows easier
 to discover while correcting provider routing and completion regressions found
 after release.
 
+Released July 21, 2026.
+
 ## Guided examples and tutorials
 
 - Reorganized the writable example workspace into a guided path covering
@@ -27,6 +29,12 @@ after release.
   project interchange.
 - Added a once-per-version startup summary with a direct link to the complete
   release notes.
+- Standardized Latin text in the bundled examples on Typst's built-in New
+  Computer Modern family so the examples render consistently without requiring
+  another system font.
+- Migrated every bundled main file and managed template to the current
+  `typsastra:document-scripts` and Unicode `scx` typography format, including
+  the Khmer Folklore, Lao, language-provider, and portability projects.
 
 ## Document typography
 
@@ -41,7 +49,13 @@ after release.
   changes.
 - Rejected conflicting scales when multiple scripts select the same internal
   font family, avoiding ambiguous generated-font resolution.
-- Synchronized main-file typography directives with the typography toolbar and
+- Replaced the compact typography toolbar panel with a focused Document
+  Typography dialog for configuring scripts, fonts, scales, and language
+  providers.
+- Added drag-and-drop script ordering with keyboard-accessible Up and Down
+  Arrow controls. The selected order is preserved in document metadata and
+  generated Typst descriptors for deterministic overlap priority.
+- Synchronized main-file typography directives with the typography dialog and
   generated-font cache. Setting a main file now requests confirmation before
   preparing missing or stale scaled fonts and aborts the main-file change when
   preparation is declined or fails.
@@ -49,12 +63,16 @@ after release.
   private global application-data cache. Matching font-and-scale variants are
   reused across projects, while font bytes and cache paths never enter project
   settings, workspace copies, source ZIPs, or project archives.
-
 - Added a soft limit of 10 cached scale variants per font face. Creating another
   variant requires confirmation; Typsastra preserves existing variants until
   the planned v0.5.2 cache manager lets users inspect, delete, or renew them.
+- Added explicit support for fonts supplied internally by the Typst compiler.
+  These fonts remain selectable without a local installation, while their scale
+  is locked to `1.0` because Typsastra cannot extract their embedded font data.
+  Unsupported manual scale edits now show an error and reset the affected
+  directive entries to `1.0`.
 - Limited generated-font ownership to the configured main file. Editing a
-  typography directive or toolbar configuration in any other file no longer
+  typography directive or dialog configuration in any other file no longer
   prompts, generates fonts, or restarts Tinymist.
 - Prevented unrelated non-main files from scheduling a PDF recompilation when
   edited, saved, or reloaded externally. Included and imported sources continue
@@ -83,8 +101,11 @@ after release.
   typing context.
 - Made the main document's script assignments authoritative while editing
   included files, preventing unrelated same-script dictionaries from leaking.
-- Exposed unavailable provider state in the Typography toolbar without adding
+- Exposed bundled, installed, and unavailable providers in the Document
+  Typography dialog without adding
   warnings to intentionally unconfigured source text.
+- Restored the bundled Khmer provider in both Language Providers settings and
+  Document Typography after startup provider refreshes.
 - Rejected stale or mismatched provider results before they reach the editor.
 - Added an optional developer log category for spellcheck and document-script
   routing, and aligned wrapped-line warnings with the first visual line.
@@ -95,6 +116,9 @@ after release.
   writable-example migration, package hygiene, and language-scope fixtures.
 - Added guards preventing generated PDFs, preview caches, and font binaries from
   entering the bundled example workspace.
+- Added validation that rejects bundled main files without current
+  document-script metadata and managed typography blocks that still use an
+  unrestricted legacy font stack.
 - Verified that all 20 bundled `main.typ` entry points compile with Typst 0.15.1.
 
 ## Upgrade behavior
@@ -106,9 +130,11 @@ new release.
 
 ## Known boundaries
 
-- Optional language providers must still be installed before their explicit
-  scopes receive spellcheck or completion.
-- Keyboard-language completion reliability depends on the operating system's
-  keyboard-layout reporting; Settings shows the active fallback policy.
+- Optional language providers must be installed and assigned to a document
+  script before that script receives spellcheck or completion.
+- Scripts without a language-provider assignment intentionally receive no
+  spellcheck or completion.
 - First-class RTL editing remains scheduled for v0.9.0.
 - Fonts remain external dependencies and are never included in project exports.
+- Non-unit document-font scaling remains experimental for generated PDFs and is
+  intended only for small optical adjustments between script families.

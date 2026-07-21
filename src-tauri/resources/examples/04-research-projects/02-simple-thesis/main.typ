@@ -1,5 +1,7 @@
 #import "template.typ": thesis
 
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"}]
+
 #show: thesis.with(
   title: "A Small Thesis on Multilingual Technical Writing",
   author: "Typsastra Examples",

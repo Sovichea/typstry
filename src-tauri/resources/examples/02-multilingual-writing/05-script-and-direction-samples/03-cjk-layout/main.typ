@@ -1,7 +1,11 @@
 #set document(title: "CJK Layout")
 #set page(margin: 22mm)
 // typsastra:typography:start
-#set text(font: "New Computer Modern", size: 11pt)
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"}]
+#set text(
+  font: ((name: "New Computer Modern", covers: regex("\p{scx=Latin}")),),
+  size: 11pt,
+)
 // typsastra:typography:end
 #set par(justify: true)
 

@@ -78,6 +78,7 @@ export class EditorToolbarController {
   private rememberedTypography: DocumentTypography | null = null;
   private coverageGeneration = 0;
   private typographyReturnFocus: HTMLElement | null = null;
+  private draggedTypographyRow: HTMLElement | null = null;
 
   constructor(private readonly dependencies: EditorToolbarDependencies) {}
 
@@ -237,6 +238,33 @@ export class EditorToolbarController {
     return row.querySelector<HTMLSelectElement>("[data-fallback-script]")!;
   }
 
+  private typographyScriptLabel(row: HTMLElement): string {
+    const scriptId = this.rowScript(row).value;
+    return typographyScripts.find(script => script.id === scriptId)?.label ?? scriptId;
+  }
+
+  private announceTypographyOrder(row: HTMLElement): void {
+    const status = document.getElementById("document-typography-order-status");
+    if (!status) return;
+    const rows = this.fallbackRows();
+    status.textContent = `${this.typographyScriptLabel(row)} moved to position ${rows.indexOf(row) + 1} of ${rows.length}.`;
+  }
+
+  private moveTypographyRow(row: HTMLElement, direction: -1 | 1): void {
+    const container = this.fallbackContainer();
+    const rows = this.fallbackRows();
+    const current = rows.indexOf(row);
+    const target = current + direction;
+    if (!container || current < 0 || target < 0 || target >= rows.length) return;
+    if (direction < 0) {
+      container.insertBefore(row, rows[target]);
+    } else {
+      container.insertBefore(row, rows[target].nextSibling);
+    }
+    this.announceTypographyOrder(row);
+    row.querySelector<HTMLButtonElement>("[data-typography-drag-handle]")?.focus();
+  }
+
   private languageOptions(scriptId: string): Array<{ tag: string; label: string; installed: boolean }> {
     const script = typographyScripts.find((candidate) => candidate.id === scriptId);
     if (!script) return [];
@@ -338,6 +366,13 @@ export class EditorToolbarController {
   private createFallbackRow(fallback: DocumentScriptFont, detected = false): HTMLElement {
     const row = document.createElement("div");
     row.className = "toolbar-font-fallback-row";
+    const dragHandle = document.createElement("button");
+    dragHandle.type = "button";
+    dragHandle.className = "document-typography-drag-handle";
+    dragHandle.dataset.typographyDragHandle = "";
+    dragHandle.draggable = true;
+    dragHandle.setAttribute("aria-label", `Reorder ${typographyScripts.find(candidate => candidate.id === fallback.script)?.label ?? fallback.script} script`);
+    dragHandle.title = "Drag to reorder; use Up or Down Arrow while focused";
     const script = document.createElement("select");
     script.dataset.fallbackScript = "";
     script.replaceChildren(...typographyScripts.map(candidate => {
@@ -389,8 +424,10 @@ export class EditorToolbarController {
       container.append(...children);
       return container;
     };
+    const scriptCell = cell("Script order", dragHandle, script);
+    scriptCell.classList.add("document-typography-script-cell");
     row.append(
-      cell("Script", script),
+      scriptCell,
       cell("Font", font, hint),
       cell("Scale", scale, scaleWarning),
       cell("Language tools", language),
@@ -410,6 +447,7 @@ export class EditorToolbarController {
       }
       this.populateRowFonts(row, script.value);
       this.populateRowLanguages(row, script.value, null);
+      dragHandle.setAttribute("aria-label", `Reorder ${this.typographyScriptLabel(row)} script`);
       this.updateTypographyAvailability();
     });
     font.addEventListener("change", () => {
@@ -426,6 +464,37 @@ export class EditorToolbarController {
     remove.addEventListener("click", () => {
       row.remove();
       this.updateTypographyAvailability();
+    });
+    dragHandle.addEventListener("keydown", event => {
+      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+      event.preventDefault();
+      this.moveTypographyRow(row, event.key === "ArrowUp" ? -1 : 1);
+    });
+    dragHandle.addEventListener("dragstart", event => {
+      this.draggedTypographyRow = row;
+      row.classList.add("is-dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", this.rowScript(row).value);
+      }
+    });
+    row.addEventListener("dragover", event => {
+      const dragged = this.draggedTypographyRow;
+      const container = this.fallbackContainer();
+      if (!dragged || !container || dragged === row) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      const before = event.clientY < row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+      container.insertBefore(dragged, before ? row : row.nextSibling);
+    });
+    row.addEventListener("drop", event => {
+      if (!this.draggedTypographyRow) return;
+      event.preventDefault();
+      this.announceTypographyOrder(this.draggedTypographyRow);
+    });
+    dragHandle.addEventListener("dragend", () => {
+      this.draggedTypographyRow?.classList.remove("is-dragging");
+      this.draggedTypographyRow = null;
     });
     return row;
   }

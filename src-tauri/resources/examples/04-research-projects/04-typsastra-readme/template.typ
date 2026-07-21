@@ -19,7 +19,15 @@
       ])
     },
   )
-  set text(font: ("New Computer Modern", "MiSans Khmer", "Noto Sans Khmer", "Liberation Sans", "Arial"), size: 11pt)
+  // typsastra:typography:start
+  set text(
+    font: (
+      (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+      (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+    ),
+    size: 11pt,
+  )
+  // typsastra:typography:end
   set par(justify: true, leading: 0.75em)
 
   // Title Page

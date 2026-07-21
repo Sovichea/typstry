@@ -11,7 +11,7 @@ const releaseSummaries: Record<string, ReleaseSummary> = {
     title: "Examples, multilingual tools, and safer typography",
     highlights: [
       "A versioned, guided examples workspace with task-oriented tutorials.",
-      "Script-specific font assignments with Unicode coverage and independent fine scaling.",
+      "Script-specific font assignments with drag ordering, Unicode coverage, and independent fine scaling.",
       "Deterministic document-script spellcheck and word completion.",
       "A private global scaled-font cache that is reused across projects and never exported."
     ],

@@ -24,7 +24,9 @@ its own font, Unicode coverage restriction, and optional visual scale.
 3. Add each script used by the document.
 4. Choose its installed font and adjust its scale if necessary.
 5. Optionally assign the language provider used for spellcheck and completion.
-6. Choose **Apply to document**, or **Apply as template** for shared project
+6. Drag the script rows into priority order. With the drag handle focused, Up
+   and Down Arrow provide the same operation from the keyboard.
+7. Choose **Apply to document**, or **Apply as template** for shared project
    typography.
 
 For example:

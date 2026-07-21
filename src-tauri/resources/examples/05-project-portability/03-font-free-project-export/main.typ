@@ -1,6 +1,12 @@
 #set document(title: "Font-free Project Export")
 #set page(margin: 24mm)
-#set text(font: "New Computer Modern", size: 11pt)
+// typsastra:typography:start
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"}]
+#set text(
+  font: ((name: "New Computer Modern", covers: regex("\p{scx=Latin}")),),
+  size: 11pt,
+)
+// typsastra:typography:end
 
 = Font-free project export
 

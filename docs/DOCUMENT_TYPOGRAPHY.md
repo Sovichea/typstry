@@ -48,6 +48,10 @@ The `covers` restriction makes a family eligible only for its assigned script.
 MiSans Khmer can therefore appear before MiSans Latin without consuming Latin
 letters that happen to exist in the Khmer font. Order remains meaningful only
 when two configured entries intentionally have overlapping Unicode coverage.
+The Document Typography dialog lets authors drag script rows into the desired
+priority order. A focused drag handle also supports Up and Down Arrow for
+keyboard reordering. For a Khmer-dominant book, placing Khmer before Latin is a
+useful default; order is a tie-breaker, not a primary-font or scaling role.
 
 Spaces, generic punctuation, digits, and other Common or Inherited characters
 are not always owned by one script. Typst may select their font from the

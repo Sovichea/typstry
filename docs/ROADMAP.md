@@ -27,10 +27,11 @@ broader multilingual work:
 - Script-specific document typography with Unicode `scx` coverage and independent scaling.
 - Warmed source-map sessions for reliable first-use synchronization in very long documents.
 
-## v0.5.1 — examples, tutorials, and maintenance
+## v0.5.1 — examples, tutorials, and maintenance (released)
 
-Make the v0.5.0 multilingual foundations easier to learn and verify while
-continuing the v0.5.x maintenance line:
+Released on July 21, 2026, this milestone made the v0.5.0 multilingual
+foundations easier to learn and verify while continuing the v0.5.x maintenance
+line:
 
 - Restructure the bundled examples into a guided path from Typst basics through
   multilingual document scripts, language providers, research projects, and

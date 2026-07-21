@@ -1,6 +1,13 @@
 // Select another compatible family from Document typography if MiSans Khmer is not installed.
 // typsastra:typography:start
-#set text(font: ("New Computer Modern", "MiSans Khmer"))
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"}]
+#set text(
+  font: (
+    (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+    (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+  ),
+  size: 11pt,
+)
 // typsastra:typography:end
 #set document(title: "Complex Script Shaping")
 #set page(margin: 22mm)

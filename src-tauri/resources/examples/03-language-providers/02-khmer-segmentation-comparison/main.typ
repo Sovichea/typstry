@@ -6,7 +6,14 @@
 )
 
 // typsastra:typography:start
-#set text(font: ("New Computer Modern", "MiSans Khmer"), size: 10pt)
+// typsastra:document-scripts [{"family":"New Computer Modern","script":"latin","scale":1,"language":"en-US"},{"family":"MiSans Khmer","script":"khmer","scale":1,"language":"km"}]
+#set text(
+  font: (
+    (name: "New Computer Modern", covers: regex("\p{scx=Latin}")),
+    (name: "MiSans Khmer", covers: regex("\p{scx=Khmer}")),
+  ),
+  size: 10pt,
+)
 // typsastra:typography:end
 
 #align(center)[
