@@ -23,7 +23,7 @@ export type EditorToolbarDependencies = {
   renderWysiwym: (markup: string) => void;
   save: () => Promise<void>;
   syncPreview: (cursor: number) => Promise<void>;
-  applyTypography: (config: DocumentTypography, target: "document" | "template") => Promise<void>;
+  applyTypography: (config: DocumentTypography, target: "document" | "template") => Promise<boolean>;
   // TODO: Re-enable when the WYSIWYM layout is ready for use.
   // toggleMode: () => void;
 };
@@ -332,7 +332,7 @@ export class EditorToolbarController {
     control.value = value;
   }
 
-  private applyDocumentTypography(target: "document" | "template"): void {
+  private async applyDocumentTypography(target: "document" | "template"): Promise<void> {
     const value = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
     const fonts = this.fallbackRows().flatMap(row => {
       const family = row.querySelector<HTMLSelectElement>("[data-fallback-font]")?.value ?? "";
@@ -348,7 +348,7 @@ export class EditorToolbarController {
       baseSizePt: this.boundedTypographyNumber(value("toolbar-base-size"), 6, 96, this.typographyDefaults.baseSizePt),
       fonts
     };
-    void this.dependencies.applyTypography(config, target);
+    if (!await this.dependencies.applyTypography(config, target)) return;
     this.typographyDefaults = config;
     this.rememberedTypography = config;
     this.saveRememberedTypography(config);

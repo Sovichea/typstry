@@ -64,6 +64,12 @@ Every script entry accepts a uniform scale from `0.5` to `2.0`, relative to the
 shared document point size. For an `11pt` document, Latin can use `1.1`, Khmer
 `0.95`, and Arabic `1.0`; no script has a special base-font role.
 
+Typsastra treats `0.90×` through `1.10×` as the recommended fine-adjustment
+range. Values outside that range require confirmation because script scaling
+is intended to balance fonts optically, not to double or substantially change
+the document text size. Accurate representation beyond ±10% is not guaranteed
+and varies from one font to another.
+
 When a scale differs from `1.0`, Typsastra:
 
 1. locates every installed TTF or OTF face in the selected family;
@@ -72,11 +78,34 @@ When a scale differs from `1.0`, Typsastra:
 4. writes the results and a manifest under `.typsastra/fonts/generated/`;
 5. restarts Tinymist with that directory in `TYPST_FONT_PATHS`.
 
-Changing units-per-em scales outlines, advances, vertical metrics, and OpenType
-positioning anchors together. Generated fonts retain their original internal
-family names. The generated directory is local, disposable, ignored by Git,
-and excluded from project exports. Recipients install the original fonts and
-reproduce any scale locally.
+Changing units-per-em asks the font engine to interpret outlines, advances,
+vertical metrics, and OpenType positioning anchors against a different em
+square. Generated fonts retain their original internal family names. The
+generated directory is local, disposable, ignored by Git, and excluded from
+project exports. Recipients install the original fonts and reproduce any scale
+locally.
+
+### Known Typst PDF limitation
+
+Non-`1.0` script scaling is experimental for PDF output. Typst's PDF subsetter
+may normalize a generated font back to a 1000-unit em square while retaining
+advance widths calculated from the scaled font. When that happens, glyphs keep
+their unscaled outlines but occupy scaled horizontal space, which looks like
+excessive letter spacing. Typst does not apply this normalization consistently
+to every font or scale; for example, a 2x subset may retain a 500-unit em square
+while another scaled subset is normalized to 1000 units.
+
+This behavior is reproducible with the Typst CLI and a generated font, without
+Typsastra's preview layer. Typsastra therefore does not rewrite the exported
+PDF or apply a preview-only correction. Preview and exported PDF intentionally
+show the same result. Use `1.0` scales when reliable, portable PDF output is
+required, and verify every non-unit scale in the exported PDF with the intended
+PDF reader.
+
+The managed source block remains valid Typst. Outside Typsastra, or when the
+generated font cache is absent, the original installed family is used and the
+metadata scale is ignored. This preserves source compatibility at the cost of
+the optional visual scale not being portable.
 
 Two assignments that use the same physical family with different scales are
 not supported because both generated copies would have the same internal family

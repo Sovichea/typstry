@@ -51,6 +51,11 @@ Typsastra prepares uniformly scaled local fonts without wrapping or replacing
 source runs. Forward and inverse synchronization therefore retain the original
 source ownership.
 
+Non-unit scales are experimental for PDF output. Typst may normalize a scaled
+font while subsetting it, leaving scaled advances with unscaled outlines.
+Typsastra keeps preview faithful to the exported PDF; use `1.0` when dependable
+PDF output is required.
+
 == Example scripts
 
 Latin uses its assigned family: Multilingual documents should remain readable.

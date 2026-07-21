@@ -20,6 +20,14 @@ export type DocumentScriptFont = {
 export type TypographyEdit = { from: number; to: number; insert: string };
 export type TypographyScaleChange = "unchanged" | "apply" | "confirm";
 
+export const TYPOGRAPHY_FINE_ADJUSTMENT_MIN = 0.9;
+export const TYPOGRAPHY_FINE_ADJUSTMENT_MAX = 1.1;
+
+export function typographyScaleExceedsFineAdjustment(scale: number): boolean {
+  return scale < TYPOGRAPHY_FINE_ADJUSTMENT_MIN - 0.0001
+    || scale > TYPOGRAPHY_FINE_ADJUSTMENT_MAX + 0.0001;
+}
+
 export function typographyScaleChange(previousScale: number, nextScale: number): TypographyScaleChange {
   if (Math.abs(previousScale - nextScale) <= 0.0001) return "unchanged";
   return Math.abs(nextScale - 1) <= 0.0001 ? "apply" : "confirm";

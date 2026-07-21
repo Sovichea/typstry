@@ -38,6 +38,10 @@ after release.
   changes.
 - Rejected conflicting scales when multiple scripts select the same internal
   font family, avoiding ambiguous generated-font resolution.
+- Documented that non-unit scaling is experimental for PDF output. Typst may
+  normalize a generated font during PDF subsetting while retaining its scaled
+  advances, and Typsastra intentionally does not hide that upstream result with
+  a preview-only or PDF-rewriting workaround.
 
 ## Language-tool fixes
 

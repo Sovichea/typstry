@@ -61,7 +61,13 @@ import { EditorToolbarController } from "./editor/toolbarController";
 import { ContextMenuController } from "./components/contextMenuController";
 import { ToolchainController, type ToolchainStatus } from "./toolchain/toolchainController";
 import { DocumentOutlineController, type DocumentHeading } from "./outline/documentOutline";
-import { parseTypographyBlock, typographyEdit, type DocumentScriptFont, type DocumentTypography } from "./editor/documentTypography";
+import {
+  parseTypographyBlock,
+  typographyEdit,
+  typographyScaleExceedsFineAdjustment,
+  type DocumentScriptFont,
+  type DocumentTypography
+} from "./editor/documentTypography";
 import {
   SpellcheckController,
   type SpellcheckDebugEvent,
@@ -2339,8 +2345,9 @@ export class TypsastraWorkspaceController {
   private async applyTypography(
     config: DocumentTypography,
     target: "document" | "template"
-  ): Promise<void> {
-    if (!this.activeFilePath) return;
+  ): Promise<boolean> {
+    if (!this.activeFilePath) return false;
+    if (!await this.confirmTypographyScaleRange(config)) return false;
     const typographyDocumentKey = filePathKey(this.activeFilePath);
     const previousAcceptedScale = this.acceptedTypographyScales.get(typographyDocumentKey) ?? [];
     this.acceptedTypographyScales.set(typographyDocumentKey, config.fonts.map(font => ({ ...font })));
@@ -2358,7 +2365,7 @@ export class TypsastraWorkspaceController {
         const fontsChanged = await this.updateWorkspaceTypographyFont(config);
         await this.refreshActivePreviewRoot(fontsChanged);
         editor.focus();
-        return;
+        return true;
       }
 
       const activeText = this.editorInstance.state.doc.toString();
@@ -2385,7 +2392,7 @@ export class TypsastraWorkspaceController {
           editor.focus();
           this.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
           await this.refreshActivePreviewRoot(fontsChanged);
-          return;
+          return true;
         }
       }
 
@@ -2432,6 +2439,7 @@ export class TypsastraWorkspaceController {
       const fontsChanged = await this.updateWorkspaceTypographyFont(config);
       await this.refreshActivePreviewRoot(fontsChanged);
       this.editorInstance.focus();
+      return true;
     } catch (error) {
       this.acceptedTypographyScales.set(typographyDocumentKey, previousAcceptedScale);
       this.appendLspLog({
@@ -2440,7 +2448,25 @@ export class TypsastraWorkspaceController {
         message: `Failed to apply template typography: ${String(error)}`
       });
       await message(String(error), { title: "Unable to apply typography", kind: "error" });
+      return false;
     }
+  }
+
+  private typographyScaleRangeWarning(config: DocumentTypography): string | null {
+    const outsideFineRange = config.fonts.filter(font =>
+      typographyScaleExceedsFineAdjustment(font.scale)
+    );
+    if (outsideFineRange.length === 0) return null;
+    return `The following font scales exceed the recommended 0.90×–1.10× fine-adjustment range:\n\n${outsideFineRange.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nFont scaling is intended for small optical adjustments between script families, not for doubling or substantially changing text size. Beyond ±10%, accurate representation is not guaranteed and results vary from one font to another. Use the document text size for larger size changes.\n\nContinue anyway?`;
+  }
+
+  private async confirmTypographyScaleRange(config: DocumentTypography): Promise<boolean> {
+    const warning = this.typographyScaleRangeWarning(config);
+    if (!warning) return true;
+    return confirm(warning, {
+      title: "Large Font Scale Adjustment",
+      kind: "warning"
+    });
   }
 
   private async prepareWorkspaceTypographyFont(config: DocumentTypography): Promise<boolean> {
@@ -3122,9 +3148,14 @@ export class TypsastraWorkspaceController {
     this.typographyScaleConfirmationOpen = true;
     let accepted = false;
     try {
+      const rangeWarning = this.typographyScaleRangeWarning(config);
       accepted = await confirm(
-        `Apply these document font scales?\n\n${config.fonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate scaled workspace fonts and restart the preview compiler.`,
-        { title: "Confirm Font Scaling", kind: "warning" }
+        rangeWarning
+          ?? `Apply these document font scales?\n\n${config.fonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate scaled workspace fonts and restart the preview compiler. Non-1× scaling is experimental for PDF output because Typst may normalize scaled fonts while subsetting them. Use 1× for dependable PDF export.`,
+        {
+          title: rangeWarning ? "Large Font Scale Adjustment" : "Confirm Font Scaling",
+          kind: "warning"
+        }
       );
     } finally {
       this.typographyScaleConfirmationOpen = false;

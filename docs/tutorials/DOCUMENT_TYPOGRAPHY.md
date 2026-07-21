@@ -50,6 +50,17 @@ Typsastra asks for confirmation before generating a scaled font. Generated
 fonts live under `.typsastra/fonts/generated`; they are local, disposable, and
 excluded from project exports.
 
+Keep script scales between `0.90×` and `1.10×` when possible. Typsastra warns
+before applying a larger adjustment because this control is for fine optical
+balancing, not for doubling the font size. Results beyond ±10% vary between
+fonts and may not be represented accurately.
+
+> **PDF limitation:** Non-`1.0` scales are experimental. Typst may normalize a
+> scaled font while creating a PDF subset, producing unscaled glyph outlines
+> with scaled spacing. Typsastra does not post-process the PDF or make preview
+> differ from export. Use `1.0` for dependable PDF output and inspect every
+> exported PDF when testing another scale.
+
 ## What this does not control
 
 Script-font assignments do not change:
