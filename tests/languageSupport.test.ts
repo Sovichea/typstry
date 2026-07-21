@@ -6,6 +6,7 @@ import {
   parseLanguageProviderCapabilitiesList,
   providerFeatureLabels,
   providerStabilityLabel,
+  supplementalLanguageProviders,
   supportLevelPresentation
 } from "../src/languageSupport";
 
@@ -34,6 +35,18 @@ const serializedProvider = {
 };
 
 describe("language support taxonomy", () => {
+  test("adds bundled deep providers that are absent from the download catalog", () => {
+    const [khmer] = parseLanguageProviderCapabilitiesList([serializedProvider]);
+    expect(supplementalLanguageProviders([{ id: "hunspell:en_US" }], [khmer])).toEqual([khmer]);
+    expect(supplementalLanguageProviders([{ id: "khmer-segmenter" }], [khmer])).toEqual([]);
+  });
+
+  test("refreshes provider-dependent UI after deferred provider startup", async () => {
+    const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    expect(source).toContain('document.dispatchEvent(new CustomEvent("typsastra:language-providers-changed"))');
+    expect(source).toContain("this.handleLanguageProvidersChanged(providers);");
+  });
+
   test("normalizes legacy support values without overstating unknown providers", () => {
     expect(normalizeSupportLevel("deep")).toBe("deep");
     expect(normalizeSupportLevel("full")).toBe("enhanced");

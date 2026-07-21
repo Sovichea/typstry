@@ -137,6 +137,14 @@ export function parseLanguageCatalog(value: unknown): LanguageCatalogCapabilitie
   }), "catalog entry");
 }
 
+export function supplementalLanguageProviders(
+  catalog: readonly Pick<LanguageCatalogCapabilities, "id">[],
+  installed: readonly LanguageProviderCapabilities[],
+): LanguageProviderCapabilities[] {
+  const catalogIds = new Set(catalog.map(entry => entry.id.toLocaleLowerCase()));
+  return installed.filter(provider => !catalogIds.has(provider.id.toLocaleLowerCase()));
+}
+
 function parseLanguageProviderCapabilities(value: unknown, path: string): LanguageProviderCapabilities {
   const record = capabilityRecord(value, path);
   return {

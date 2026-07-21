@@ -10,6 +10,7 @@ import {
   parseLanguageCatalog,
   parseLanguageProviderCapabilitiesList,
   providerFeatureLabels,
+  supplementalLanguageProviders,
   supportLevelPresentation,
   type LanguageCatalogCapabilities,
   type LanguageProviderCapabilities
@@ -168,6 +169,10 @@ export class SettingsController {
       openSettings((event as CustomEvent<{ panel?: string }>).detail?.panel);
     });
     document.addEventListener("typsastra:system-fonts-changed", () => void this.refreshSystemFonts());
+    document.addEventListener("typsastra:language-providers-changed", () => {
+      const catalog = document.getElementById("settings-language-catalog");
+      if (catalog && !catalog.classList.contains("hidden")) void this.populateLanguageCatalog();
+    });
 
     const onChange = (id: string, update: (settings: AppSettings, control: HTMLInputElement | HTMLSelectElement) => void) => {
       const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
@@ -556,14 +561,72 @@ export class SettingsController {
       catalog.textContent = `Failed to load language catalog: ${String(error)}`;
       return;
     }
+    let installedProviders: LanguageProviderCapabilities[] = [];
+    try {
+      installedProviders = parseLanguageProviderCapabilitiesList(
+        await invoke<unknown>("get_provider_capabilities")
+      );
+    } catch (error) {
+      console.warn("Failed to load installed language providers.", error);
+    }
+    const supplemental = supplementalLanguageProviders(entries, installedProviders);
 
     const header = document.createElement("div");
     header.className = "settings-language-catalog-header";
     header.textContent = "Downloadable dictionaries provide Basic support unless Typsastra has a tested language-specific provider. Basic support does not imply reliable segmentation or word completion.";
     const list = document.createElement("div");
     list.className = "settings-language-catalog-list";
-    list.replaceChildren(...entries.map(entry => this.renderLanguageCatalogRow(entry)));
+    const rows = [
+      ...entries.map(entry => ({ name: entry.displayName, row: this.renderLanguageCatalogRow(entry) })),
+      ...supplemental.map(entry => ({ name: entry.displayName, row: this.renderBundledLanguageProviderRow(entry) })),
+    ].sort((left, right) => left.name.localeCompare(right.name));
+    list.replaceChildren(...rows.map(entry => entry.row));
     catalog.replaceChildren(header, list);
+  }
+
+  private renderBundledLanguageProviderRow(entry: LanguageProviderCapabilities): HTMLElement {
+    const title = document.createElement("div");
+    title.className = "settings-language-catalog-title";
+    title.textContent = entry.displayName;
+    const support = supportLevelPresentation(entry.supportLevel);
+    const titleRow = document.createElement("div");
+    titleRow.className = "settings-language-provider-title-row";
+    titleRow.append(
+      title,
+      this.createSupportBadge(support.level, support.label, support.description),
+      this.createStabilityBadge(entry.stability),
+    );
+
+    const meta = document.createElement("div");
+    meta.className = "settings-language-catalog-meta";
+    const typeLabel = entry.providerType === "deep" ? "Deep provider" : "Installed provider";
+    meta.textContent = [
+      entry.languageTag,
+      "bundled",
+      typeLabel,
+      entry.engine,
+      entry.version,
+      entry.license,
+      "Bundled with Typsastra",
+    ].filter(Boolean).join(" · ");
+
+    const features = document.createElement("div");
+    features.className = "settings-language-provider-features";
+    features.textContent = providerFeatureLabels(entry).join(" · ") || "No active language-tool capabilities";
+    const text = document.createElement("div");
+    text.append(titleRow, meta, features);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "settings-secondary-button";
+    button.textContent = "Bundled";
+    button.disabled = true;
+
+    const row = document.createElement("div");
+    row.className = "settings-language-catalog-row";
+    row.title = support.description;
+    row.append(text, button);
+    return row;
   }
 
   private renderLanguageCatalogRow(entry: HunspellCatalogEntry): HTMLElement {

@@ -25,6 +25,23 @@ export type TypographyScaleChange = "unchanged" | "apply" | "confirm";
 export const TYPOGRAPHY_FINE_ADJUSTMENT_MIN = 0.9;
 export const TYPOGRAPHY_FINE_ADJUSTMENT_MAX = 1.1;
 
+/** Font families embedded by the local Typst compiler rather than installed by the OS. */
+export const TYPST_INTERNAL_FONT_FAMILIES = [
+  "Libertinus Serif",
+  "New Computer Modern",
+  "New Computer Modern Math",
+  "DejaVu Sans Mono",
+] as const;
+
+function sameFontFamily(left: string, right: string): boolean {
+  return left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0;
+}
+
+export function isTypstInternalOnlyFont(family: string, systemFamilies: readonly string[]): boolean {
+  return TYPST_INTERNAL_FONT_FAMILIES.some(candidate => sameFontFamily(candidate, family))
+    && !systemFamilies.some(candidate => sameFontFamily(candidate, family));
+}
+
 export function typographyScaleExceedsFineAdjustment(scale: number): boolean {
   return scale < TYPOGRAPHY_FINE_ADJUSTMENT_MIN - 0.0001
     || scale > TYPOGRAPHY_FINE_ADJUSTMENT_MAX + 0.0001;

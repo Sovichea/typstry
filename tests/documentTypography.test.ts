@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { detectDocumentScript, detectDocumentScripts, detectTypographyScripts, documentScriptsEdit, parseDocumentScripts, parseTypographyBlock, renderTypographyBlock, typographyEdit, typographyScaleChange, typographyScaleExceedsFineAdjustment } from "../src/editor/documentTypography";
+import { detectDocumentScript, detectDocumentScripts, detectTypographyScripts, documentScriptsEdit, isTypstInternalOnlyFont, parseDocumentScripts, parseTypographyBlock, renderTypographyBlock, typographyEdit, typographyScaleChange, typographyScaleExceedsFineAdjustment, TYPST_INTERNAL_FONT_FAMILIES } from "../src/editor/documentTypography";
 
 describe("document typography", () => {
+  test("distinguishes compiler-only fonts from locally installed copies", () => {
+    expect(TYPST_INTERNAL_FONT_FAMILIES).toContain("New Computer Modern");
+    expect(isTypstInternalOnlyFont("New Computer Modern", ["Arial"])).toBe(true);
+    expect(isTypstInternalOnlyFont("New Computer Modern", ["New Computer Modern"])).toBe(false);
+    expect(isTypstInternalOnlyFont("MiSans Latin", ["MiSans Latin"])).toBe(false);
+  });
+
   test("confirms only manual changes to a non-unit font scale", () => {
     expect(typographyScaleChange(1, 1)).toBe("unchanged");
     expect(typographyScaleChange(1.2, 1)).toBe("apply");

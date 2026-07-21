@@ -11,8 +11,10 @@ import {
 } from "../languageSupport";
 import {
   detectTypographyScripts,
+  isTypstInternalOnlyFont,
   parseTypographyBlock,
   preferredInstalledFamily,
+  TYPST_INTERNAL_FONT_FAMILIES,
   typographyScripts,
   type DocumentScriptFont,
   type DocumentTypography
@@ -75,6 +77,7 @@ export class EditorToolbarController {
   };
   private rememberedTypography: DocumentTypography | null = null;
   private coverageGeneration = 0;
+  private typographyReturnFocus: HTMLElement | null = null;
 
   constructor(private readonly dependencies: EditorToolbarDependencies) {}
 
@@ -100,9 +103,24 @@ export class EditorToolbarController {
       this.fallbackContainer()?.append(this.createFallbackRow({ script: script.id, family: "", scale: 1, language: null }));
       this.updateTypographyAvailability();
     });
+    document.getElementById("toolbar-document-typography")?.addEventListener("click", event => {
+      event.preventDefault();
+      this.openTypographyModal(event.currentTarget as HTMLElement);
+    });
+    document.getElementById("document-typography-close")?.addEventListener("click", () => this.closeTypographyModal());
+    document.getElementById("document-typography-cancel")?.addEventListener("click", () => this.closeTypographyModal());
+    this.typographyOverlay()?.addEventListener("mousedown", event => {
+      if (event.target === this.typographyOverlay()) this.closeTypographyModal();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !this.typographyOverlay()?.classList.contains("hidden")) {
+        event.preventDefault();
+        this.closeTypographyModal();
+      }
+    });
     this.toolbar.addEventListener("pointerdown", event => {
       const target = event.target as HTMLElement;
-      if (target.closest("[data-tool]") || target.closest(".toolbar-dropdown-btn")) event.preventDefault();
+      if (target.closest("[data-tool]") || target.closest(".toolbar-dropdown-btn") || target.closest("#toolbar-document-typography")) event.preventDefault();
     });
     this.toolbar.addEventListener("click", event => {
       const target = event.target as HTMLElement;
@@ -110,16 +128,10 @@ export class EditorToolbarController {
       if (dropdownButton) {
         const container = dropdownButton.closest(".toolbar-dropdown-container");
         if (container) {
-          if (container.classList.contains("toolbar-typography-container")) this.syncTypographyControls();
           this.closeDropdowns(container);
           container.classList.toggle("active");
           event.stopPropagation();
         }
-        return;
-      }
-      const typographyPanel = target.closest(".toolbar-typography-panel");
-      if (typographyPanel) {
-        event.stopPropagation();
         return;
       }
       const button = target.closest<HTMLElement>("[data-tool]");
@@ -165,14 +177,56 @@ export class EditorToolbarController {
     });
   }
 
+  private groupedFontOptions(families: readonly string[]): HTMLOptGroupElement[] {
+    const internal = families.filter(family => isTypstInternalOnlyFont(family, this.systemFontFamilies));
+    const system = families.filter(family => !isTypstInternalOnlyFont(family, this.systemFontFamilies));
+    const group = (label: string, entries: readonly string[]) => {
+      const element = document.createElement("optgroup");
+      element.label = label;
+      element.append(...this.fontOptions(entries));
+      return element;
+    };
+    return [
+      ...(internal.length > 0 ? [group("Typst built-in", internal)] : []),
+      ...(system.length > 0 ? [group("System fonts", system)] : []),
+    ];
+  }
+
   private supportedFonts(scriptId: string): string[] {
-    if (scriptId === "latin") return [...this.systemFontFamilies];
+    if (scriptId === "latin") {
+      return [...new Set([...this.systemFontFamilies, ...TYPST_INTERNAL_FONT_FAMILIES])]
+        .sort((left, right) => left.localeCompare(right));
+    }
     return [...new Set(this.scriptFontFamilies[scriptId] ?? [])]
       .sort((left, right) => left.localeCompare(right));
   }
 
   private fallbackContainer(): HTMLElement | null {
     return document.getElementById("toolbar-document-scripts");
+  }
+
+  private typographyOverlay(): HTMLElement | null {
+    return document.getElementById("document-typography-overlay");
+  }
+
+  private openTypographyModal(returnFocus: HTMLElement): void {
+    this.typographyReturnFocus = returnFocus;
+    this.closeDropdowns();
+    this.syncTypographyControls();
+    const overlay = this.typographyOverlay();
+    if (!overlay) return;
+    overlay.classList.remove("hidden");
+    returnFocus.setAttribute("aria-expanded", "true");
+    requestAnimationFrame(() => document.getElementById("document-typography-close")?.focus());
+  }
+
+  private closeTypographyModal(): void {
+    const overlay = this.typographyOverlay();
+    if (!overlay || overlay.classList.contains("hidden")) return;
+    overlay.classList.add("hidden");
+    this.typographyReturnFocus?.setAttribute("aria-expanded", "false");
+    this.typographyReturnFocus?.focus();
+    this.typographyReturnFocus = null;
   }
 
   private fallbackRows(): HTMLElement[] {
@@ -226,13 +280,22 @@ export class EditorToolbarController {
       select.append(unavailable);
     }
     select.value = selected ?? "";
-    const hint = row.querySelector<HTMLElement>("[data-language-hint]");
     const selectedOption = options.find((entry) => entry.tag === select.value);
-    if (hint) hint.textContent = !selectedOption
-      ? "Spellcheck and word completion are disabled for this script."
-      : selectedOption.installed
-        ? `${selectedOption.label} owns language tools for this script.`
-        : `${selectedOption.label} is selected but its provider is not installed.`;
+    const status = row.querySelector<HTMLElement>("[data-language-status]");
+    const statusText = row.querySelector<HTMLElement>("[data-language-status-text]");
+    const settingsButton = row.querySelector<HTMLButtonElement>("[data-language-settings]");
+    const unavailable = !!select.value && !selectedOption;
+    const state = !select.value ? "off" : selectedOption?.installed ? "ready" : "missing";
+    if (status) status.dataset.state = state;
+    if (statusText) {
+      statusText.textContent = state === "ready" ? "Ready" : state === "missing" ? "Not installed" : "Off";
+      statusText.title = state === "ready"
+        ? `${selectedOption?.label ?? select.value} owns language tools for this script.`
+        : state === "missing"
+          ? `${unavailable ? select.value : selectedOption?.label} needs an installed language provider.`
+          : "Spellcheck and word completion are disabled for this script.";
+    }
+    if (settingsButton) settingsButton.hidden = state !== "missing";
   }
 
   private populateRowFonts(
@@ -242,13 +305,14 @@ export class EditorToolbarController {
     coverageFamilies?: readonly string[]
   ): string[] {
     const select = row.querySelector<HTMLSelectElement>("[data-fallback-font]");
-    const supported = [...new Set(coverageFamilies ?? this.supportedFonts(scriptId))]
+    const compilerFonts = scriptId === "latin" ? TYPST_INTERNAL_FONT_FAMILIES : [];
+    const supported = [...new Set([...(coverageFamilies ?? this.supportedFonts(scriptId)), ...compilerFonts])]
       .sort((left, right) => left.localeCompare(right));
     if (!select) return supported;
     const previous = preferredFont === null ? "" : preferredFont ?? select.value;
     select.replaceChildren(
       this.emptyFontOption(supported.length > 0 ? "Select font" : "No compatible installed font"),
-      ...this.fontOptions(supported)
+      ...this.groupedFontOptions(supported)
     );
     const next = previous === ""
       ? ""
@@ -264,8 +328,9 @@ export class EditorToolbarController {
     select.disabled = false;
     const hint = row.querySelector<HTMLElement>("[data-fallback-hint]");
     if (hint) hint.textContent = supported.length > 0
-      ? `${supported.length} compatible installed font${supported.length === 1 ? "" : "s"}.`
+      ? `${supported.length} compatible Typst font${supported.length === 1 ? "" : "s"}.`
       : "No compatible installed font.";
+    this.updateRowScaleAvailability(row);
     this.updateTypographyAvailability();
     return supported;
   }
@@ -299,13 +364,39 @@ export class EditorToolbarController {
     remove.type = "button";
     remove.className = "toolbar-remove-fallback";
     remove.textContent = "Remove";
-    const hint = document.createElement("div");
+    const hint = document.createElement("span");
     hint.dataset.fallbackHint = "";
-    hint.className = "toolbar-typography-hint";
-    const languageHint = document.createElement("div");
-    languageHint.dataset.languageHint = "";
-    languageHint.className = "toolbar-typography-hint";
-    row.append(script, font, scale, language, remove, hint, languageHint);
+    hint.className = "document-typography-field-hint";
+    const scaleWarning = document.createElement("span");
+    scaleWarning.className = "document-typography-scale-warning";
+    scaleWarning.textContent = "Fine adjustment only";
+    scaleWarning.hidden = true;
+    const status = document.createElement("div");
+    status.className = "document-typography-status";
+    status.dataset.languageStatus = "";
+    const statusText = document.createElement("span");
+    statusText.dataset.languageStatusText = "";
+    const settingsButton = document.createElement("button");
+    settingsButton.type = "button";
+    settingsButton.dataset.languageSettings = "";
+    settingsButton.textContent = "Manage";
+    settingsButton.hidden = true;
+    status.append(statusText, settingsButton);
+    const cell = (label: string, ...children: HTMLElement[]) => {
+      const container = document.createElement("div");
+      container.className = "document-typography-cell";
+      container.dataset.label = label;
+      container.append(...children);
+      return container;
+    };
+    row.append(
+      cell("Script", script),
+      cell("Font", font, hint),
+      cell("Scale", scale, scaleWarning),
+      cell("Language tools", language),
+      cell("Status", status),
+      cell("", remove),
+    );
     this.populateRowFonts(row, fallback.script, fallback.family || undefined);
     this.populateRowLanguages(row, fallback.script, fallback.language);
     if (detected) hint.textContent = `Detected ${typographyScripts.find(item => item.id === fallback.script)?.label}. ${hint.textContent}`;
@@ -321,13 +412,48 @@ export class EditorToolbarController {
       this.populateRowLanguages(row, script.value, null);
       this.updateTypographyAvailability();
     });
-    font.addEventListener("change", () => this.updateTypographyAvailability());
+    font.addEventListener("change", () => {
+      this.updateRowScaleAvailability(row);
+      this.updateTypographyAvailability();
+    });
     language.addEventListener("change", () => this.populateRowLanguages(row, script.value, language.value || null));
+    scale.addEventListener("input", () => this.updateRowScaleAvailability(row));
+    this.updateRowScaleAvailability(row);
+    settingsButton.addEventListener("click", () => {
+      this.closeTypographyModal();
+      document.dispatchEvent(new CustomEvent("typsastra:open-settings", { detail: { panel: "editor" } }));
+    });
     remove.addEventListener("click", () => {
       row.remove();
       this.updateTypographyAvailability();
     });
     return row;
+  }
+
+  private updateRowScaleAvailability(row: HTMLElement): void {
+    const font = row.querySelector<HTMLSelectElement>("[data-fallback-font]");
+    const scale = row.querySelector<HTMLInputElement>("[data-fallback-scale]");
+    const hint = row.querySelector<HTMLElement>(".document-typography-scale-warning");
+    if (!font || !scale || !hint) return;
+    const internalOnly = isTypstInternalOnlyFont(font.value, this.systemFontFamilies);
+    if (internalOnly) {
+      scale.value = "1";
+      scale.disabled = true;
+      scale.setAttribute("aria-invalid", "false");
+      scale.title = "Typst built-in fonts cannot be scaled unless the font is installed locally.";
+      hint.dataset.state = "info";
+      hint.textContent = "Built-in font · install locally to scale";
+      hint.hidden = false;
+      return;
+    }
+    scale.disabled = false;
+    scale.removeAttribute("title");
+    const value = Number(scale.value);
+    const outsideFineAdjustment = Number.isFinite(value) && (value < 0.9 || value > 1.1);
+    scale.setAttribute("aria-invalid", outsideFineAdjustment ? "true" : "false");
+    hint.dataset.state = "warning";
+    hint.textContent = "Fine adjustment only";
+    hint.hidden = !outsideFineAdjustment;
   }
 
   private async refineFallbackCoverage(text: string): Promise<void> {
@@ -348,9 +474,12 @@ export class EditorToolbarController {
         if (generation !== this.coverageGeneration || !row.isConnected || this.rowScript(row).value !== scriptId) return;
         this.populateRowFonts(row, scriptId, selected, families);
         const hint = row.querySelector<HTMLElement>("[data-fallback-hint]");
-        if (hint) hint.textContent = families.length > 0
-          ? `${families.length} installed font${families.length === 1 ? "" : "s"} cover every ${script.label} character used.`
-          : `No installed font covers every ${script.label} character used.`;
+        const selectedFamily = row.querySelector<HTMLSelectElement>("[data-fallback-font]")?.value ?? "";
+        if (hint) hint.textContent = isTypstInternalOnlyFont(selectedFamily, this.systemFontFamilies)
+          ? `${selectedFamily} is provided by the Typst compiler.`
+          : families.length > 0
+            ? `${families.length} installed font${families.length === 1 ? "" : "s"} cover every ${script.label} character used.`
+            : `No installed font covers every ${script.label} character used.`;
       } catch (error) {
         console.warn(`Unable to inspect ${script.label} font coverage.`, error);
       }
@@ -430,7 +559,7 @@ export class EditorToolbarController {
     this.typographyDefaults = config;
     this.rememberedTypography = config;
     this.saveRememberedTypography(config);
-    this.closeDropdowns();
+    this.closeTypographyModal();
   }
 
   private loadRememberedTypography(): DocumentTypography | null {

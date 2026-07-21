@@ -842,6 +842,7 @@ export class TypsastraWorkspaceController {
 
   private handleLanguageProvidersChanged(providers: Parameters<SpellcheckController["setProviders"]>[0]): void {
     this.spellcheckController.setProviders(providers);
+    document.dispatchEvent(new CustomEvent("typsastra:language-providers-changed"));
     const editor = this.settingsController.value.editor;
     if (!this.editorInstance) return;
     this.editorInstance.dispatch({
@@ -4353,7 +4354,7 @@ export class TypsastraWorkspaceController {
       const providers = await this.timeStartup("finish native startup initialization", () =>
         invoke<unknown>("finish_startup_initialization")
       );
-      this.spellcheckController.setProviders(providers);
+      this.handleLanguageProvidersChanged(providers);
       this.performanceDiagnostics.recordFirst({
         name: "startup.providers",
         milliseconds: performance.now() - startedAt,
