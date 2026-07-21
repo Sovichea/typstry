@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewPreferredSourceColumn, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
+import { allowsStandalonePreview, participatesInPreviewCompilation, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewPreferredSourceColumn, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
 
 describe("preview policy", () => {
+  test("keeps unrelated files out of preview compilation", () => {
+    expect(participatesInPreviewCompilation("C:\\work\\main.typ", "c:/work/main.typ", false)).toBe(true);
+    expect(participatesInPreviewCompilation("C:/work/chapter.typ", "C:/work/main.typ", true)).toBe(true);
+    expect(participatesInPreviewCompilation("C:/work/notes.typ", "C:/work/main.typ", false)).toBe(false);
+    expect(participatesInPreviewCompilation("C:/work/main.typ", null, false)).toBe(false);
+  });
   test("keeps standalone preview disabled for v1.0", () => {
     expect(allowsStandalonePreview("// @standalone-preview\n= Chapter")).toBe(false);
     expect(allowsStandalonePreview("\uFEFF// @standalone-preview\n= Chapter")).toBe(false);

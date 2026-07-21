@@ -70,6 +70,21 @@ is intended to balance fonts optically, not to double or substantially change
 the document text size. Accurate representation beyond ±10% is not guaranteed
 and varies from one font to another.
 
+When a file is selected as the project's main file, Typsastra reads its managed
+typography directive before changing the preview target. If its generated font
+cache is missing or no longer matches the directive, Typsastra lists the
+required scales and asks for confirmation before generating fonts. Cancelling
+also cancels the main-file change, so the directive, typography toolbar, font
+cache, and Tinymist session cannot silently diverge. An already matching cache
+does not prompt again.
+Selecting a main file without a managed typography directive clears scaled
+fonts left by the previous main file before Tinymist restarts.
+
+Typography directives in non-main files are inert workspace configuration.
+They can be edited through source or the typography toolbar without prompting,
+generating fonts, or restarting Tinymist. Typsastra evaluates such a directive
+only if that file is later selected as the project's main file.
+
 When a scale differs from `1.0`, Typsastra:
 
 1. locates every installed TTF or OTF face in the selected family;

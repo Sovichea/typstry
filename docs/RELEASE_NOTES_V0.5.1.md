@@ -38,6 +38,16 @@ after release.
   changes.
 - Rejected conflicting scales when multiple scripts select the same internal
   font family, avoiding ambiguous generated-font resolution.
+- Synchronized main-file typography directives with the typography toolbar and
+  generated-font cache. Setting a main file now requests confirmation before
+  preparing missing or stale scaled fonts and aborts the main-file change when
+  preparation is declined or fails.
+- Limited generated-font ownership to the configured main file. Editing a
+  typography directive or toolbar configuration in any other file no longer
+  prompts, generates fonts, or restarts Tinymist.
+- Prevented unrelated non-main files from scheduling a PDF recompilation when
+  edited, saved, or reloaded externally. Included and imported sources continue
+  to update their configured main-document preview.
 - Documented that non-unit scaling is experimental for PDF output. Typst may
   normalize a generated font during PDF subsetting while retaining its scaled
   advances, and Typsastra intentionally does not hide that upstream result with

@@ -47,6 +47,18 @@ export function previewLspMainPath(target: Pick<PreviewTarget, "rootPath" | "mai
   return target.standalone ? target.rootPath : (target.mainPath ?? target.rootPath);
 }
 
+export function participatesInPreviewCompilation(
+  activePath: string | null,
+  pinnedMainPath: string | null,
+  importedByMain: boolean
+): boolean {
+  return importedByMain || (
+    !!activePath
+    && !!pinnedMainPath
+    && filePathKey(activePath) === filePathKey(pinnedMainPath)
+  );
+}
+
 export function tinymistPreviewSourceColumn(lineText: string, utf16Offset: number): number {
   const offset = Math.max(0, Math.min(utf16Offset, lineText.length));
   return [...lineText.slice(0, offset)].length;

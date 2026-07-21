@@ -622,4 +622,22 @@ export class EditorToolbarController {
       this.updateTypographyAvailability();
     }
   }
+
+  public synchronizeDocumentTypography(config: DocumentTypography): void {
+    const synchronized = {
+      baseSizePt: config.baseSizePt,
+      fonts: config.fonts.map(font => ({ ...font }))
+    };
+    this.typographyDefaults = synchronized;
+    this.rememberedTypography = synchronized;
+    this.saveRememberedTypography(synchronized);
+    this.setTypographyControl("toolbar-base-size", String(synchronized.baseSizePt));
+    const text = this.dependencies.getEditor().state.doc.toString();
+    const detected = detectTypographyScripts(text);
+    this.fallbackContainer()?.replaceChildren(...synchronized.fonts.map(font =>
+      this.createFallbackRow(font, detected.some(script => script.id === font.script))
+    ));
+    void this.refineFallbackCoverage(text);
+    this.updateTypographyAvailability();
+  }
 }

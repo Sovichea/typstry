@@ -32,7 +32,7 @@ import {
   tinymistDataPlaneFrameKind,
   tinymistDataPlanePositionText
 } from "./preview/tinymistDataPlane";
-import { allowsStandalonePreview, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewPreferredSourceColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
+import { allowsStandalonePreview, participatesInPreviewCompilation, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewPreferredSourceColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, spellcheckConsoleGroupKey, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
@@ -2213,7 +2213,12 @@ export class TypsastraWorkspaceController {
         this.renderEditorTabs();
       }
       this.setLspStatus({ kind: "preview-ready", message: "File saved" });
-      if (savedChangedRevision && this.settingsController.value.preview.renderMode === "on-save" && !this.previewDisabled) {
+      if (
+        savedChangedRevision
+        && participatesInPreviewCompilation(this.activeFilePath, this.pinnedMainFilePath, this.previewImported)
+        && this.settingsController.value.preview.renderMode === "on-save"
+        && !this.previewDisabled
+      ) {
         void this.renderPdfPreview(content);
       }
 
@@ -2347,7 +2352,8 @@ export class TypsastraWorkspaceController {
     target: "document" | "template"
   ): Promise<boolean> {
     if (!this.activeFilePath) return false;
-    if (!await this.confirmTypographyScaleRange(config)) return false;
+    const ownsWorkspaceTypography = this.isPinnedMainFile(this.activeFilePath);
+    if (ownsWorkspaceTypography && !await this.confirmTypographyScaleRange(config)) return false;
     const typographyDocumentKey = filePathKey(this.activeFilePath);
     const previousAcceptedScale = this.acceptedTypographyScales.get(typographyDocumentKey) ?? [];
     this.acceptedTypographyScales.set(typographyDocumentKey, config.fonts.map(font => ({ ...font })));
@@ -2362,8 +2368,10 @@ export class TypsastraWorkspaceController {
           userEvent: "input"
         });
         await this.saveActiveFile();
-        const fontsChanged = await this.updateWorkspaceTypographyFont(config);
-        await this.refreshActivePreviewRoot(fontsChanged);
+        const fontsChanged = ownsWorkspaceTypography
+          ? await this.updateWorkspaceTypographyFont(config)
+          : false;
+        if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(fontsChanged);
         editor.focus();
         return true;
       }
@@ -2388,10 +2396,12 @@ export class TypsastraWorkspaceController {
             userEvent: "input"
           });
           await this.saveActiveFile();
-          const fontsChanged = await this.updateWorkspaceTypographyFont(config);
+          const fontsChanged = ownsWorkspaceTypography
+            ? await this.updateWorkspaceTypographyFont(config)
+            : false;
           editor.focus();
           this.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
-          await this.refreshActivePreviewRoot(fontsChanged);
+          if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(fontsChanged);
           return true;
         }
       }
@@ -2436,8 +2446,10 @@ export class TypsastraWorkspaceController {
       }
 
       this.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
-      const fontsChanged = await this.updateWorkspaceTypographyFont(config);
-      await this.refreshActivePreviewRoot(fontsChanged);
+      const fontsChanged = ownsWorkspaceTypography
+        ? await this.updateWorkspaceTypographyFont(config)
+        : false;
+      if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(fontsChanged);
       this.editorInstance.focus();
       return true;
     } catch (error) {
@@ -3131,6 +3143,18 @@ export class TypsastraWorkspaceController {
       scale: Number(font.scale.toFixed(4))
     })));
     if (signature(previousFonts) === signature(config.fonts)) return;
+    if (!this.isPinnedMainFile(filePath)) {
+      this.acceptedTypographyScales.set(documentKey, config.fonts.map(font => ({ ...font })));
+      return;
+    }
+    if (!participatesInPreviewCompilation(this.activeFilePath, this.pinnedMainFilePath, this.previewImported)) {
+      this.appendDeveloperLog({
+        kind: "info",
+        source: "preview scheduler",
+        message: `On-type schedule skipped: ${this.activeFilePath ?? "no active file"} does not own the configured main preview.`
+      });
+      return;
+    }
     const requiresConfirmation = config.fonts.some(font => {
       if (Math.abs(font.scale - 1) <= 0.0001) return false;
       const previous = previousFonts.find(candidate =>
@@ -5086,7 +5110,12 @@ export class TypsastraWorkspaceController {
         lspUpdated = true;
       }
     }
-    if (refreshPreview && tab.path.toLowerCase().endsWith(".typ") && !tab.previewDisabled) {
+    if (
+      refreshPreview
+      && participatesInPreviewCompilation(tab.path, this.pinnedMainFilePath, tab.previewImported)
+      && tab.path.toLowerCase().endsWith(".typ")
+      && !tab.previewDisabled
+    ) {
       if (this.settingsController.value.preview.renderMode === "on-save") {
         void this.renderPdfPreview(contents);
       } else {
@@ -5884,8 +5913,56 @@ export class TypsastraWorkspaceController {
     return this.pinnedMainFilePath !== null && filePathKey(this.pinnedMainFilePath) === filePathKey(path);
   }
 
+  private async preparePinnedMainTypography(path: string): Promise<DocumentTypography | null | false> {
+    try {
+      const config = parseTypographyBlock(await this.workspaceText(path));
+      if (!this.workspaceRootPath) return config;
+      const updateRequired = await invoke<boolean>("scaled_workspace_font_set_update_required", {
+        workspaceRootPath: this.workspaceRootPath,
+        fonts: config?.fonts ?? []
+      });
+      if (!updateRequired) return config;
+
+      const scaledFonts = config?.fonts.filter(font => Math.abs(font.scale - 1) > 0.0001) ?? [];
+      if (scaledFonts.length > 0) {
+        const outsideFineRange = scaledFonts.some(font => typographyScaleExceedsFineAdjustment(font.scale));
+        const accepted = await confirm(
+          `${fileNameFromPath(path)} contains a document typography directive that requires local font scaling:\n\n${scaledFonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate scaled workspace fonts before setting this file as main. Font scaling is intended for fine optical adjustment${outsideFineRange ? "; one or more values also exceed the recommended ±10% range, where accurate representation is not guaranteed and varies between fonts" : ""}.\n\nPrepare the fonts and continue?`,
+          {
+            title: "Prepare Document Fonts?",
+            kind: "warning",
+            okLabel: "Prepare and Continue",
+            cancelLabel: "Cancel"
+          }
+        );
+        if (!accepted) return false;
+      }
+
+      try {
+        await this.prepareWorkspaceTypographyFont(config ?? { baseSizePt: 11, fonts: [] });
+      } finally {
+        this.typographyFontUpdateInProgress = false;
+        this.deferredTypographyPreviewContents = null;
+      }
+      return config;
+    } catch (error) {
+      this.appendLspLog({
+        kind: "error",
+        source: "typography",
+        message: `Could not prepare typography for ${fileNameFromPath(path)}: ${String(error)}`
+      });
+      await message(String(error), { title: "Unable to Prepare Document Fonts", kind: "error" });
+      return false;
+    }
+  }
+
   private async setPinnedMainFile(path: string | null): Promise<void> {
     const mainChanged = filePathKey(this.pinnedMainFilePath ?? "") !== filePathKey(path ?? "");
+    const typography = path && mainChanged
+      ? await this.preparePinnedMainTypography(path)
+      : null;
+    if (typography === false) return;
+    if (typography) this.editorToolbarController.synchronizeDocumentTypography(typography);
     const mainWasAlreadyActive = path !== null
       && this.activeFilePath !== null
       && filePathKey(path) === filePathKey(this.activeFilePath);

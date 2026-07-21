@@ -16,6 +16,14 @@ describe("Tinymist workspace lifecycle", () => {
     const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
 
     expect(source).toContain("mainChanged && this.lspClient");
+    expect(source).toContain("preparePinnedMainTypography(path)");
+    expect(source).toContain("scaled_workspace_font_set_update_required");
+    expect(source).toContain("synchronizeDocumentTypography(typography)");
+    expect(source).toContain("ownsWorkspaceTypography && !await this.confirmTypographyScaleRange(config)");
+    expect(source).toContain("if (!this.isPinnedMainFile(filePath))");
+    expect(source.indexOf("preparePinnedMainTypography(path)")).toBeLessThan(
+      source.indexOf("this.pinnedMainFilePath = path", source.indexOf("preparePinnedMainTypography(path)"))
+    );
     expect(source).toContain('restartTinymistSession("Restarting Tinymist for the new main file..."');
     expect(source).toContain('stopTinymistSession("Project closed")');
     expect(source).toContain("tinymistLifecycleQueue");
