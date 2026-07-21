@@ -409,8 +409,8 @@ export class WorkspaceExplorer {
     input.value = defaultValue;
     input.style.width = "100%";
     input.style.background = "transparent";
-    input.style.border = "1px solid #007acc";
-    input.style.color = "var(--text-color)";
+    input.style.border = "1px solid var(--ui-accent-color)";
+    input.style.color = "var(--ui-text)";
     input.style.outline = "none";
     input.style.marginLeft = "4px";
 

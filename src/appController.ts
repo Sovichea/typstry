@@ -1969,7 +1969,7 @@ export class TypsastraWorkspaceController {
       } else if (this.previewRootPath) {
         if (!previewPresentationReused) void this.renderPdfPreview(tab.content);
       } else {
-        this.previewFrame.setMessage(`<div style="padding: 20px; color: #5f6368; font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
+        this.previewFrame.setMessage(`<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
       }
     } else if (!options.skipPreviewActivation) {
       if (!options.preservePreviewSession && this.previewRootPath && !this.previewDisabled) {
@@ -5303,7 +5303,7 @@ export class TypsastraWorkspaceController {
   private noMainFileMessage(): string {
     return (
       `<div class="preview-disabled-placeholder">` +
-      `<div class="preview-disabled-title" style="color:#3db489;font-size:18px;margin-bottom:12px;">No Main File Selected</div>` +
+      `<div class="preview-disabled-title preview-accent-title" style="font-size:18px;margin-bottom:12px;">No Main File Selected</div>` +
       `<div class="preview-disabled-msg">Right-click any <code style="background:var(--ui-hover);padding:1px 5px;border-radius:3px;">.typ</code> file in the Explorer and choose <strong>Set as Main File</strong> to enable live preview and export.</div>` +
       `</div>`
     );
@@ -5676,7 +5676,7 @@ export class TypsastraWorkspaceController {
     this.applyPreviewTargetToTab(activeTab, target);
 
     if (!target.rootPath) {
-      this.previewPane.innerHTML = `<div style="padding: 20px; color: #5f6368; font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`;
+      this.previewPane.innerHTML = `<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`;
       return;
     }
 
