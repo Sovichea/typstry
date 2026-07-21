@@ -42,6 +42,13 @@ after release.
   generated-font cache. Setting a main file now requests confirmation before
   preparing missing or stale scaled fonts and aborts the main-file change when
   preparation is declined or fails.
+- Moved scaled-font variants from project-local `.typsastra` storage to a
+  private global application-data cache. Matching font-and-scale variants are
+  reused across projects, while font bytes and cache paths never enter project
+  settings, workspace copies, source ZIPs, or project archives.
+- Added a soft limit of 10 cached scale variants per font face. Creating another
+  variant requires confirmation; Typsastra preserves existing variants until
+  the planned v0.5.2 cache manager lets users inspect, delete, or renew them.
 - Limited generated-font ownership to the configured main file. Editing a
   typography directive or toolbar configuration in any other file no longer
   prompts, generates fonts, or restarts Tinymist.

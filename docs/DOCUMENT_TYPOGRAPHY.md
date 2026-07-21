@@ -90,15 +90,27 @@ When a scale differs from `1.0`, Typsastra:
 1. locates every installed TTF or OTF face in the selected family;
 2. creates a uniformly scaled copy by changing the OpenType units-per-em value;
 3. recalculates the `head` table and whole-font checksums;
-4. writes the results and a manifest under `.typsastra/fonts/generated/`;
-5. restarts Tinymist with that directory in `TYPST_FONT_PATHS`.
+4. writes the result to Typsastra's private application-data font cache;
+5. records the selected global variants outside the project and restarts
+   Tinymist with only those variant directories in `TYPST_FONT_PATHS`.
 
 Changing units-per-em asks the font engine to interpret outlines, advances,
 vertical metrics, and OpenType positioning anchors against a different em
 square. Generated fonts retain their original internal family names. The
-generated directory is local, disposable, ignored by Git, and excluded from
-project exports. Recipients install the original fonts and reproduce any scale
-locally.
+global cache is private to the local Typsastra installation. Another project
+requesting the same font and scale reuses the cached variant without rescaling.
+Font bytes and machine-specific cache paths are never written under
+`.typsastra`, copied with workspace settings, or included in project exports.
+Recipients install the original fonts and reproduce any scale locally.
+Typsastra rechecks the main-file directive before starting workspace services,
+so a directive changed outside the app cannot silently reuse a stale selection.
+
+Typsastra recommends keeping at most 10 cached scale variants per font face.
+Reusing an existing variant never prompts. When a main-file change, toolbar
+edit, or direct typography-directive edit would create an additional variant
+after that limit, Typsastra asks for confirmation first. It does not delete an
+existing variant automatically. Advanced controls for viewing, deleting, and
+renewing global variants are planned for v0.5.2.
 
 ### Known Typst PDF limitation
 

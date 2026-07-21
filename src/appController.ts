@@ -170,6 +170,19 @@ type ActivateEditorTabOptions = {
   largeFileConfirmed?: boolean;
 };
 
+type FontVariantLimitWarning = {
+  family: string;
+  cachedVariants: number;
+  requestedScale: number;
+  recommendedLimit: number;
+};
+
+type ScaledFontSetStatus = {
+  updateRequired: boolean;
+  generationRequired: boolean;
+  variantLimitWarnings: FontVariantLimitWarning[];
+};
+
 type ForwardSyncTarget = {
   filepath: string;
   line: number;
@@ -2354,6 +2367,7 @@ export class TypsastraWorkspaceController {
     if (!this.activeFilePath) return false;
     const ownsWorkspaceTypography = this.isPinnedMainFile(this.activeFilePath);
     if (ownsWorkspaceTypography && !await this.confirmTypographyScaleRange(config)) return false;
+    if (ownsWorkspaceTypography && !await this.confirmTypographyVariantLimit(config)) return false;
     const typographyDocumentKey = filePathKey(this.activeFilePath);
     const previousAcceptedScale = this.acceptedTypographyScales.get(typographyDocumentKey) ?? [];
     this.acceptedTypographyScales.set(typographyDocumentKey, config.fonts.map(font => ({ ...font })));
@@ -2481,18 +2495,49 @@ export class TypsastraWorkspaceController {
     });
   }
 
-  private async prepareWorkspaceTypographyFont(config: DocumentTypography): Promise<boolean> {
-    if (!this.workspaceRootPath) return false;
-    const scaled = config.fonts.filter(font => Math.abs(font.scale - 1) > 0.0001);
-    const updateRequired = await invoke<boolean>("scaled_workspace_font_set_update_required", {
+  private async scaledFontSetStatus(config: DocumentTypography): Promise<ScaledFontSetStatus> {
+    if (!this.workspaceRootPath) {
+      return { updateRequired: false, generationRequired: false, variantLimitWarnings: [] };
+    }
+    return invoke<ScaledFontSetStatus>("scaled_workspace_font_set_status", {
       workspaceRootPath: this.workspaceRootPath,
       fonts: config.fonts
     });
-    if (!updateRequired) return false;
+  }
+
+  private typographyVariantLimitWarning(status: ScaledFontSetStatus): string | null {
+    if (status.variantLimitWarnings.length === 0) return null;
+    const variants = status.variantLimitWarnings.map(warning =>
+      `${warning.family}: ${warning.cachedVariants} cached variants; requested ${warning.requestedScale}×`
+    ).join("\n");
+    const limit = Math.min(...status.variantLimitWarnings.map(warning => warning.recommendedLimit));
+    return `Typsastra recommends keeping no more than ${limit} scaled variants per font face. This change would add another variant for:\n\n${variants}\n\nExisting variants will not be deleted automatically. Advanced font-variant management is planned for v0.5.2, where variants can be deleted or renewed.\n\nCreate the additional variant anyway?`;
+  }
+
+  private async confirmTypographyVariantLimit(config: DocumentTypography): Promise<boolean> {
+    const warning = this.typographyVariantLimitWarning(await this.scaledFontSetStatus(config));
+    if (!warning) return true;
+    return confirm(warning, {
+      title: "Font Variant Cache Limit",
+      kind: "warning",
+      okLabel: "Create Variant",
+      cancelLabel: "Cancel"
+    });
+  }
+
+  private async prepareWorkspaceTypographyFont(config: DocumentTypography): Promise<boolean> {
+    if (!this.workspaceRootPath) return false;
+    const scaled = config.fonts.filter(font => Math.abs(font.scale - 1) > 0.0001);
+    const status = await this.scaledFontSetStatus(config);
+    if (!status.updateRequired) return false;
     this.typographyFontUpdateInProgress = true;
-    let changed = await invoke<boolean>("clear_scaled_workspace_fonts", { workspaceRootPath: this.workspaceRootPath });
-    if (scaled.length === 0) return changed;
-    this.previewFrame.setLoading(`Scaling ${scaled.length} document fallback font${scaled.length === 1 ? "" : "s"}… This one-time setup may take a moment.`);
+    if (scaled.length === 0) {
+      return invoke<boolean>("clear_scaled_workspace_fonts", { workspaceRootPath: this.workspaceRootPath });
+    }
+    let changed = false;
+    if (status.generationRequired) {
+      this.previewFrame.setLoading(`Scaling ${scaled.length} document fallback font${scaled.length === 1 ? "" : "s"}… The result will be stored in Typsastra's global cache.`);
+    }
     for (const font of scaled) {
       const result = await invoke<{ changed: boolean }>("prepare_scaled_workspace_font", {
         workspaceRootPath: this.workspaceRootPath,
@@ -2501,6 +2546,11 @@ export class TypsastraWorkspaceController {
       });
       changed ||= result.changed;
     }
+    const activationChanged = await invoke<boolean>("activate_scaled_workspace_fonts", {
+      workspaceRootPath: this.workspaceRootPath,
+      fonts: config.fonts
+    });
+    changed ||= activationChanged;
     return changed;
   }
 
@@ -3173,11 +3223,15 @@ export class TypsastraWorkspaceController {
     let accepted = false;
     try {
       const rangeWarning = this.typographyScaleRangeWarning(config);
+      const variantWarning = this.typographyVariantLimitWarning(await this.scaledFontSetStatus(config));
+      const warning = [rangeWarning, variantWarning].filter((value): value is string => Boolean(value)).join("\n\n");
       accepted = await confirm(
-        rangeWarning
-          ?? `Apply these document font scales?\n\n${config.fonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate scaled workspace fonts and restart the preview compiler. Non-1× scaling is experimental for PDF output because Typst may normalize scaled fonts while subsetting them. Use 1× for dependable PDF export.`,
+        warning
+          || `Apply these document font scales?\n\n${config.fonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will prepare the required variants in its private global font cache and restart the preview compiler. No font data is written into the project. Non-1× scaling is experimental for PDF output because Typst may normalize scaled fonts while subsetting them. Use 1× for dependable PDF export.`,
         {
-          title: rangeWarning ? "Large Font Scale Adjustment" : "Confirm Font Scaling",
+          title: variantWarning
+            ? "Font Variant Cache Limit"
+            : (rangeWarning ? "Large Font Scale Adjustment" : "Confirm Font Scaling"),
           kind: "warning"
         }
       );
@@ -5596,6 +5650,17 @@ export class TypsastraWorkspaceController {
         return;
       }
       this.workspaceServicesDeferredForLargeFile = false;
+      if (this.pinnedMainFilePath) {
+        const typography = await this.preparePinnedMainTypography(this.pinnedMainFilePath);
+        if (this.workspaceRootPath !== selected) return;
+        if (typography === false) {
+          await invoke<boolean>("clear_scaled_workspace_fonts", { workspaceRootPath: selected });
+          this.pinnedMainFilePath = null;
+          await this.saveWorkspaceState();
+        } else if (typography) {
+          this.editorToolbarController.synchronizeDocumentTypography(typography);
+        }
+      }
       await this.prepareRenderProjectIfNeeded();
       if (this.workspaceRootPath !== selected) return;
       if (this.lspClient) {
@@ -5917,17 +5982,16 @@ export class TypsastraWorkspaceController {
     try {
       const config = parseTypographyBlock(await this.workspaceText(path));
       if (!this.workspaceRootPath) return config;
-      const updateRequired = await invoke<boolean>("scaled_workspace_font_set_update_required", {
-        workspaceRootPath: this.workspaceRootPath,
-        fonts: config?.fonts ?? []
-      });
-      if (!updateRequired) return config;
+      const typography = config ?? { baseSizePt: 11, fonts: [] };
+      const status = await this.scaledFontSetStatus(typography);
+      if (!status.updateRequired) return config;
 
       const scaledFonts = config?.fonts.filter(font => Math.abs(font.scale - 1) > 0.0001) ?? [];
-      if (scaledFonts.length > 0) {
+      if (scaledFonts.length > 0 && status.generationRequired) {
         const outsideFineRange = scaledFonts.some(font => typographyScaleExceedsFineAdjustment(font.scale));
+        const variantWarning = this.typographyVariantLimitWarning(status);
         const accepted = await confirm(
-          `${fileNameFromPath(path)} contains a document typography directive that requires local font scaling:\n\n${scaledFonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate scaled workspace fonts before setting this file as main. Font scaling is intended for fine optical adjustment${outsideFineRange ? "; one or more values also exceed the recommended ±10% range, where accurate representation is not guaranteed and varies between fonts" : ""}.\n\nPrepare the fonts and continue?`,
+          `${fileNameFromPath(path)} contains a document typography directive that requires local font scaling:\n\n${scaledFonts.map(font => `${font.family}: ${font.scale}×`).join("\n")}\n\nTypsastra will generate the fonts in its private global cache before setting this file as main. No font data will be written into the project. Font scaling is intended for fine optical adjustment${outsideFineRange ? "; one or more values also exceed the recommended ±10% range, where accurate representation is not guaranteed and varies between fonts" : ""}.${variantWarning ? `\n\n${variantWarning}` : "\n\nPrepare the fonts and continue?"}`,
           {
             title: "Prepare Document Fonts?",
             kind: "warning",
@@ -5939,7 +6003,7 @@ export class TypsastraWorkspaceController {
       }
 
       try {
-        await this.prepareWorkspaceTypographyFont(config ?? { baseSizePt: 11, fonts: [] });
+        await this.prepareWorkspaceTypographyFont(typography);
       } finally {
         this.typographyFontUpdateInProgress = false;
         this.deferredTypographyPreviewContents = null;

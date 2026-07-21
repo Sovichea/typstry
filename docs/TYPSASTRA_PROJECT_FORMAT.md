@@ -52,7 +52,7 @@ Schema v1 archives are intentionally unsupported. This prerelease breaking chang
 
 Typsastra project export never includes font binaries, regardless of their location, format, license, or Creative Commons/Open Font License status. The same rule applies to **Export Source ZIP**. Supported font extensions are filtered during export, and an imported project archive containing a font binary is rejected.
 
-Recipients must install the fonts required by a document separately. Exact toolchain binding makes compiler behavior reproducible, but it cannot guarantee identical rendering when the same font faces are unavailable. Local generated fonts under `.typsastra/fonts/generated` remain available to the workspace that created them, but they are cache-like local artifacts and are never archived.
+Recipients must install the fonts required by a document separately. Exact toolchain binding makes compiler behavior reproducible, but it cannot guarantee identical rendering when the same font faces are unavailable. Scaled variants remain in Typsastra's private global application-data cache and may be reused across local projects, but no font bytes or cache paths are written into a workspace or archive.
 
 ## Compatibility and import safety
 

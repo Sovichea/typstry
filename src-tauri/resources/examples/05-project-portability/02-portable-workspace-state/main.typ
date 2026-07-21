@@ -9,7 +9,7 @@ toolchain under `.typsastra`.
 
 Project-owned settings use relative `/`-separated paths. Therefore, copying or
 moving the whole project preserves its configured main file. Preview caches and
-generated fonts are local, disposable data and are not portable settings.
+scaled font variants stay in Typsastra's private global cache and are not portable settings.
 
 Try setting this file as main, opening `notes.typ`, moving the project directory,
 and reopening it. The workspace UI state loads before asynchronous PDF

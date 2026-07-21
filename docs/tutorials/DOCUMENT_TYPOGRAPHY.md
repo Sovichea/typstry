@@ -47,8 +47,14 @@ built-in Latin glyphs from taking ownership of Latin text. It also avoids the
 regex show rules that would interfere with forward and inverse sync.
 
 Typsastra asks for confirmation before generating a scaled font. Generated
-fonts live under `.typsastra/fonts/generated`; they are local, disposable, and
-excluded from project exports.
+variants live only in Typsastra's private global application-data cache, where
+they can be reused by other projects. No font data or cache path is written
+into `.typsastra` or included in project exports.
+
+Typsastra recommends no more than 10 cached scale variants per font face. It
+asks before creating another variant and keeps every existing variant until the
+user explicitly manages the cache. Cache inspection, deletion, and renewal
+controls are planned for v0.5.2.
 
 Keep script scales between `0.90×` and `1.10×` when possible. Typsastra warns
 before applying a larger adjustment because this control is for fine optical

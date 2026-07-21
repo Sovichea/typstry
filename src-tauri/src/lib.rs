@@ -36,18 +36,22 @@ use segmentation::{
 };
 use toolchain::active_tinymist;
 
-fn workspace_font_directories(start: &Path) -> Vec<std::path::PathBuf> {
+fn workspace_font_directories(app_local_data_dir: &Path, start: &Path) -> Vec<std::path::PathBuf> {
+    let cache_root = scaled_fonts::global_scaled_font_root(app_local_data_dir);
     for ancestor in start.ancestors() {
-        let generated = ancestor.join(".typsastra/fonts/generated");
-        if generated.is_dir() {
-            return vec![generated];
+        if ancestor.join(".typsastra").is_dir() {
+            return scaled_fonts::workspace_font_directories(&cache_root, ancestor);
         }
     }
     Vec::new()
 }
 
-fn apply_workspace_font_paths(command: &mut std::process::Command, start: &Path) {
-    let paths = workspace_font_directories(start);
+fn apply_workspace_font_paths(
+    command: &mut std::process::Command,
+    app_local_data_dir: &Path,
+    start: &Path,
+) {
+    let paths = workspace_font_directories(app_local_data_dir, start);
     if !paths.is_empty() {
         if let Ok(value) = std::env::join_paths(paths) {
             command.env("TYPST_FONT_PATHS", value);
@@ -67,28 +71,46 @@ fn font_families_supporting_text(families: Vec<String>, characters: String) -> V
 
 #[tauri::command]
 async fn prepare_scaled_workspace_font(
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, LspState>,
     workspace_root_path: String,
     family: String,
     scale: f32,
 ) -> Result<scaled_fonts::ScaledFontResult, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let cache_root = scaled_fonts::global_scaled_font_root(&data_dir);
     if scaled_fonts::scaled_workspace_font_update_required(
+        &cache_root,
         Path::new(&workspace_root_path),
         &family,
         scale,
     )? {
         stop_lsp_process(&state).await;
     }
-    scaled_fonts::prepare_scaled_workspace_font(Path::new(&workspace_root_path), &family, scale)
+    scaled_fonts::prepare_scaled_workspace_font(
+        &cache_root,
+        Path::new(&workspace_root_path),
+        &family,
+        scale,
+    )
 }
 
 #[tauri::command]
 fn scaled_workspace_font_update_required(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
     family: String,
     scale: f32,
 ) -> Result<bool, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
     scaled_fonts::scaled_workspace_font_update_required(
+        &scaled_fonts::global_scaled_font_root(&data_dir),
         Path::new(&workspace_root_path),
         &family,
         scale,
@@ -97,26 +119,78 @@ fn scaled_workspace_font_update_required(
 
 #[tauri::command]
 fn scaled_workspace_font_set_update_required(
+    app_handle: tauri::AppHandle,
     workspace_root_path: String,
     fonts: Vec<scaled_fonts::ScaledFontRequest>,
 ) -> Result<bool, String> {
-    scaled_fonts::scaled_workspace_font_set_update_required(Path::new(&workspace_root_path), &fonts)
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    scaled_fonts::scaled_workspace_font_set_update_required(
+        &scaled_fonts::global_scaled_font_root(&data_dir),
+        Path::new(&workspace_root_path),
+        &fonts,
+    )
+}
+
+#[tauri::command]
+fn scaled_workspace_font_set_status(
+    app_handle: tauri::AppHandle,
+    workspace_root_path: String,
+    fonts: Vec<scaled_fonts::ScaledFontRequest>,
+) -> Result<scaled_fonts::ScaledFontSetStatus, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    scaled_fonts::scaled_workspace_font_set_status(
+        &scaled_fonts::global_scaled_font_root(&data_dir),
+        Path::new(&workspace_root_path),
+        &fonts,
+    )
+}
+
+#[tauri::command]
+async fn activate_scaled_workspace_fonts(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, LspState>,
+    workspace_root_path: String,
+    fonts: Vec<scaled_fonts::ScaledFontRequest>,
+) -> Result<bool, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let changed = scaled_fonts::activate_scaled_workspace_fonts(
+        &scaled_fonts::global_scaled_font_root(&data_dir),
+        Path::new(&workspace_root_path),
+        &fonts,
+    )?;
+    if changed {
+        stop_lsp_process(&state).await;
+    }
+    Ok(changed)
 }
 
 #[tauri::command]
 async fn clear_scaled_workspace_fonts(
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, LspState>,
     workspace_root_path: String,
 ) -> Result<bool, String> {
-    let generated_dir = Path::new(&workspace_root_path)
-        .join(".typsastra")
-        .join("fonts")
-        .join("generated");
-    if !generated_dir.exists() {
-        return Ok(false);
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let changed = scaled_fonts::clear_scaled_workspace_fonts(
+        &scaled_fonts::global_scaled_font_root(&data_dir),
+        Path::new(&workspace_root_path),
+    )?;
+    if changed {
+        stop_lsp_process(&state).await;
     }
-    stop_lsp_process(&state).await;
-    scaled_fonts::clear_scaled_workspace_fonts(Path::new(&workspace_root_path)).map(|_| true)
+    Ok(changed)
 }
 
 #[tauri::command]
@@ -284,9 +358,15 @@ fn save_workspace_metadata(
     let metadata = root.join(".typsastra");
     write_json_atomically(&metadata.join("config.json"), &project)?;
     write_json_atomically(&metadata.join("workspace.json"), &workspace)?;
+    scaled_fonts::remove_legacy_workspace_fonts(root)?;
     let ignore = metadata.join(".gitignore");
-    let mut ignored = std::fs::read_to_string(&ignore).unwrap_or_default();
-    for entry in ["workspace.json", "cache/", "fonts/generated/"] {
+    let mut ignored = std::fs::read_to_string(&ignore)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| line.trim() != "fonts/generated/")
+        .collect::<Vec<_>>()
+        .join("\n");
+    for entry in ["workspace.json", "cache/"] {
         if !ignored.lines().any(|line| line.trim() == entry) {
             if !ignored.is_empty() && !ignored.ends_with('\n') {
                 ignored.push('\n');
@@ -1277,7 +1357,7 @@ async fn check_typst_document(
 
     let mut command = std::process::Command::new(&tinymist_cmd);
     command.current_dir(parent);
-    apply_workspace_font_paths(&mut command, parent);
+    apply_workspace_font_paths(&mut command, &data_dir, parent);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
 
@@ -1385,7 +1465,7 @@ async fn compile_typst_document(
 
     let mut command = std::process::Command::new(&tinymist_cmd);
     command.current_dir(parent);
-    apply_workspace_font_paths(&mut command, parent);
+    apply_workspace_font_paths(&mut command, &data_dir, parent);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
 
@@ -1952,7 +2032,7 @@ async fn start_tinymist_lsp(
     let mut command = tokio::process::Command::new(&tinymist_exe);
     if let Some(workspace_root) = workspace_root_path {
         let workspace = Path::new(&workspace_root);
-        let paths = workspace_font_directories(workspace);
+        let paths = workspace_font_directories(&data_dir, workspace);
         if !paths.is_empty() {
             if let Ok(value) = std::env::join_paths(paths) {
                 command.env("TYPST_FONT_PATHS", value);
@@ -2649,6 +2729,8 @@ pub fn run() {
             prepare_scaled_workspace_font,
             scaled_workspace_font_update_required,
             scaled_workspace_font_set_update_required,
+            scaled_workspace_font_set_status,
+            activate_scaled_workspace_fonts,
             clear_scaled_workspace_fonts,
             install_unicode_font,
             analyze_language_ranges,

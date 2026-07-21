@@ -165,7 +165,7 @@ Installer verification is required for Windows MSI/NSIS, Linux DEB/RPM desktop i
 - [x] **V1-I.18 Adopt font-free archives.** Remove font-package and render-environment fields in schema v2.
 - [x] **V1-I.19 Exclude font binaries.** Filter recognized desktop and web-font formats from project and source ZIP exports.
 - [x] **V1-I.20 Reject font-bearing archives.** Fail preflight before extraction when a font binary is present.
-- [x] **V1-I.21 Preserve local font workflows.** Continue using workspace-generated fonts locally without archiving them.
+- [x] **V1-I.21 Preserve local font workflows.** Reuse scaled variants from Typsastra's private global cache without writing or archiving fonts in a workspace.
 - [x] **V1-I.22 Explain external font requirements.** Tell importers that required fonts must be installed separately.
 - [x] **V1-I.23 Keep export lightweight.** Remove PDF font auditing, licensing checks, duplicate compilation, and font payload limits.
 - [x] **V1-I.24 Test font-free interchange.** Cover every filtered extension, crafted archives, source ZIPs, local generated fonts, and cross-platform round trips.

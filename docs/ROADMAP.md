@@ -49,6 +49,14 @@ continuing the v0.5.x maintenance line:
 The detailed tasks and acceptance criteria are in the
 [v0.5.1 examples and documentation implementation plan](./V0_5_1_EXAMPLES_DOCUMENTATION_IMPLEMENTATION_PLAN.md).
 
+## v0.5.2 — font-variant cache management
+
+- Add advanced settings for inspecting the private global scaled-font cache.
+- Show cached variants by font face, scale, disk usage, and last use.
+- Allow users to delete selected or unused variants and renew stale variants.
+- Preserve the 10-variant recommendation while keeping deletion explicitly
+  user-controlled.
+
 ## v0.6.0 — research productivity and discoverability
 
 Make Typsastra's document-engineering strengths easier to discover while adding broadly useful research-authoring tools. This milestone does not expand into discipline-specific computation or visual tooling.
