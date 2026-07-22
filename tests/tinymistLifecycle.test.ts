@@ -37,6 +37,20 @@ describe("Tinymist workspace lifecycle", () => {
     expect(source).toContain("await this.restoreActiveDocumentAfterTinymistRestart();");
   });
 
+  test("reloads template typography and synchronizes restored directives", async () => {
+    const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    expect(source).toContain("private async reloadTemplateTypographyContext");
+    expect(source).toContain('restartTinymistSession("Reloading template typography..."');
+    const activation = source.indexOf("private async activateEditorTab");
+    const tabDispatch = source.indexOf("this.editorInstance.dispatch({", activation);
+    const typographySync = source.indexOf(
+      "this.editorToolbarController.synchronizeDocumentTypography(activeTypography)",
+      tabDispatch,
+    );
+    expect(tabDispatch).toBeGreaterThan(activation);
+    expect(typographySync).toBeGreaterThan(tabDispatch);
+  });
+
   test("corrects unsupported compiler-font scales after reporting them", async () => {
     const source = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
     expect(source).toContain('userEvent: "input.typography-scale-correction"');

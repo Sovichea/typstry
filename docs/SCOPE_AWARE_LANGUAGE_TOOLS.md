@@ -26,9 +26,16 @@ The Typography toolbar writes this directive.
 - IME candidates remain owned by the operating system and are independent of
   Typsastra word completion.
 
-The configured main file owns this setting for its included files. When a
-workspace has no main file, the active standalone document owns it. A directive
-in a non-main file does not override the main document's language routing.
+The configured main file owns this project-level setting. Typsastra inherits it
+across the main document's local dependency graph, including included chapters,
+imported templates, and imported local libraries. Authors do not copy the
+directive into those files, and a dependency-local directive does not override
+the main document's language routing.
+
+Files outside that dependency graph do not inherit the main setting. An
+unrelated file can opt in with its own `document-scripts` directive; otherwise
+Typsastra leaves its spellcheck and word completion disabled. When a workspace
+has no configured main file, the active standalone document owns its setting.
 
 ## Why this model is deliberately simple
 
@@ -49,7 +56,8 @@ dictionary.
 
 Provider binaries and dictionaries are installed globally under Settings.
 Installation makes a provider available; it does not activate it for every
-project. The `document-scripts` directive activates it for one document.
+project. The main file's `document-scripts` directive activates it for that
+document and its local dependencies.
 
 Global and project terminology continue to recognize accepted names. Language-
 family terminology is applied only when its matching configured provider owns

@@ -89,7 +89,7 @@ The editing policy never performs dictionary lookup or IPC. The Rust provider ne
 |:--|:--|
 | `editor.spellcheck` | Enables unknown-word analysis for all enabled providers |
 | `editor.wordCompletion` | Enables provider-advertised typing suggestions independently from spellcheck |
-| `typsastra:document-scripts` | Assigns the Khmer provider to Khmer text for the current document; the Khmer editing policy remains independent |
+| `typsastra:document-scripts` | Assigns the Khmer provider to Khmer text for the configured main document and its local dependencies; the Khmer editing policy remains independent |
 | `editor.userDictionary` | Treats exact personal words as known in frontend issue filtering |
 | `editor.ignoredWords` | Keeps an informational underline/log entry but excludes the word from problem counts |
 | `editor.showZws` | Controls visibility of invisible markers, including temporary composition geometry |

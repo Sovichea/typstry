@@ -92,7 +92,10 @@ Spellcheck and typing word suggestions can be controlled independently in Editor
 
 Settings installs language providers globally. A provider participates in a
 document only after its language is assigned to a script through the Typography
-toolbar and stored in `typsastra:document-scripts`.
+toolbar and stored in the configured main file's `typsastra:document-scripts`.
+That one assignment is inherited by included chapters, imported templates, and
+imported local libraries; it does not need to be copied into those files.
+Unrelated files inherit nothing and may declare their own routing.
 
 **Add language...** opens the catalog dialog to download additional Hunspell dictionaries. Each catalog entry row displays detailed onboarding metadata:
 - **Provider Type:** Displays the type level (e.g. `Deep provider` or `Dictionary only`).

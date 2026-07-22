@@ -32,7 +32,7 @@ import {
   tinymistDataPlaneFrameKind,
   tinymistDataPlanePositionText
 } from "./preview/tinymistDataPlane";
-import { activeFileCanRenderPreview, allowsStandalonePreview, participatesInPreviewCompilation, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewPreferredSourceColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
+import { activeFileCanRenderPreview, allowsStandalonePreview, documentScriptsForPreviewContext, participatesInPreviewCompilation, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, tinymistPreviewPreferredSourceColumn, usesTemplateAwareStandaloneRoot, type PreviewTarget, type PreviewRefreshStyle } from "./preview/previewPolicy";
 import { LogConsoleController, spellcheckConsoleGroupKey, type LogConsoleEntryInput } from "./diagnostics/logConsoleController";
 import { EditorFontManager } from "./editor/fontManager";
 import { TabStripController } from "./editor/tabStripController";
@@ -83,6 +83,7 @@ import { releaseSummaryForVersion, shouldShowReleaseSummary } from "./releaseNot
 
 import {
   ensureTypographyTemplateApplication,
+  effectiveTemplateTypography,
   externalReferenceLabels,
   findLocalTemplateApplication,
   findTemplateFunctionName,
@@ -1355,10 +1356,17 @@ export class TypsastraWorkspaceController {
   }
 
   private configureDocumentLanguageTools(text: string): void {
+    const activeEntries = parseDocumentScripts(text);
     const activeOwnsDocumentConfiguration = !this.pinnedMainFilePath
       || (this.activeFilePath !== null && this.isPinnedMainFile(this.activeFilePath));
-    if (activeOwnsDocumentConfiguration) this.mainDocumentScripts = parseDocumentScripts(text);
-    const entries = this.mainDocumentScripts;
+    if (activeOwnsDocumentConfiguration) this.mainDocumentScripts = activeEntries;
+    const entries = documentScriptsForPreviewContext(
+      this.activeFilePath,
+      this.pinnedMainFilePath,
+      this.previewImported,
+      activeEntries,
+      this.mainDocumentScripts
+    );
     this.documentLanguageService.configure(entries);
     this.spellcheckController.setDocumentScripts(entries);
   }
@@ -1969,6 +1977,10 @@ export class TypsastraWorkspaceController {
       this.isLoadingFile = false;
     }
     this.restoreTabFoldState(tab);
+    const activeTypography = await this.effectiveDocumentTypography(path, tab.content);
+    if (activeTypography) {
+      this.editorToolbarController.synchronizeDocumentTypography(activeTypography);
+    }
 
     if (tab.scrollTop !== undefined || tab.scrollLeft !== undefined) {
       requestAnimationFrame(() => {
@@ -1978,7 +1990,6 @@ export class TypsastraWorkspaceController {
     }
 
     this.activeFilePath = path;
-    this.activateSpellcheckDocument(path);
     if (path.toLowerCase().endsWith(".typ")) this.diagnosticWaitStartedAt = performance.now();
     let previewPresentationReused = false;
     let previewGuarded = false;
@@ -2027,6 +2038,10 @@ export class TypsastraWorkspaceController {
         }
       }
     }
+    // Resolve dependency ownership before activating language tools. Included
+    // chapters, templates, and libraries inherit the main document's script
+    // languages; unrelated files use only their own directive.
+    this.activateSpellcheckDocument(path);
     this.clearPendingLspSync();
     this.previewSyncController.clearForward();
     this.renderEditorTabs();
@@ -2608,12 +2623,9 @@ export class TypsastraWorkspaceController {
             userEvent: "input"
           });
           await this.saveActiveFile();
-          const fontsChanged = ownsWorkspaceTypography
-            ? await this.updateWorkspaceTypographyFont(config)
-            : false;
+          await this.reloadTemplateTypographyContext(config);
           editor.focus();
           this.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
-          if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(fontsChanged);
           return true;
         }
       }
@@ -2668,11 +2680,8 @@ export class TypsastraWorkspaceController {
         this.configureDocumentLanguageTools(this.editorInstance.state.doc.toString());
       }
 
+      await this.reloadTemplateTypographyContext(config);
       this.setLspStatus({ kind: "preview-ready", message: "Typography applied to template" });
-      const fontsChanged = ownsWorkspaceTypography
-        ? await this.updateWorkspaceTypographyFont(config)
-        : false;
-      if (ownsWorkspaceTypography) await this.refreshActivePreviewRoot(fontsChanged);
       this.editorInstance.focus();
       return true;
     } catch (error) {
@@ -2728,6 +2737,36 @@ export class TypsastraWorkspaceController {
     if (managed) return managed;
     const fonts = parseDocumentScripts(text);
     return fonts.length > 0 ? { baseSizePt: 11, fonts } : null;
+  }
+
+  private async effectiveDocumentTypography(
+    path: string,
+    text: string
+  ): Promise<DocumentTypography | null> {
+    const localTypography = parseTypographyBlock(text);
+    if (localTypography) return localTypography;
+
+    const application = findLocalTemplateApplication(text);
+    if (application) {
+      try {
+        const templatePath = await join(await dirname(path), application.importPath);
+        const insideWorkspace = !this.workspaceRootPath
+          || relativeFilePath(this.workspaceRootPath, templatePath) !== null;
+        if (insideWorkspace && await invoke<boolean>("workspace_path_exists", { path: templatePath })) {
+          const templateText = await this.workspaceText(templatePath);
+          const templateTypography = effectiveTemplateTypography(text, templateText);
+          if (templateTypography) return templateTypography;
+        }
+      } catch (error) {
+        this.appendDeveloperLog({
+          kind: "warning",
+          source: "typography",
+          message: `Could not resolve typography from ${application.importPath}: ${String(error)}`
+        });
+      }
+    }
+
+    return this.documentTypographyFromText(text);
   }
 
   private async confirmTypographyScaleRange(config: DocumentTypography): Promise<boolean> {
@@ -2809,6 +2848,26 @@ export class TypsastraWorkspaceController {
     const hadDeferredPreview = this.deferredTypographyPreviewContents !== null;
     this.deferredTypographyPreviewContents = null;
     return changed || hadDeferredPreview;
+  }
+
+  private async reloadTemplateTypographyContext(config: DocumentTypography): Promise<void> {
+    if (this.workspaceRootPath && this.pinnedMainFilePath) {
+      try {
+        await this.prepareWorkspaceTypographyFont(config);
+      } finally {
+        this.typographyFontUpdateInProgress = false;
+        this.deferredTypographyPreviewContents = null;
+      }
+    }
+    // A blocked large preview must remain stopped until its own confirmation
+    // is accepted. Its eventual startup will read the updated template.
+    if (this.blockedLargePreviewRoot) return;
+    if (this.lspClient) {
+      await this.restartTinymistSession("Reloading template typography...");
+      await this.restoreActiveDocumentAfterTinymistRestart();
+    } else {
+      await this.refreshActivePreviewRoot(true);
+    }
   }
 
   private async reloadWorkspaceFonts(): Promise<void> {
@@ -5906,7 +5965,10 @@ export class TypsastraWorkspaceController {
       pinnedMainPath: this.pinnedMainFilePath
     });
     if (target.disabled) {
-      if (activeTab) this.applyPreviewTargetToTab(activeTab, target);
+      if (activeTab) {
+        this.applyPreviewTargetToTab(activeTab, target);
+        this.configureDocumentLanguageTools(contents);
+      }
       this.invalidatePreviewWork(`${this.activeFilePath} does not participate in the configured main preview`);
       this.previewFrame.setMessage(this.disabledPreviewMessage());
       return;
@@ -5914,7 +5976,10 @@ export class TypsastraWorkspaceController {
     target = await this.prepareTemplateAwarePreview(target, this.activeFilePath, contents);
     if (!await this.ensureLargePreviewApproved(target.rootPath)) {
       const activeTab = this.getActiveTab();
-      if (activeTab) this.applyPreviewTargetToTab(activeTab, target);
+      if (activeTab) {
+        this.applyPreviewTargetToTab(activeTab, target);
+        this.configureDocumentLanguageTools(contents);
+      }
       return;
     }
     await this.updatePinnedMain(previewLspMainPath(target));
@@ -5933,10 +5998,10 @@ export class TypsastraWorkspaceController {
         )
       : null;
     const unchanged = identity?.key === this.previewSessionKey;
-    if (unchanged && !forceRender) return;
-
     if (!activeTab) return;
     this.applyPreviewTargetToTab(activeTab, target);
+    this.configureDocumentLanguageTools(contents);
+    if (unchanged && !forceRender) return;
 
     if (!target.rootPath) {
       this.previewPane.innerHTML = `<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`;
@@ -6391,10 +6456,10 @@ export class TypsastraWorkspaceController {
           await this.writeWorkspaceText(path, source);
         }
       }
-      if (!this.workspaceRootPath) return config;
+      if (!this.workspaceRootPath) return await this.effectiveDocumentTypography(path, source) ?? config;
       const typography = config ?? { baseSizePt: 11, fonts: [] };
       const status = await this.scaledFontSetStatus(typography);
-      if (!status.updateRequired) return config;
+      if (!status.updateRequired) return await this.effectiveDocumentTypography(path, source) ?? config;
 
       const scaledFonts = config?.fonts.filter(font => Math.abs(font.scale - 1) > 0.0001) ?? [];
       if (scaledFonts.length > 0 && status.generationRequired) {
@@ -6418,7 +6483,7 @@ export class TypsastraWorkspaceController {
         this.typographyFontUpdateInProgress = false;
         this.deferredTypographyPreviewContents = null;
       }
-      return config;
+      return await this.effectiveDocumentTypography(path, source) ?? config;
     } catch (error) {
       this.appendLspLog({
         kind: "error",

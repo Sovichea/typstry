@@ -54,6 +54,13 @@ The detailed tasks and acceptance criteria are in the
 
 - Keep the release focused on bug fixes, regressions, performance, and minor
   refinements to the existing v0.5.1 feature set.
+- **TODO — revisit document-language configuration UX.** The main file now
+  provides language routing to its included and imported dependencies, but the
+  workflow is not yet convenient enough. Re-evaluate metadata ownership,
+  inherited-versus-standalone state, configuration discoverability, and how the
+  Typography UI can manage project language providers without requiring users
+  to understand or manually maintain directives. Preserve deterministic routing
+  and keep unrelated files isolated while simplifying the authoring workflow.
 - Add advanced settings for inspecting the private global scaled-font cache.
 - Show cached variants by font face, scale, disk usage, and last use.
 - Allow users to delete selected or unused variants and renew stale variants.

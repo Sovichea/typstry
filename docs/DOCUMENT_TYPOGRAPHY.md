@@ -165,6 +165,15 @@ Document Typography does not change CodeMirror's source-editor font or Typst
 spellcheck and word completion for the assigned script. A script with no
 language is intentionally left unchecked and receives no Typsastra completion.
 Typst language scopes and keyboard layouts do not override this selection.
+When the file is configured as the workspace main document, these language
+assignments are inherited by its included chapters, imported templates, and
+imported local libraries. Do not duplicate the directive in each dependency.
+Unrelated files remain isolated and may provide their own directive.
+
+An applied template retains separate `typsastra:script-fonts` metadata because
+Typsastra needs the original family, script, order, and scale to edit the
+generated typography rule. This is typography metadata, not language routing;
+it deliberately contains no language-provider assignments.
 
 Typsastra does not override `raw`; inline and block raw content keeps Typst's
 normal raw-font behavior.

@@ -1,4 +1,10 @@
-import { renderTypographyBlock, type DocumentTypography, type TypographyEdit } from "./documentTypography";
+import {
+  parseDocumentScripts,
+  parseTypographyBlock,
+  renderTypographyBlock,
+  type DocumentTypography,
+  type TypographyEdit
+} from "./documentTypography";
 
 export type LocalTemplateApplication = {
   functionName: string;
@@ -61,6 +67,21 @@ export function findLocalTemplateApplication(mainText: string): LocalTemplateApp
   return null;
 }
 
+export function effectiveTemplateTypography(
+  mainText: string,
+  templateText: string
+): DocumentTypography | null {
+  const templateTypography = parseTypographyBlock(templateText);
+  if (!templateTypography) return null;
+  const documentScripts = parseDocumentScripts(mainText);
+  return {
+    baseSizePt: templateTypography.baseSizePt,
+    // The main-file directive owns document language routing and script order.
+    // The template owns the effective text rule, including its base size.
+    fonts: documentScripts.length > 0 ? documentScripts : templateTypography.fonts
+  };
+}
+
 export function findTemplateFunctionName(text: string): string | null {
   const matches = [...text.matchAll(/#let\s+([A-Za-z_][\w-]*)\s*\(/g)];
   for (const match of matches) {
@@ -82,7 +103,12 @@ export function findTemplateFunctionName(text: string): string | null {
 
 
 export function renderTemplateTypographyBlock(config: DocumentTypography): string {
-  return renderTypographyBlock(config)
+  const typographyOnly: DocumentTypography = {
+    ...config,
+    fonts: config.fonts.map(font => ({ ...font, language: null }))
+  };
+  return renderTypographyBlock(typographyOnly)
+    .replace("// typsastra:document-scripts ", "// typsastra:script-fonts ")
     .trimEnd()
     .split("\n")
     .map(line => line.startsWith("#") ? `  ${line.slice(1)}` : `  ${line}`)

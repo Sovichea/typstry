@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { activeFileCanRenderPreview, allowsStandalonePreview, participatesInPreviewCompilation, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, previewTargetStartsMainCompiler, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewPreferredSourceColumn, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
+import { activeFileCanRenderPreview, allowsStandalonePreview, documentScriptsForPreviewContext, participatesInPreviewCompilation, previewLspMainPath, previewRefreshStyle, previewSessionIdentity, previewTargetStartsMainCompiler, researchDocumentIdentity, sourceMapPreviewTaskId, staleSourceMapTaskIds, supportsResponsivePartialRendering, tinymistPreviewArguments, tinymistPreviewByteColumn, tinymistPreviewNearbyByteColumns, tinymistPreviewNearbySourceColumns, tinymistPreviewPreferredSourceColumn, tinymistPreviewSourceColumn, usesTemplateAwareStandaloneRoot } from "../src/preview/previewPolicy";
 
 describe("preview policy", () => {
+  test("inherits main language routing only through the dependency graph", () => {
+    const main = [{ family: "Main Latin", script: "latin", scale: 1, language: "en" }];
+    const local = [{ family: "Local Latin", script: "latin", scale: 1, language: "fr" }];
+    expect(documentScriptsForPreviewContext("/project/chapter.typ", "/project/main.typ", true, [], main)).toBe(main);
+    expect(documentScriptsForPreviewContext("/project/library.typ", "/project/main.typ", true, [], main)).toBe(main);
+    expect(documentScriptsForPreviewContext("/project/unrelated.typ", "/project/main.typ", false, local, main)).toBe(local);
+    expect(documentScriptsForPreviewContext("/project/unrelated.typ", "/project/main.typ", false, [], main)).toEqual([]);
+  });
+
   test("guards the main compiler for included chapters and imported libraries", () => {
     const mainTarget = {
       rootPath: "C:\\project\\main.typ",

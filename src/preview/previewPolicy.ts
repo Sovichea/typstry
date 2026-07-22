@@ -1,4 +1,5 @@
 import { filePathKey } from "../platform/paths";
+import type { DocumentScriptFont } from "../editor/documentTypography";
 
 export type PreviewTarget = {
   rootPath: string | null;
@@ -70,6 +71,26 @@ export function participatesInPreviewCompilation(
     && !!pinnedMainPath
     && filePathKey(activePath) === filePathKey(pinnedMainPath)
   );
+}
+
+export function documentScriptsForPreviewContext(
+  activePath: string | null,
+  pinnedMainPath: string | null,
+  importedByMain: boolean,
+  activeEntries: readonly DocumentScriptFont[],
+  mainEntries: readonly DocumentScriptFont[]
+): readonly DocumentScriptFont[] {
+  if (
+    pinnedMainPath
+    && activePath
+    && filePathKey(activePath) !== filePathKey(pinnedMainPath)
+    && importedByMain
+  ) {
+    return mainEntries;
+  }
+  // The configured main owns project language routing. Files outside its
+  // dependency graph remain isolated and may opt in with their own directive.
+  return activeEntries;
 }
 
 export function activeFileCanRenderPreview(

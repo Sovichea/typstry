@@ -272,7 +272,9 @@ export function parseTypographyBlock(text: string): DocumentTypography | null {
   const stack = block.match(/#set text\(font: \(([^\r\n]+)\), size: (-?\d+(?:\.\d+)?)pt\)/);
   const single = block.match(/#set text\(font: "((?:\\.|[^"])*)", size: (-?\d+(?:\.\d+)?)pt\)/);
   const legacyComplex = block.match(/#show regex\("\\p\{([^}]+)\}\+"\): set text\(font: "((?:\\.|[^"])*)", size: 1em ([+-]) (\d+(?:\.\d+)?)pt\)/);
-  const managedTextRule = /#set text\(/.test(block);
+  // Managed rules are written as `#set text` in a document, but lose the
+  // leading `#` when they are installed inside a Typst template function.
+  const managedTextRule = /(?:^|\n)\s*#?set text\(/.test(block);
   if (!managedTextRule && !legacyComplex) return null;
   const legacyScript = legacyComplex
     ? documentScripts.find(candidate => candidate.unicodeProperty === legacyComplex[1])

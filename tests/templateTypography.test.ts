@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   externalReferenceLabels,
+  effectiveTemplateTypography,
   ensureTypographyTemplateApplication,
   findLocalTemplateApplication,
   findTemplateFunctionName,
@@ -42,7 +43,17 @@ describe("template typography", () => {
     const updated = source.slice(0, edit.from) + edit.insert + source.slice(edit.to);
     expect(updated).toContain('  set text(');
     expect(updated).toContain('(name: "MiSans Khmer", covers: regex("\\p{scx=Khmer}"))');
+    expect(updated).toContain("// typsastra:script-fonts ");
+    expect(updated).not.toContain("// typsastra:document-scripts ");
+    expect(updated).not.toContain('"language"');
     expect(updated).not.toContain("show regex(");
+    expect(effectiveTemplateTypography(
+      '#import "template.typ": thesis\n#show: thesis\n// typsastra:document-scripts [{"family":"Main Latin","script":"latin","scale":1,"language":"en"}]',
+      updated.replace("size: 11pt", "size: 13pt")
+    )).toEqual({
+      baseSizePt: 13,
+      fonts: [{ family: "Main Latin", script: "latin", scale: 1, language: "en" }]
+    });
   });
 
   test("creates a portable local fallback and preview source", () => {
