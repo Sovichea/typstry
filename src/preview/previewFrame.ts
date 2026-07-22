@@ -79,6 +79,7 @@ export class PreviewFrame {
   private messageHost: HTMLDivElement | null = null;
   private errorOverlay: HTMLDivElement | null = null;
   private mountedUrl = "";
+  private mountedSessionKey = "";
   private previewZoomPercent = FALLBACK_ZOOM_PERCENT;
   private isFitToWidth = true;
   private resizeObserver: ResizeObserver | null = null;
@@ -282,7 +283,7 @@ export class PreviewFrame {
     }
   }
 
-  public async loadPdfData(base64Data: string, identity = "compiler-pdf"): Promise<void> {
+  public async loadPdfData(base64Data: string, identity = "compiler-pdf", sessionKey = identity): Promise<void> {
     const startedAt = performance.now();
     const generation = ++this.pdfGeneration;
     const obsoleteLoadingTask = this.pendingPdfLoadingTask;
@@ -347,6 +348,7 @@ export class PreviewFrame {
       this.pageDimensions = nextDimensions;
       this.currentPdfBytes = bytes.byteLength;
       this.mountedUrl = identity;
+      this.mountedSessionKey = sessionKey;
       if (this.isFitToWidth) this.previewZoomPercent = this.computeFitToWidthPercent();
       this.createPageSlots(iframeDoc, true);
       this.updateHorizontalOverflow();
@@ -1231,8 +1233,10 @@ export class PreviewFrame {
     this.reportInteractionStatus({ kind: "debug", url: this.mountedUrl, reason: `Inverse sync: ${reason}` });
   }
 
-  public activateSession(_sessionKey: string): boolean {
-    return this.pdfDoc !== null;
+  public activateSession(sessionKey: string): boolean {
+    if (!this.pdfDoc || this.mountedSessionKey !== sessionKey) return false;
+    this.clearMessageHost();
+    return true;
   }
 
   public async clear(): Promise<void> {
@@ -1241,6 +1245,7 @@ export class PreviewFrame {
     this.iframe?.remove();
     this.iframe = null;
     this.mountedUrl = "";
+    this.mountedSessionKey = "";
     this.currentPdfBytes = 0;
     await this.disposePdfDocument();
     this.pdfWorker?.destroy();
@@ -1256,6 +1261,7 @@ export class PreviewFrame {
     this.iframe?.remove();
     this.iframe = null;
     this.mountedUrl = "";
+    this.mountedSessionKey = "";
     this.currentPdfBytes = 0;
     void this.disposePdfDocument();
     this.clearErrorOverlay();
@@ -1263,6 +1269,16 @@ export class PreviewFrame {
     this.reportPageStatus(0);
     const host = document.createElement("div");
     host.className = "preview-message-host";
+    host.innerHTML = html;
+    this.pane.appendChild(host);
+    this.messageHost = host;
+  }
+
+  public setMessageOverlay(html: string): void {
+    this.clearErrorOverlay();
+    this.clearMessageHost();
+    const host = document.createElement("div");
+    host.className = "preview-message-host preview-preserved-message-overlay";
     host.innerHTML = html;
     this.pane.appendChild(host);
     this.messageHost = host;

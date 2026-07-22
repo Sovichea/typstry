@@ -3356,6 +3356,13 @@ button.welcome-item:disabled {
   justify-content: flex-end;
 }
 
+.preview-preserved-message-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+  background: var(--ui-bg);
+}
+
 .cm-lineNumbers .cm-gutterElement > .cm-language-scope-marker {
   margin-top: max(0px, calc((var(--editor-line-height-px, 23.8px) - 16px) / 2));
 }

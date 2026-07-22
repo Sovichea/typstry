@@ -45,4 +45,14 @@ describe("cross-platform scrollbar design", () => {
     expect(html).toContain('id="preview-page-count"');
     expect(html).toContain('role="spinbutton"');
   });
+
+  test("preserves a compiled PDF behind non-Typst preview messages", async () => {
+    const source = await Bun.file(new URL("../src/preview/previewFrame.ts", import.meta.url)).text();
+    const controller = await Bun.file(new URL("../src/appController.ts", import.meta.url)).text();
+    expect(source).toContain("setMessageOverlay(html: string)");
+    expect(source).toContain("this.mountedSessionKey !== sessionKey");
+    expect(source).toContain("this.clearMessageHost();");
+    expect(controller).toContain("this.previewFrame.setMessageOverlay(");
+    expect(controller).toContain("previewPresentationReused = this.previewFrame.activateSession(tab.previewSessionKey)");
+  });
 });

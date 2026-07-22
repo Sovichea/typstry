@@ -273,7 +273,7 @@ export function getEditorExtensions(
           const client = getClient();
           const uri = getUri();
           const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-          if (client && pos !== null && onNavigateToDefinition) {
+          if (client && uri && pos !== null && onNavigateToDefinition) {
             const lspPos = client.lspPositionFromEditorPosition(view.state.doc, pos);
             console.log("[Ctrl+Click] Requesting definition for", uri, lspPos);
             void client.getDefinition(uri, lspPos).then((locations) => {

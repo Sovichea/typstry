@@ -23,7 +23,7 @@ import type { EditorTextEdit, LspDiagnostic, LspInverseSyncResult, LspLogEntry, 
 import type { AppSettings, DeveloperLogCategory } from "./settings";
 import { SettingsController } from "./settingsController";
 import { fileNameFromPath, filePathFromUri, filePathKey, filePathToUri, nativeFilePath, relativeFilePath, remapFilePath } from "./platform/paths";
-import { isBinaryImagePath, isSupportedInAppPath, fileExtension } from "./platform/fileTypes";
+import { isBinaryImagePath, isSupportedInAppPath, isTypstDocumentPath, fileExtension } from "./platform/fileTypes";
 import { WysiwymAdapter } from "./wysiwym/adapter";
 import { PreviewFrame, type PreviewClickPoint, type PreviewInteractionStatus, type PreviewPageStatus } from "./preview/previewFrame";
 import { PreviewSyncController } from "./preview/previewSyncController";
@@ -1538,8 +1538,10 @@ export class TypsastraWorkspaceController {
         try {
           for (const renamed of renamedTabs) {
             const oldUri = filePathToUri(renamed.oldPath);
-            if (!this.openedDocumentUris.delete(oldUri)) continue;
-            await this.lspClient.closeTextDocument(oldUri).catch(() => {});
+            if (this.openedDocumentUris.delete(oldUri)) {
+              await this.lspClient.closeTextDocument(oldUri).catch(() => {});
+            }
+            if (!isTypstDocumentPath(renamed.tab.path)) continue;
             const newUri = filePathToUri(renamed.tab.path);
             await this.lspClient.openTextDocument(newUri, renamed.tab.content, renamed.tab.version);
             this.openedDocumentUris.add(newUri);
@@ -1781,6 +1783,7 @@ export class TypsastraWorkspaceController {
     }
 
     path = tab.path;
+    const isTypstDocument = isTypstDocumentPath(path);
     this.acceptedTypographyScales.set(
       filePathKey(path),
       this.documentTypographyFromText(tab.content)?.fonts.map(font => ({ ...font })) ?? []
@@ -1859,13 +1862,13 @@ export class TypsastraWorkspaceController {
         } else {
           this.editorToolbarController.setDisabled(true);
           if (ext === "svg") {
-            this.previewFrame.setMessage(
+            this.previewFrame.setMessageOverlay(
               `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
               tab.content +
               `</div>`
             );
           } else {
-            this.previewFrame.setMessage(
+            this.previewFrame.setMessageOverlay(
               `<div class="preview-disabled-placeholder">` +
               `<div class="preview-disabled-icon">🚫</div>` +
               `<div class="preview-disabled-title">Preview Unavailable</div>` +
@@ -1912,6 +1915,9 @@ export class TypsastraWorkspaceController {
       if (options.preservePreviewSession.previewSessionKey) {
         previewPresentationReused = this.previewFrame.activateSession(options.preservePreviewSession.previewSessionKey);
       }
+    } else if (!isTypstDocument) {
+      // Non-Typst text files remain editor-only. Their preview placeholder was
+      // selected above and they must never be resolved as compiler roots.
     } else if (!this.pinnedMainFilePath) {
       this.previewFrame.setMessage(this.noMainFileMessage());
     } else {
@@ -1934,6 +1940,9 @@ export class TypsastraWorkspaceController {
           }
         } else {
           this.applyPreviewTargetToTab(tab, previewTarget);
+          if (tab.previewSessionKey) {
+            previewPresentationReused = this.previewFrame.activateSession(tab.previewSessionKey);
+          }
         }
       }
     }
@@ -1950,7 +1959,7 @@ export class TypsastraWorkspaceController {
     }
 
 
-    if (!options.skipPreviewActivation && this.lspReady && this.lspClient) {
+    if (!options.skipPreviewActivation && isTypstDocument && this.lspReady && this.lspClient) {
       const lspRes = await this.getLspUriAndContent(path, tab.content);
       if (lspRes) {
         const { uri: lspUri, content: lspContent } = lspRes;
@@ -1975,7 +1984,7 @@ export class TypsastraWorkspaceController {
       } else {
         this.previewFrame.setMessage(`<div style="padding: 20px; color: var(--ui-header-text); font-family: var(--font-family-sans);">No preview root found for this library/template file. Diagnostics are still active.</div>`);
       }
-    } else if (!options.skipPreviewActivation) {
+    } else if (!options.skipPreviewActivation && isTypstDocument) {
       if (!options.preservePreviewSession && this.previewRootPath && !this.previewDisabled) {
         void this.renderPdfPreview(tab.content);
       }
@@ -2308,7 +2317,7 @@ export class TypsastraWorkspaceController {
   }
 
   private async formatActiveDocument(options: { silent?: boolean } = {}): Promise<boolean> {
-    if (!this.activeFilePath || this.activeMode !== "CODE") return false;
+    if (!this.activeFilePath || !isTypstDocumentPath(this.activeFilePath) || this.activeMode !== "CODE") return false;
     if (!this.lspReady || !this.lspClient) {
       if (!options.silent) this.setLspStatus({ kind: "error", message: "Formatter unavailable until Tinymist LSP is ready" });
       return false;
@@ -3008,7 +3017,7 @@ export class TypsastraWorkspaceController {
       this.pdfPreviewSourceMapRootPath = previewPath;
       this.pdfPreviewSourceMapTaskId = sourceMapTaskId;
       this.lastPdfBase64 = pdf.data!;
-      await this.previewFrame.loadPdfData(pdf.data!, previewPath);
+      await this.previewFrame.loadPdfData(pdf.data!, previewPath, this.previewSessionKey ?? previewPath);
       if (reportRenderStatus) {
         this.setLspStatus({ kind: "preview-ready", message: "Preview ready" });
       }
@@ -3281,7 +3290,7 @@ export class TypsastraWorkspaceController {
       this.scheduleManualTypographyScaleCheck();
     }
 
-    if (!this.isLoadingFile && this.activeFilePath && this.lspReady && this.lspClient) {
+    if (!this.isLoadingFile && this.activeFilePath && isTypstDocumentPath(this.activeFilePath) && this.lspReady && this.lspClient) {
       const version = ++this.currentVersion;
       this.latestDocumentVersion = version;
       const activeTab = this.getActiveTab();
@@ -4509,6 +4518,7 @@ export class TypsastraWorkspaceController {
 
   private async handleLspDiagnostics(uri: string, diagnostics: LspDiagnostic[], version?: number) {
     const originalPath = this.mapToOriginalPath(filePathFromUri(uri));
+    if (!isTypstDocumentPath(originalPath)) return;
     const isActive = this.activeFilePath && filePathKey(originalPath) === filePathKey(this.activeFilePath);
     if (isActive && this.diagnosticWaitStartedAt !== null) {
       this.performanceDiagnostics.recordFirst({
@@ -5392,8 +5402,12 @@ export class TypsastraWorkspaceController {
       }
     }
     this.setLspStatus({
-      kind: lspUpdated ? "preview-ready" : "sync-pending",
-      message: lspUpdated ? "Reloaded external file change" : "Reloaded external file; preview update queued"
+      kind: lspUpdated || !isTypstDocumentPath(tab.path) ? "preview-ready" : "sync-pending",
+      message: lspUpdated
+        ? "Reloaded external file change"
+        : isTypstDocumentPath(tab.path)
+          ? "Reloaded external file; preview update queued"
+          : "Reloaded external file"
     });
   }
 
@@ -5724,9 +5738,18 @@ export class TypsastraWorkspaceController {
     }
 
     if (ext === "svg") {
-      this.previewFrame.setMessage(
+      this.previewFrame.setMessageOverlay(
         `<div style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;background:var(--ui-bg);box-sizing:border-box;padding:20px;overflow:auto;">` +
         this.editorInstance.state.doc.toString() +
+        `</div>`
+      );
+      return;
+    }
+    if (!isTypstDocumentPath(path)) {
+      this.previewFrame.setMessageOverlay(
+        `<div class="preview-disabled-placeholder">` +
+        `<div class="preview-disabled-title">Preview Unavailable</div>` +
+        `<div class="preview-disabled-msg">Live preview is not supported for ${ext.toUpperCase() || "this"} files.</div>` +
         `</div>`
       );
       return;
@@ -7142,11 +7165,12 @@ export class TypsastraWorkspaceController {
   }
 
   private async getLspUriAndContent(path: string, originalContent: string): Promise<{ uri: string; content: string } | null> {
+    if (!isTypstDocumentPath(path)) return null;
     return { uri: filePathToUri(path), content: originalContent };
   }
 
   private getActiveLspUri(): string {
-    if (!this.activeFilePath) return "";
+    if (!this.activeFilePath || !isTypstDocumentPath(this.activeFilePath)) return "";
     return filePathToUri(this.activeFilePath);
   }
 
