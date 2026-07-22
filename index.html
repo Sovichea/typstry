@@ -2198,6 +2198,18 @@
                             Toolchain
                         </button>
                         <button
+                            class="settings-nav-item settings-nav-item-with-status"
+                            type="button"
+                            data-settings-panel="storage"
+                        >
+                            <span>Storage</span>
+                            <span
+                                id="settings-storage-warning"
+                                class="settings-nav-warning hidden"
+                                aria-label="Storage warning"
+                            >!</span>
+                        </button>
+                        <button
                             class="settings-nav-item"
                             type="button"
                             data-settings-panel="developer"
@@ -2617,6 +2629,38 @@
 
                         <div
                             class="settings-panel"
+                            data-settings-panel-content="storage"
+                        >
+                            <h3>Storage</h3>
+                            <div
+                                id="settings-storage-status"
+                                class="settings-notice"
+                                role="status"
+                                aria-live="polite"
+                            >Loading WebView storage status...</div>
+                            <p id="settings-storage-details" class="settings-storage-details"></p>
+                            <div class="settings-storage-summary" aria-label="WebView storage summary">
+                                <div><small>Total profile</small><strong id="settings-storage-total">Not scanned</strong></div>
+                                <div><small>Disposable cache</small><strong id="settings-storage-disposable">Not scanned</strong></div>
+                                <div><small>Persistent state</small><strong id="settings-storage-persistent">Not scanned</strong></div>
+                                <div><small>Free disk space</small><strong id="settings-storage-free">Not scanned</strong></div>
+                            </div>
+                            <div class="settings-field settings-storage-path-field">
+                                <label>WebView profile</label>
+                                <code id="settings-storage-profile">Resolving profile path...</code>
+                                <small>The path is resolved from Typsastra's platform configuration and is never included in project exports.</small>
+                            </div>
+                            <h4 class="settings-storage-heading">Largest categories</h4>
+                            <div id="settings-storage-categories" class="settings-storage-categories"></div>
+                            <div class="settings-storage-actions">
+                                <button id="settings-storage-scan" class="settings-secondary-button" type="button">Scan now</button>
+                                <button id="settings-storage-reveal" class="settings-secondary-button" type="button">Reveal folder</button>
+                            </div>
+                            <p class="settings-help">Monitoring is read-only. Typsastra does not delete the complete WebView profile or clear persistent application state.</p>
+                        </div>
+
+                        <div
+                            class="settings-panel"
                             data-settings-panel-content="developer"
                         >
                             <h3>Developer</h3>
@@ -2971,6 +3015,22 @@ SOFTWARE.</pre>
                 </div>
             </section>
         </div>
+
+        <aside
+            id="webview-storage-notification"
+            class="webview-storage-notification hidden"
+            role="status"
+            aria-live="polite"
+        >
+            <div>
+                <strong id="webview-storage-notification-title">WebView storage needs attention</strong>
+                <p id="webview-storage-notification-message"></p>
+            </div>
+            <div class="webview-storage-notification-actions">
+                <button id="webview-storage-review" class="settings-secondary-button" type="button">Review storage</button>
+                <button id="webview-storage-dismiss" class="settings-secondary-button" type="button">Dismiss</button>
+            </div>
+        </aside>
 
         <script type="module" src="/src/main.ts"></script>
     </body>

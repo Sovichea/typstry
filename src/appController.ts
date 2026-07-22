@@ -81,6 +81,7 @@ import { DocumentLanguageService } from "./editor/languageScopes";
 import type { ImportedTypsastraProject, TypsastraProjectPreflight } from "./projectArchive";
 import { AppUpdateController } from "./appUpdateController";
 import { releaseSummaryForVersion, shouldShowReleaseSummary } from "./releaseNotes";
+import { WebviewStorageController } from "./webviewStorageController";
 
 import {
   ensureTypographyTemplateApplication,
@@ -327,6 +328,7 @@ export class TypsastraWorkspaceController {
   private suppressTypographyScaleConfirmation = false;
   private acceptedTypographyScales = new Map<string, DocumentScriptFont[]>();
   private typographyFontUpdateInProgress = false;
+  private exportInProgress = false;
   private deferredTypographyPreviewContents: string | null = null;
   private lastPdfBase64 = "";
   private pdfPreviewFailureAt: number | null = null;
@@ -548,6 +550,14 @@ export class TypsastraWorkspaceController {
   private readonly appUpdateController = new AppUpdateController(
     () => this.openTabs.some(tab => tab.isDirty)
   );
+  private readonly webviewStorageController = new WebviewStorageController(() =>
+    this.pdfPreviewRunning
+    || this.typographyFontUpdateInProgress
+    || this.exportInProgress
+    || this.settingsController.isLanguageProviderOperationInProgress
+    || this.toolchainController.isBusy
+    || this.appUpdateController.isInstalling
+  );
   private lspStatus = document.getElementById("lsp-status")!;
   private lspStatusDot = this.lspStatus.querySelector(".status-dot") as HTMLElement;
   private lspStatusText = this.lspStatus.querySelector(".status-text") as HTMLElement;
@@ -582,6 +592,7 @@ export class TypsastraWorkspaceController {
 
     await this.timeStartup("show main window", () => getCurrentWindow().show());
     this.appUpdateController.initialize();
+    this.webviewStorageController.initialize();
     this.refreshEditorLayout("main window shown");
     this.recordStartupTiming("frontend startup", "frontend bootstrap until window shown", this.startupStart);
     this.performanceDiagnostics.recordFirst({
@@ -6953,7 +6964,7 @@ export class TypsastraWorkspaceController {
       if (this.activeFilePath) {
         this.setLspStatus({ kind: "running", message: "Exporting PDF..." });
         const content = this.editorInstance.state.doc.toString();
-        
+        this.exportInProgress = true;
         try {
           const rootPath = this.previewStandalone
             ? (this.previewRootPath ?? this.activeFilePath)
@@ -7021,6 +7032,8 @@ export class TypsastraWorkspaceController {
           this.setLspStatus({ kind: "preview-ready", message: `Exported to ${originalPdfPath}` });
         } catch (error) {
           this.setLspStatus({ kind: "error", message: `Export failed: ${error}` });
+        } finally {
+          this.exportInProgress = false;
         }
       }
     });
@@ -7049,6 +7062,7 @@ export class TypsastraWorkspaceController {
         return;
       }
 
+      this.exportInProgress = true;
       try {
         const folderName = this.workspaceRootPath.split(/[/\\]/).pop() || "workspace";
         const selected = await save({
@@ -7074,6 +7088,8 @@ export class TypsastraWorkspaceController {
       } catch (error) {
         this.setLspStatus({ kind: "error", message: `Project export failed: ${error}` });
         await message(String(error), { title: "Typsastra Project Export Failed", kind: "error" });
+      } finally {
+        this.exportInProgress = false;
       }
     });
 
@@ -7090,6 +7106,7 @@ export class TypsastraWorkspaceController {
         return;
       }
 
+      this.exportInProgress = true;
       try {
         const folderName = this.workspaceRootPath.split(/[/\\]/).pop() || "workspace";
         const selected = await save({
@@ -7110,6 +7127,8 @@ export class TypsastraWorkspaceController {
       } catch (error) {
         this.setLspStatus({ kind: "error", message: `Source ZIP export failed: ${error}` });
         await message(String(error), { title: "Source ZIP Export Failed", kind: "error" });
+      } finally {
+        this.exportInProgress = false;
       }
     });
 

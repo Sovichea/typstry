@@ -1364,6 +1364,26 @@ body.typsastra-resizing #input-container-wrapper::after {
 
 .settings-nav-item:hover { background: var(--ui-bg); }
 .settings-nav-item.active { color: var(--ui-accent-foreground); background: var(--ui-accent-color); }
+.settings-nav-item-with-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-nav-warning {
+  min-width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ui-bg);
+  background: var(--ui-warning-color);
+  font-size: 10px;
+  font-weight: 700;
+}
+.settings-nav-item.active .settings-nav-warning {
+  color: var(--ui-accent-color);
+  background: var(--ui-accent-foreground);
+}
 .settings-panels { flex: 1; min-width: 0; overflow-y: auto; padding: 22px 26px; }
 .settings-panel { display: none; }
 .settings-panel.active { display: block; }
@@ -1376,7 +1396,11 @@ body.typsastra-resizing #input-container-wrapper::after {
   background: var(--ui-hover);
   line-height: 1.45;
 }
-.settings-notice.warning { border-color: #bf8700; color: #9a6700; }
+.settings-notice.warning {
+  border-color: var(--ui-warning-color);
+  color: color-mix(in srgb, var(--ui-warning-color) 82%, var(--ui-text));
+  background: color-mix(in srgb, var(--ui-warning-color) 8%, var(--ui-bg));
+}
 .settings-notice.error { border-color: #cf222e; color: #cf222e; }
 .settings-help { color: var(--ui-header-text); font-size: 11px; line-height: 1.5; }
 .settings-compatibility-card {
@@ -1591,6 +1615,94 @@ body.typsastra-resizing #input-container-wrapper::after {
   border-bottom: 1px solid var(--ui-border);
   color: var(--ui-header-text);
   font-size: 11px;
+}
+.settings-storage-details {
+  margin: 8px 0 14px;
+  color: var(--ui-header-text);
+  font: 10px/1.5 var(--font-family-mono);
+}
+.settings-storage-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.settings-storage-summary > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in srgb, var(--ui-hover) 55%, transparent);
+}
+.settings-storage-summary small,
+.settings-storage-summary strong {
+  display: block;
+}
+.settings-storage-summary small {
+  margin-bottom: 4px;
+  color: var(--ui-header-text);
+  font-size: 10px;
+}
+.settings-storage-summary strong { font-size: 13px; }
+.settings-storage-path-field code {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  overflow: hidden;
+  color: var(--ui-text);
+  font: 11px/1.45 var(--font-family-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-storage-heading { margin: 18px 0 8px; font-size: 12px; }
+.settings-storage-categories {
+  border: 1px solid var(--ui-border);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.settings-storage-category {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.settings-storage-category:last-child { border-bottom: 0; }
+.settings-storage-category > span {
+  overflow: hidden;
+  font: 11px/1.4 var(--font-family-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-storage-category small { color: var(--ui-header-text); font-size: 10px; }
+.settings-storage-category strong { font-size: 11px; }
+.settings-storage-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 12px 0;
+}
+.webview-storage-notification {
+  position: fixed;
+  z-index: 10000;
+  right: 18px;
+  bottom: 40px;
+  width: min(420px, calc(100vw - 36px));
+  padding: 12px;
+  border: 1px solid var(--ui-warning-color);
+  background: var(--ui-bg);
+  box-shadow: 0 10px 30px color-mix(in srgb, #000 24%, transparent);
+}
+.webview-storage-notification p {
+  margin-top: 5px;
+  color: var(--ui-header-text);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.webview-storage-notification-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
 }
 .settings-language-catalog-search {
   display: block;
@@ -2001,6 +2113,8 @@ body.typsastra-resizing #input-container-wrapper::after {
   .document-typography-table-header {
     display: none;
   }
+  .settings-storage-summary { grid-template-columns: 1fr; }
+  .settings-storage-path-field code { grid-column: 1; grid-row: auto; }
 
   .toolbar-font-fallbacks {
     gap: 10px;

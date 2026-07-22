@@ -28,6 +28,10 @@ export class ToolchainController {
 
   constructor(private readonly options: ToolchainControllerOptions) {}
 
+  public get isBusy(): boolean {
+    return this.loading;
+  }
+
   public initialize() {
     document.getElementById("settings-tinymist-version")?.addEventListener("change", event => {
       const version = (event.currentTarget as HTMLSelectElement).value;

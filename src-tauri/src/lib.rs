@@ -21,6 +21,7 @@ mod render_prepare;
 mod scaled_fonts;
 mod segmentation;
 mod toolchain;
+mod webview_storage;
 use compatibility::{get_linux_renderer_compatibility, prepare_linux_renderer_relaunch};
 use examples::prepare_examples_workspace;
 use render_prepare::{
@@ -272,6 +273,49 @@ fn save_app_settings(
     std::fs::write(&path, format!("{}\n", contents))
         .map_err(|error| format!("Failed to write settings.json: {}", error))?;
     Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_webview_storage_status(
+    app_handle: tauri::AppHandle,
+) -> Result<webview_storage::WebviewStorageReport, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let config_dir = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    let profile = webview_storage::profile_path(&data_dir);
+    webview_storage::load_status(
+        profile.as_deref(),
+        &webview_storage::history_path(&config_dir),
+        &app_handle.package_info().version.to_string(),
+    )
+}
+
+#[tauri::command]
+async fn scan_webview_storage(
+    app_handle: tauri::AppHandle,
+    full: bool,
+) -> Result<webview_storage::WebviewStorageReport, String> {
+    let data_dir = app_handle
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?;
+    let config_dir = app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    let profile = webview_storage::profile_path(&data_dir);
+    let history = webview_storage::history_path(&config_dir);
+    let version = app_handle.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        webview_storage::scan(profile.as_deref(), &history, &version, full)
+    })
+    .await
+    .map_err(|error| format!("WebView storage scan task failed: {error}"))?
 }
 
 #[derive(serde::Serialize)]
@@ -2791,6 +2835,8 @@ pub fn run() {
             finish_startup_initialization,
             load_app_settings,
             save_app_settings,
+            get_webview_storage_status,
+            scan_webview_storage,
             load_workspace_metadata,
             save_workspace_metadata,
             compile_typst_document,

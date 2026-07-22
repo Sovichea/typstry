@@ -11,6 +11,10 @@ export class AppUpdateController {
 
   constructor(private readonly hasUnsavedChanges: () => boolean = () => false) {}
 
+  public get isInstalling(): boolean {
+    return this.installing;
+  }
+
   public initialize(): void {
     if (!this.badge) return;
     this.badge.addEventListener("click", () => void this.confirmAndInstall());

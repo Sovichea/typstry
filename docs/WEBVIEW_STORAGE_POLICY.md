@@ -161,7 +161,7 @@ Before cleanup ships on a platform, verify:
 
 ## Delivery sequence
 
-1. **Read-only monitoring:** runtime path resolution, classified background
+1. **Read-only monitoring (implemented for Windows WebView2):** runtime path resolution, classified background
    scanning, rolling local samples, Settings display, and warning hysteresis.
 2. **Manual cache maintenance:** qualified runtime API, confirmation, restart
    coordination where required, and before/after reporting.

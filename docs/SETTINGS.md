@@ -123,16 +123,23 @@ Provider architecture is documented in [LANGUAGE_TOOLS.md](./LANGUAGE_TOOLS.md),
 
 Khmer render preparation leaves source files unchanged and, when explicitly enabled, generates preview/export input with zero-width word-break opportunities. This renderer path is experimental, defaults off, and its Settings row is shown only in dev builds.
 
-## WebView storage monitoring (planned for v0.5.2)
+## WebView storage monitoring
 
-Typsastra will monitor its embedded-browser profile in the background without
-placing directory traversal on the UI thread. Settings will report total size,
+Typsastra monitors its embedded-browser profile in the background without
+placing directory traversal on the UI thread. Settings reports total size,
 disposable cache, recent growth, and the resolved platform-specific location.
 Routine measurements will not interrupt editing.
 
+Windows WebView2 is the first qualified target. Typsastra performs the first
+full scan after the workspace UI is ready, refreshes disposable-cache
+measurements after idle periods, and retains at most 32 aggregate local samples.
+Use **Settings → Storage → Scan now** for an immediate full scan or **Reveal
+folder** to inspect the resolved profile location.
+
 Monitoring does not authorize deleting the complete WebView profile. Normal
 maintenance will preserve persistent application state and offer cleanup only
-for qualified disposable categories. See the
+for qualified disposable categories in a later phase. The current implementation
+is read-only. See the
 [WebView storage monitoring and maintenance policy](./WEBVIEW_STORAGE_POLICY.md)
 for cadence, thresholds, warning behavior, cleanup boundaries, and validation
 gates.

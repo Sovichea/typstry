@@ -59,6 +59,7 @@ export class SettingsController {
   private rendererCompatibility: LinuxRendererCompatibility | null = null;
   private rendererCompatibilityError: string | null = null;
   private languageCatalogQuery = "";
+  private languageProviderOperationInProgress = false;
   private updateProjectTerminology: (entries: TerminologyEntry[]) => void = () => {};
 
   constructor(
@@ -555,6 +556,10 @@ export class SettingsController {
     catalog.querySelector<HTMLInputElement>(".settings-language-catalog-search")?.focus();
   }
 
+  public get isLanguageProviderOperationInProgress(): boolean {
+    return this.languageProviderOperationInProgress;
+  }
+
   private async populateLanguageCatalog(): Promise<void> {
     const catalog = document.getElementById("settings-language-catalog");
     if (!catalog) return;
@@ -746,6 +751,7 @@ export class SettingsController {
     const original = button.textContent ?? "Download";
     button.disabled = true;
     button.textContent = "Downloading...";
+    this.languageProviderOperationInProgress = true;
     try {
       const providers = parseLanguageProviderCapabilitiesList(
         await invoke<unknown>("install_hunspell_dictionary", { locale: entry.locale })
@@ -756,6 +762,8 @@ export class SettingsController {
       button.disabled = false;
       button.textContent = original;
       await message(String(error), { title: `Install ${entry.displayName}`, kind: "error" });
+    } finally {
+      this.languageProviderOperationInProgress = false;
     }
   }
 
@@ -763,6 +771,7 @@ export class SettingsController {
     const original = button.textContent ?? "Remove";
     button.disabled = true;
     button.textContent = "Removing...";
+    this.languageProviderOperationInProgress = true;
     try {
       const providers = parseLanguageProviderCapabilitiesList(
         await invoke<unknown>("remove_hunspell_dictionary", { locale: entry.locale })
@@ -773,6 +782,8 @@ export class SettingsController {
       button.disabled = false;
       button.textContent = original;
       await message(String(error), { title: `Remove ${entry.displayName}`, kind: "error" });
+    } finally {
+      this.languageProviderOperationInProgress = false;
     }
   }
 
