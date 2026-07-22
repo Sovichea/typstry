@@ -38,6 +38,17 @@ describe("editor grapheme navigation", () => {
     expect(selection.main.head).toBe(0);
   });
 
+  test("maps pointer placement inside a line-leading COENG cluster to its start", () => {
+    const state = EditorState.create({
+      doc: "\u17B1\u17D2\u1799 text",
+      extensions: [graphemeSelectionBoundaryFilter]
+    });
+    const pointer = state.update({ selection: { anchor: 2 }, userEvent: "select.pointer" }).state;
+    expect(pointer.selection.main.head).toBe(0);
+    const keyboard = state.update({ selection: { anchor: 2 }, userEvent: "select" }).state;
+    expect(keyboard.selection.main.head).toBe(3);
+  });
+
   test("expands Khmer word selection at line start to the full cluster", () => {
     for (const word of ["ឲ្យ", "ឱ្យ"]) {
       const doc = Text.of([`${word} text`]);

@@ -120,7 +120,8 @@ export const graphemeSelectionBoundaryFilter: Extension = EditorState.transactio
   const snapped = snapSelectionToGraphemeBoundaries(
     transaction.newDoc,
     transaction.selection,
-    selectionKeepsTemporaryBoundary ? temporaryBoundary : null
+    selectionKeepsTemporaryBoundary ? temporaryBoundary : null,
+    transaction.isUserEvent("select.pointer")
   );
   if (snapped.eq(transaction.selection)) return transaction;
   return {
@@ -132,7 +133,8 @@ export const graphemeSelectionBoundaryFilter: Extension = EditorState.transactio
 export function snapSelectionToGraphemeBoundaries(
   doc: Text,
   selection: EditorSelection,
-  temporaryBoundary: number | null = null
+  temporaryBoundary: number | null = null,
+  pointerSelection = false
 ): EditorSelection {
   const ranges = selection.ranges.map(range => {
     if (!range.empty) {
@@ -153,13 +155,32 @@ export function snapSelectionToGraphemeBoundaries(
         ? EditorSelection.cursor(anchor, range.assoc, range.bidiLevel ?? undefined, range.goalColumn)
         : EditorSelection.range(anchor, head, range.goalColumn, range.bidiLevel ?? undefined, range.assoc);
     }
-    const anchor = snapPositionToGraphemeBoundary(doc, range.anchor, temporaryBoundary);
-    const head = snapPositionToGraphemeBoundary(doc, range.head, temporaryBoundary);
+    const snap = pointerSelection ? snapPointerPositionToGraphemeBoundary : snapPositionToGraphemeBoundary;
+    const anchor = snap(doc, range.anchor, temporaryBoundary);
+    const head = snap(doc, range.head, temporaryBoundary);
     return anchor === head
       ? EditorSelection.cursor(anchor, range.assoc, range.bidiLevel ?? undefined, range.goalColumn)
       : EditorSelection.range(anchor, head, range.goalColumn, range.bidiLevel ?? undefined, range.assoc);
   });
   return EditorSelection.create(ranges, selection.mainIndex);
+}
+
+function snapPointerPositionToGraphemeBoundary(
+  doc: Text,
+  position: number,
+  temporaryBoundary: number | null = null
+): number {
+  const line = doc.lineAt(Math.max(0, Math.min(position, doc.length)));
+  const local = position - line.from;
+  const localTemporaryBoundary = temporaryBoundary === null ? null : temporaryBoundary - line.from;
+  for (const boundary of graphemeBoundaries(line.text, localTemporaryBoundary)) {
+    if (boundary.from < local && local < boundary.to
+      && boundary.from === 0
+      && line.text.slice(boundary.from, boundary.to).includes("\u17D2")) {
+      return line.from;
+    }
+  }
+  return snapPositionToGraphemeBoundary(doc, position, temporaryBoundary);
 }
 
 function snapSelectionEndpoint(
