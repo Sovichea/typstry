@@ -134,6 +134,7 @@ The trackable post-release work is in the [v1.x implementation plan](./V1X_IMPLE
 - **v1.2 — reproducible computation:** explicitly run Python and GNU Octave workflows, with optional user-installed MATLAB integration, and consume generated plots/data in Typst. Project scripts never run automatically. Continue improving bounded AI writing workflows.
 - **v1.3 — Git workflows:** repository status, Unicode-safe diffs, staging, commits, branches, history, and safe conflict handling before remote hosting integration. AI may explain user-selected diffs but cannot perform Git mutations implicitly.
 - **Across v1.x — Khmer workflow:** revisit Khmer project presets, typography, editing, language tools, source navigation, preview/export, and experimental render preparation using representative documents and native-speaker review. Render preparation remains default-off unless it safely outperforms tuned ordinary Typst justification.
+- **Across v1.x — indexed forward sync:** eliminate whole-document source-position scans so exact reveals from included files remain responsive in 500- to 1,500-page projects without loading Tinymist's full vector preview.
 - **Later v1.x:** global project search, package/dependency inventory, bibliography improvements, support bundles, and additional stable complex-script providers.
 
 ## Deferred to v2.x

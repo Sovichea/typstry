@@ -27,6 +27,7 @@ Tasks use stable IDs such as `V1X-A.1`. Implementation, tests, documentation, pr
 
 - Fix user-reported crashes, preview/LSP recovery failures, Unicode editing regressions, packaging issues, and project-interchange defects.
 - [ ] **V1X-P.1 Redesign standalone chapter previews.** The v1.0 `// @standalone-preview` directive is disabled. Reintroduce independent preview roots only after Tinymist forward/inverse sync task routing is deterministic for main files, imported chapters, template-aware wrappers, render-cache mirrors, Unicode byte offsets, and tab switches. Add end-to-end native tests before restoring the directive or any equivalent UI action.
+- [ ] **V1X-P.2 Index long-document forward-sync positions.** Remove the one-to-two-second compiler lookup commonly observed when revealing a cursor from an included file in a very long document. Work with Tinymist or add an equivalent generation-scoped index from source file/span to the first exact PDF position; invalidate it on every compiled generation and keep memory bounded. Do not restore the full SVG/vector snapshot, guess from PDF text, or trade exact included-file mapping for an approximate jump. Benchmark main-file and included-file cold and warm lookups at 200, 500, and 1,500 pages.
 - Improve telemetry-free diagnostic bundles that users can explicitly export for bug reports.
 - Optimize startup, language-provider lazy loading, long-document memory, and PDF rendering.
 - Improve accessibility, platform integration, migration reliability, and release automation.

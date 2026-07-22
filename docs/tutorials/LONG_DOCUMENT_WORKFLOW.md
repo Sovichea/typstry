@@ -15,9 +15,13 @@ large files.
 ## Navigate the preview directly
 
 Enter a page number in the preview toolbar instead of animating through hundreds
-of pages. Manual forward sync jumps immediately to Tinymist's page-and-line
-position. The first source-map session is warmed when preview becomes ready so
-the first request does not pay session startup after the click.
+of pages. Once Tinymist returns a page-and-line position, manual forward sync
+jumps there without animating through intermediate pages. The first source-map
+session is warmed when preview becomes ready so the first request does not pay
+session startup after the click. In very long documents, resolving a position
+from an included file can still take one or two seconds because current
+Tinymist versions scan the compiled document. This is a known issue planned for
+the v1.x indexed-forward-sync workstream.
 
 ## Memory ownership
 

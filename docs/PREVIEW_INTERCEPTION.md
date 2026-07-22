@@ -54,6 +54,16 @@ one request per reveal so a slow lookup cannot create a queue of repeated
 whole-document scans. The developer log separates local mapping, source-map
 session readiness, and compiler lookup timings for further qualification.
 
+This scan is particularly noticeable when revealing a cursor from an included
+file in a very long document. A main-file reveal may appear nearly instant while
+an included chapter takes one or two seconds, even though both ultimately land
+at the correct page and line. Typsastra's render-cache path and byte-offset
+translation take only a small part of that time; the remaining compiler lookup
+is currently a known issue. The v1.x plan tracks a generation-scoped source
+position index so included-file lookup no longer requires a whole-document scan.
+Until that work lands, Typsastra will preserve exact compiler-owned mapping
+rather than substitute a faster approximate or PDF-text-based jump.
+
 If the source-map socket is unavailable, Typsastra logs the failure and does not pretend that the sync succeeded.
 
 ## Inverse sync
