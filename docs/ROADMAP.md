@@ -62,9 +62,10 @@ The detailed tasks and acceptance criteria are in the
   to understand or manually maintain directives. Preserve deterministic routing
   and keep unrelated files isolated while simplifying the authoring workflow.
 - Add advanced settings for inspecting the private global scaled-font cache.
-- Temporarily disable PDF render-on-type and migrate existing preferences to
-  render-on-save. Repeated PDF replacement is not a useful live-editing path
-  and can create unsafe WebView canvas and font-resource pressure.
+- Restore debounced PDF render-on-type for responsive short documents while
+  retaining render-on-save for long or resource-intensive projects. Continue
+  measuring replacement latency and WebView memory before choosing another
+  live-preview architecture.
 - Show cached variants by font face, scale, disk usage, and last use.
 - Allow users to delete selected or unused variants and renew stale variants.
 - Preserve the 10-variant recommendation while keeping deletion explicitly
@@ -77,18 +78,22 @@ The detailed tasks and acceptance criteria are in the
 
 ## v0.5.3 — portable active-file preview
 
-- Reintroduce on-type updates through SVG live preview only for documents that
-  remain within measured page-count, output-size, and memory budgets.
-- Automatically use PDF-on-save when the compiled document exceeds the live
-  SVG budget. Do not classify documents from source-file size alone because a
-  small Typst source can generate thousands of pages.
-- Show whether the active preview is **Live SVG** or **PDF on save**, and explain
-  automatic fallback without interrupting editing.
-- Keep only one renderer active when changing policy; release SVG resources
-  before installing PDF state and never retain both complete document
-  representations.
-- Qualify thresholds with representative text, complex-script, image, and
-  vector documents on Windows WebView2, Linux WebKitGTK, and macOS WKWebView.
+- Qualify debounced PDF render-on-type with representative text,
+  complex-script, image, and vector documents on Windows WebView2, Linux
+  WebKitGTK, and macOS WKWebView.
+- Decide from measured latency and memory whether a bounded SVG live-preview
+  experiment is still necessary. Do not introduce a second renderer merely
+  because SVG can update differently.
+- If an SVG experiment proceeds, qualify it only for documents within measured
+  page-count, output-size, and memory budgets; retain PDF-on-save as the bounded
+  path for larger output and never keep both complete representations alive.
+- Correct and qualify the decoded-raster-image preflight before enabling it.
+  Inspect statically discoverable assets without decoding them, warn from
+  decoded pixel area rather than compressed size, preserve the last successful
+  preview, and require explicit **Render Anyway** approval.
+- Never hide, downsample, convert, replace, or otherwise rewrite a source image.
+  Dynamic paths, package resources, plugins, unsupported containers, and
+  uncertain metadata must fail open with a documented detection limitation.
 - Add explicit **Full Document** and **Active File** preview modes.
 - Restrict Active File preview to the configured main file and documents
   directly or transitively reachable through `#include`.

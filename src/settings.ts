@@ -143,11 +143,8 @@ function booleanValue(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function previewRenderMode(_value: unknown): PreviewRenderMode {
-  // PDF render-on-type is disabled for the v0.5.2 stabilization release.
-  // Existing preferences migrate to on-save. A bounded SVG/PDF hybrid is
-  // planned for v0.5.3.
-  return "on-save";
+function previewRenderMode(value: unknown): PreviewRenderMode {
+  return value === "on-type" ? "on-type" : "on-save";
 }
 
 function terminologyEntries(value: unknown, limit = 2_000): TerminologyEntry[] {

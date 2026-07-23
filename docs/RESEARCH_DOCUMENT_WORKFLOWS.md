@@ -30,12 +30,10 @@ Keep project-wide typography and page configuration in the template applied by `
 
 ## Render modes
 
-- **On save** is the only preview refresh policy enabled in v0.5.2. It compiles
-  original workspace files only after a successful save and does not depend on
-  the mirror cache.
-- **On type** is temporarily disabled. v0.5.3 will reintroduce it as bounded SVG
-  live preview for qualified small documents and automatically retain
-  PDF-on-save for large documents.
+- **On type** keeps edits in memory and updates the PDF after typing pauses. It
+  is intended for responsive iteration on short documents.
+- **On save** compiles only after a successful save and is recommended for long
+  or resource-intensive documents.
 
 A render failure is non-terminal: the queued latest revision is processed after the failed request completes. LSP restarts clear stale document and source-map session state before reopening the active document.
 

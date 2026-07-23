@@ -54,14 +54,15 @@ The Toolchain panel installs stable Tinymist releases and shows each release's e
 
 ## Preview
 
-`renderMode` is normalized to `"on-save"` in v0.5.2. Existing `"on-type"`
-preferences migrate automatically. Imported files continue to preview through
-their configured main document. The former standalone-preview directive remains
-disabled; its portable replacement is planned for v0.5.3 and hardened in v1.x.
+`renderMode` accepts `"on-type"` and `"on-save"`. On-type keeps editor changes
+in memory and starts a PDF update after `syncDebounceMs`; on-save updates only
+after a successful save. Use on-save for long or resource-intensive documents.
+Imported files continue to preview through their configured main document. The
+former standalone-preview directive remains disabled; its portable replacement
+is planned for v0.5.3 and hardened in v1.x.
 
-`syncDebounceMs` is retained for forward compatibility but its control is
-disabled in v0.5.2. v0.5.3 will use it for a bounded SVG/PDF hybrid rather than
-repeated PDF rendering while typing.
+`syncDebounceMs` controls how long on-type mode waits after the latest edit
+before starting a preview update. It does not affect on-save mode.
 
 Forward cursor sync is temporarily disabled. Its reliability redesign and re-enablement are scheduled for the v0.9.0 prerelease.
 

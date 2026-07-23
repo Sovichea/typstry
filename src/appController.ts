@@ -125,10 +125,24 @@ type MemoryDiagnosticTotals = {
   backendBytes: number;
 };
 
+type OversizedPreviewImage = {
+  path: string;
+  width: number;
+  height: number;
+  sourceBytes: number;
+  estimatedDecodedBytes: number;
+  format: string;
+  modifiedMs: number;
+};
+
 const DEFAULT_INPUT_WIDTH_PCT = 50;
 const DEFAULT_PREVIEW_WIDTH_PCT = 100 - DEFAULT_INPUT_WIDTH_PCT;
 const DEFAULT_EXPLORER_WIDTH_PX = 250;
 const RELEASE_SUMMARY_SEEN_KEY_PREFIX = "typsastra:release-summary-seen";
+const MAX_RECOMMENDED_DECODED_PREVIEW_IMAGE_BYTES = 64 * 1024 * 1024;
+// TODO(v0.5.3): Enable only after decoded-image probing and dependency
+// discovery pass the expanded cross-platform qualification plan.
+const ENABLE_OVERSIZED_PREVIEW_IMAGE_PREFLIGHT = false;
 
 class PreviewPreparationInterrupted extends Error {
   constructor() {
@@ -271,6 +285,8 @@ export class TypsastraWorkspaceController {
   private readonly approvedLargePreviewRoots = new Set<string>();
   private readonly inspectedPreviewRoots = new Set<string>();
   private blockedLargePreviewRoot: string | null = null;
+  private readonly approvedOversizedPreviewImages = new Set<string>();
+  private blockedOversizedPreviewImages: string | null = null;
   private wordWrapDeferredForResize = false;
   private recommendedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
   private selectedWorkspaceToolchain: { tinymistVersion: string; typstVersion: string } | null = null;
@@ -1623,14 +1639,16 @@ export class TypsastraWorkspaceController {
     // user is typing. For on-type preview, copy one settled snapshot to
     // Tinymist at the configured preview debounce boundary rather than after
     // every input transaction.
-    const delay = 300;
+    const delay = this.settingsController.value.preview.renderMode === "on-type"
+      ? Math.min(300, this.settingsController.value.preview.syncDebounceMs)
+      : 300;
     this.pendingEditorMutationTimer = window.setTimeout(() => {
       this.pendingEditorMutationTimer = null;
-      this.flushEditorContentMutation(true);
+      this.flushEditorContentMutation(delay);
     }, delay);
   }
 
-  private flushEditorContentMutation(previewDebounceElapsed = false): void {
+  private flushEditorContentMutation(previewDebounceElapsedMs = 0): void {
     if (this.pendingEditorMutationTimer !== null) {
       window.clearTimeout(this.pendingEditorMutationTimer);
       this.pendingEditorMutationTimer = null;
@@ -1647,7 +1665,7 @@ export class TypsastraWorkspaceController {
     const currentText = pending.doc.toString();
     this.configureDocumentLanguageTools(currentText);
     this.editorFontManager.scheduleDocumentUpdate(currentText);
-    this.handleContentMutation(currentText, previewDebounceElapsed);
+    this.handleContentMutation(currentText, previewDebounceElapsedMs);
   }
 
   private async renameWorkspacePath(oldPath: string, newPath: string): Promise<void> {
@@ -1910,6 +1928,77 @@ export class TypsastraWorkspaceController {
         if (onApproved) await onApproved();
         else await this.refreshActivePreviewRoot(true);
       }
+    });
+    return false;
+  }
+
+  private oversizedPreviewImageKey(image: OversizedPreviewImage): string {
+    return [
+      filePathKey(image.path),
+      image.width,
+      image.height,
+      image.sourceBytes,
+      image.modifiedMs
+    ].join(":");
+  }
+
+  private async ensureOversizedPreviewImagesApproved(
+    rootPath: string | null,
+    contents: string,
+    force: boolean
+  ): Promise<boolean> {
+    if (!rootPath) return true;
+    let images: OversizedPreviewImage[];
+    try {
+      images = await invoke<OversizedPreviewImage[]>("typst_preview_oversized_images", {
+        rootPath,
+        maxDecodedBytes: MAX_RECOMMENDED_DECODED_PREVIEW_IMAGE_BYTES
+      });
+    } catch (error) {
+      this.appendDeveloperLog({
+        kind: "warning",
+        source: "preview scheduler",
+        message: `Could not inspect preview image dimensions: ${String(error)}`
+      });
+      return true;
+    }
+
+    const unapproved = images.filter(
+      image => !this.approvedOversizedPreviewImages.has(this.oversizedPreviewImageKey(image))
+    );
+    if (unapproved.length === 0) {
+      this.blockedOversizedPreviewImages = null;
+      return true;
+    }
+    const warningKey = unapproved.map(image => this.oversizedPreviewImageKey(image)).join("|");
+    if (this.blockedOversizedPreviewImages === warningKey) return false;
+    this.blockedOversizedPreviewImages = warningKey;
+
+    const visibleItems = unapproved.slice(0, 3).map(image =>
+      `${fileNameFromPath(image.path)} (${image.width.toLocaleString()} × ${image.height.toLocaleString()}, about ${formatFileSize(image.estimatedDecodedBytes)} decoded from ${formatFileSize(image.sourceBytes)})`
+    );
+    const additional = unapproved.length > visibleItems.length
+      ? ` and ${unapproved.length - visibleItems.length} more`
+      : "";
+    this.previewFrame.setConfirmationMessage({
+      title: "Large Image Preview Paused",
+      message: `Typsastra found ${unapproved.length === 1 ? "a raster image" : `${unapproved.length} raster images`} that may consume excessive memory when decoded: ${visibleItems.join("; ")}${additional}. Downscale or convert the source image manually, then save again. Typsastra will not alter the source automatically.`,
+      confirmLabel: "Render Anyway",
+      preservePreview: true,
+      onConfirm: async () => {
+        for (const image of unapproved) {
+          this.approvedOversizedPreviewImages.add(this.oversizedPreviewImageKey(image));
+        }
+        if (this.blockedOversizedPreviewImages === warningKey) {
+          this.blockedOversizedPreviewImages = null;
+        }
+        await this.renderPdfPreview(contents, force);
+      }
+    });
+    this.appendDeveloperLog({
+      kind: "warning",
+      source: "preview scheduler",
+      message: `Preview paused before rendering ${unapproved.length} oversized decoded image${unapproved.length === 1 ? "" : "s"}.`
     });
     return false;
   }
@@ -3282,6 +3371,15 @@ export class TypsastraWorkspaceController {
       });
       return;
     }
+    // Deliberately disabled for v0.5.2 so every source image reaches Typst
+    // unchanged and unblocked. Keep the guarded call compiled to prevent the
+    // deferred experiment from silently drifting out of type safety.
+    if (
+      ENABLE_OVERSIZED_PREVIEW_IMAGE_PREFLIGHT
+      && !await this.ensureOversizedPreviewImagesApproved(this.previewRootPath, contents, force)
+    ) {
+      return;
+    }
     if (this.typographyFontUpdateInProgress) {
       this.deferredTypographyPreviewContents = contents;
       this.appendDeveloperLog({
@@ -3584,7 +3682,7 @@ export class TypsastraWorkspaceController {
     return documents.size;
   }
 
-  private schedulePdfPreview(contents: string) {
+  private schedulePdfPreview(contents: string, delayMs = this.settingsController.value.preview.syncDebounceMs) {
     if (this.previewDisabled) {
       this.appendDeveloperLog({ kind: "info", source: "preview scheduler", message: "On-type schedule skipped: preview is disabled." });
       return;
@@ -3612,11 +3710,10 @@ export class TypsastraWorkspaceController {
     }
     const scheduleGeneration = ++this.pdfPreviewScheduleGeneration;
     const scheduledPath = this.activeFilePath;
-    const debounceMs = this.settingsController.value.preview.syncDebounceMs;
     this.appendDeveloperLog({
       kind: "info",
       source: "preview scheduler",
-      message: `On-type timer ${scheduleGeneration} scheduled: active=${scheduledPath ?? "none"}; sourceUtf16=${contents.length}; delay=${debounceMs}ms.`
+      message: `On-type timer ${scheduleGeneration} scheduled: active=${scheduledPath ?? "none"}; sourceUtf16=${contents.length}; delay=${delayMs}ms.`
     });
     this.pdfPreviewTimer = window.setTimeout(() => {
       this.pdfPreviewTimer = null;
@@ -3639,10 +3736,10 @@ export class TypsastraWorkspaceController {
           message: `On-type timer ${scheduleGeneration} discarded: active path changed from ${scheduledPath ?? "none"} to ${this.activeFilePath ?? "none"}.`
         });
       }
-    }, debounceMs);
+    }, delayMs);
   }
 
-  private handleContentMutation(rawText: string, previewDebounceElapsed = false) {
+  private handleContentMutation(rawText: string, previewDebounceElapsedMs = 0) {
     const canRenderPreview = activeFileCanRenderPreview(
       this.activeFilePath,
       this.pinnedMainFilePath,
@@ -3704,10 +3801,14 @@ export class TypsastraWorkspaceController {
       && this.settingsController.value.preview.renderMode === "on-type"
       && !this.previewDisabled
     ) {
-      if (previewDebounceElapsed) {
+      const remainingPreviewDebounceMs = Math.max(
+        0,
+        this.settingsController.value.preview.syncDebounceMs - previewDebounceElapsedMs
+      );
+      if (remainingPreviewDebounceMs === 0) {
         void this.renderPdfPreview(rawText);
       } else {
-        this.schedulePdfPreview(rawText);
+        this.schedulePdfPreview(rawText, remainingPreviewDebounceMs);
       }
     }
   }
@@ -6838,6 +6939,8 @@ export class TypsastraWorkspaceController {
     this.approvedLargePreviewRoots.clear();
     this.inspectedPreviewRoots.clear();
     this.blockedLargePreviewRoot = null;
+    this.approvedOversizedPreviewImages.clear();
+    this.blockedOversizedPreviewImages = null;
     this.lastTypographyInternalScaleError = "";
     this.pdfPreviewGeneration += 1;
     this.pdfForwardSyncGeneration += 1;

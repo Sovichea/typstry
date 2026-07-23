@@ -20,11 +20,10 @@ the configured main document's complete preview when opened.
 ## Edit and preview
 
 Typsastra manages Tinymist, so a separate Typst installation is normally not
-required. In v0.5.2, preview updates when a Typst file is saved. PDF compilation
-is asynchronous; the workspace UI becomes ready before the first preview
-finishes. On-type preview is temporarily disabled while v0.5.3 develops a
-bounded SVG live preview for small documents with automatic PDF-on-save
-fallback for large documents.
+required. PDF compilation is asynchronous; the workspace UI becomes ready
+before the first preview finishes. Choose **On type** for debounced PDF updates
+while editing a short document, or **On save** to reduce background work for a
+long or resource-intensive document.
 
 Use the preview page field to jump to a page. Use **Reveal Cursor in Preview**
 or `Alt+Enter` (`Option+Enter` on macOS) for manual forward sync. Double-click

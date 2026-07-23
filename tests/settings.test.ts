@@ -111,9 +111,9 @@ describe("application settings", () => {
     expect(second.developerLogs.memory).toBe(true);
   });
 
-  test("keeps on-save and migrates the temporarily disabled on-type mode", () => {
+  test("preserves both supported preview render modes", () => {
     expect(normalizeAppSettings({ preview: { renderMode: "on-save" } }).preview.renderMode).toBe("on-save");
-    expect(normalizeAppSettings({ preview: { renderMode: "on-type" } }).preview.renderMode).toBe("on-save");
+    expect(normalizeAppSettings({ preview: { renderMode: "on-type" } }).preview.renderMode).toBe("on-type");
   });
 
   test("keeps the Linux WebKit DMA-BUF compatibility override", () => {

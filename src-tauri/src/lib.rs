@@ -1185,6 +1185,279 @@ fn local_typst_dependencies(contents: &str, parent: &std::path::Path) -> Vec<std
     dependencies
 }
 
+fn local_typst_images(contents: &str, parent: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let bytes = contents.as_bytes();
+    let mut images = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index..].starts_with(b"//") {
+            index += 2;
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if bytes[index..].starts_with(b"/*") {
+            index += 2;
+            let mut depth = 1usize;
+            while index < bytes.len() && depth > 0 {
+                if bytes[index..].starts_with(b"/*") {
+                    depth += 1;
+                    index += 2;
+                } else if bytes[index..].starts_with(b"*/") {
+                    depth -= 1;
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[index] == b'`' {
+            let fence_start = index;
+            while index < bytes.len() && bytes[index] == b'`' {
+                index += 1;
+            }
+            let fence_len = index - fence_start;
+            while index < bytes.len() {
+                if bytes[index] == b'`' {
+                    let close_start = index;
+                    while index < bytes.len() && bytes[index] == b'`' {
+                        index += 1;
+                    }
+                    if index - close_start >= fence_len {
+                        break;
+                    }
+                } else {
+                    index += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[index] == b'"' {
+            index += 1;
+            let mut escaped = false;
+            while index < bytes.len() {
+                let byte = bytes[index];
+                index += 1;
+                if byte == b'"' && !escaped {
+                    break;
+                }
+                escaped = byte == b'\\' && !escaped;
+                if byte != b'\\' {
+                    escaped = false;
+                }
+            }
+            continue;
+        }
+        let previous_is_identifier =
+            index > 0 && (bytes[index - 1].is_ascii_alphanumeric() || bytes[index - 1] == b'_');
+        if previous_is_identifier || !bytes[index..].starts_with(b"image") {
+            index += 1;
+            continue;
+        }
+        let mut cursor = index + 5;
+        if cursor < bytes.len() && (bytes[cursor].is_ascii_alphanumeric() || bytes[cursor] == b'_')
+        {
+            index += 1;
+            continue;
+        }
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if cursor >= bytes.len() || bytes[cursor] != b'(' {
+            index += 1;
+            continue;
+        }
+        cursor += 1;
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if cursor >= bytes.len() || bytes[cursor] != b'"' {
+            index += 1;
+            continue;
+        }
+        cursor += 1;
+        let start = cursor;
+        let mut escaped = false;
+        while cursor < bytes.len() {
+            let byte = bytes[cursor];
+            if byte == b'"' && !escaped {
+                let raw = &contents[start..cursor];
+                if !raw.starts_with('@') && !raw.contains("://") && !raw.contains('\\') {
+                    images.push(normalized_existing_path(&parent.join(raw)));
+                }
+                cursor += 1;
+                break;
+            }
+            escaped = byte == b'\\' && !escaped;
+            if byte != b'\\' {
+                escaped = false;
+            }
+            cursor += 1;
+        }
+        index = cursor;
+    }
+    images
+}
+
+fn read_raster_dimensions(path: &std::path::Path) -> Option<(u32, u32, &'static str)> {
+    use std::io::Read;
+
+    let file = std::fs::File::open(path).ok()?;
+    let mut bytes = Vec::new();
+    file.take(1024 * 1024).read_to_end(&mut bytes).ok()?;
+
+    if bytes.len() >= 24 && bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
+        let height = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
+        return Some((width, height, "PNG"));
+    }
+    if bytes.len() >= 10 && (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
+        let width = u16::from_le_bytes(bytes[6..8].try_into().ok()?) as u32;
+        let height = u16::from_le_bytes(bytes[8..10].try_into().ok()?) as u32;
+        return Some((width, height, "GIF"));
+    }
+    if bytes.len() >= 26 && bytes.starts_with(b"BM") {
+        let width = i32::from_le_bytes(bytes[18..22].try_into().ok()?).unsigned_abs();
+        let height = i32::from_le_bytes(bytes[22..26].try_into().ok()?).unsigned_abs();
+        return Some((width, height, "BMP"));
+    }
+    if bytes.len() >= 30 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        if &bytes[12..16] == b"VP8X" {
+            let width = 1 + u32::from_le_bytes([bytes[24], bytes[25], bytes[26], 0]);
+            let height = 1 + u32::from_le_bytes([bytes[27], bytes[28], bytes[29], 0]);
+            return Some((width, height, "WebP"));
+        }
+    }
+    if bytes.len() >= 4 && bytes.starts_with(b"\xff\xd8") {
+        let mut cursor = 2usize;
+        while cursor + 3 < bytes.len() {
+            if bytes[cursor] != 0xff {
+                cursor += 1;
+                continue;
+            }
+            while cursor < bytes.len() && bytes[cursor] == 0xff {
+                cursor += 1;
+            }
+            if cursor >= bytes.len() {
+                break;
+            }
+            let marker = bytes[cursor];
+            cursor += 1;
+            if marker == 0xd8 || marker == 0xd9 || marker == 0x01 {
+                continue;
+            }
+            if cursor + 2 > bytes.len() {
+                break;
+            }
+            let segment_len =
+                u16::from_be_bytes(bytes[cursor..cursor + 2].try_into().ok()?) as usize;
+            if segment_len < 2 || cursor + segment_len > bytes.len() {
+                break;
+            }
+            if matches!(
+                marker,
+                0xc0 | 0xc1
+                    | 0xc2
+                    | 0xc3
+                    | 0xc5
+                    | 0xc6
+                    | 0xc7
+                    | 0xc9
+                    | 0xca
+                    | 0xcb
+                    | 0xcd
+                    | 0xce
+                    | 0xcf
+            ) && segment_len >= 7
+            {
+                let height =
+                    u16::from_be_bytes(bytes[cursor + 3..cursor + 5].try_into().ok()?) as u32;
+                let width =
+                    u16::from_be_bytes(bytes[cursor + 5..cursor + 7].try_into().ok()?) as u32;
+                return Some((width, height, "JPEG"));
+            }
+            cursor += segment_len;
+        }
+    }
+    None
+}
+
+#[derive(serde::Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct OversizedPreviewImage {
+    path: String,
+    width: u32,
+    height: u32,
+    source_bytes: u64,
+    estimated_decoded_bytes: u64,
+    format: String,
+    modified_ms: u64,
+}
+
+fn collect_oversized_preview_images(
+    root_path: &std::path::Path,
+    max_decoded_bytes: u64,
+) -> Vec<OversizedPreviewImage> {
+    use std::collections::{HashSet, VecDeque};
+    use std::time::UNIX_EPOCH;
+
+    let mut visited_sources = HashSet::new();
+    let mut visited_images = HashSet::new();
+    let mut pending = VecDeque::from([normalized_existing_path(root_path)]);
+    let mut oversized = Vec::new();
+    while let Some(path) = pending.pop_front() {
+        if !visited_sources.insert(path.clone()) {
+            continue;
+        }
+        let Ok(contents) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let parent = path.parent().unwrap_or(std::path::Path::new(""));
+        pending.extend(local_typst_dependencies(&contents, parent));
+        for image_path in local_typst_images(&contents, parent) {
+            if !visited_images.insert(image_path.clone()) {
+                continue;
+            }
+            let Some((width, height, format)) = read_raster_dimensions(&image_path) else {
+                continue;
+            };
+            let estimated_decoded_bytes = u64::from(width)
+                .saturating_mul(u64::from(height))
+                .saturating_mul(4);
+            if estimated_decoded_bytes <= max_decoded_bytes {
+                continue;
+            }
+            let Ok(metadata) = std::fs::metadata(&image_path) else {
+                continue;
+            };
+            let modified_ms = metadata
+                .modified()
+                .ok()
+                .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                .map(|value| value.as_millis().min(u128::from(u64::MAX)) as u64)
+                .unwrap_or_default();
+            oversized.push(OversizedPreviewImage {
+                path: image_path.to_string_lossy().to_string(),
+                width,
+                height,
+                source_bytes: metadata.len(),
+                estimated_decoded_bytes,
+                format: format.to_string(),
+                modified_ms,
+            });
+        }
+    }
+    oversized.sort_by(|left, right| {
+        right
+            .estimated_decoded_bytes
+            .cmp(&left.estimated_decoded_bytes)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    oversized
+}
+
 #[derive(serde::Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct TypstPreviewSourceStats {
@@ -1228,6 +1501,18 @@ fn collect_typst_preview_source_stats(root_path: &std::path::Path) -> TypstPrevi
 #[tauri::command]
 fn typst_preview_source_stats(root_path: String) -> TypstPreviewSourceStats {
     collect_typst_preview_source_stats(std::path::Path::new(&root_path))
+}
+
+// TODO(v0.5.3): Restore the Tauri command registration only after the
+// experimental decoded-image detector passes its format and project-graph
+// qualification. Keeping the implementation here preserves the experiment
+// without exposing it in the v0.5.2 application.
+#[allow(dead_code)]
+fn typst_preview_oversized_images(
+    root_path: String,
+    max_decoded_bytes: u64,
+) -> Vec<OversizedPreviewImage> {
+    collect_oversized_preview_images(std::path::Path::new(&root_path), max_decoded_bytes)
 }
 
 fn collect_typst_files(root: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
@@ -1821,7 +2106,8 @@ async fn compile_typst_pdf_preview(
 #[cfg(test)]
 mod preview_main_tests {
     use super::{
-        cleanup_workspace_preview_files, collect_typst_preview_source_stats,
+        cleanup_workspace_preview_files, collect_oversized_preview_images,
+        collect_typst_preview_source_stats, local_typst_images, read_raster_dimensions,
         resolve_preview_target, TypstPreviewSourceStats,
     };
 
@@ -1836,11 +2122,8 @@ mod preview_main_tests {
             "#import \"template.typ\": *\n#include \"chapter.typ\"\n",
         )
         .expect("write main");
-        std::fs::write(
-            &chapter_path,
-            "#import \"template.typ\": *\nChapter\n",
-        )
-        .expect("write chapter");
+        std::fs::write(&chapter_path, "#import \"template.typ\": *\nChapter\n")
+            .expect("write chapter");
         std::fs::write(&template_path, "Template\n").expect("write template");
 
         let stats = collect_typst_preview_source_stats(&main_path);
@@ -1856,6 +2139,41 @@ mod preview_main_tests {
                 file_count: 3,
             }
         );
+    }
+
+    #[test]
+    fn finds_static_images_without_matching_comments_or_strings() {
+        let parent = std::path::Path::new("/workspace");
+        let paths = local_typst_images(
+            "#image(\"hero.png\")\n// #image(\"ignored.png\")\n#let sample = \"image(\\\"also-ignored.png\\\")\"\n",
+            parent,
+        );
+        assert_eq!(paths, vec![parent.join("hero.png")]);
+    }
+
+    #[test]
+    fn reads_png_dimensions_and_reports_oversized_reachable_images() {
+        let workspace = tempfile::tempdir().expect("create workspace");
+        let main_path = workspace.path().join("main.typ");
+        let chapter_path = workspace.path().join("chapter.typ");
+        let image_path = workspace.path().join("large.png");
+        std::fs::write(&main_path, "#include \"chapter.typ\"\n").expect("write main");
+        std::fs::write(&chapter_path, "#image(\"large.png\")\n").expect("write chapter");
+        let mut png = vec![0u8; 24];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[16..20].copy_from_slice(&5000u32.to_be_bytes());
+        png[20..24].copy_from_slice(&4000u32.to_be_bytes());
+        std::fs::write(&image_path, png).expect("write png");
+
+        assert_eq!(
+            read_raster_dimensions(&image_path),
+            Some((5000, 4000, "PNG"))
+        );
+        let images = collect_oversized_preview_images(&main_path, 64 * 1024 * 1024);
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].width, 5000);
+        assert_eq!(images[0].height, 4000);
+        assert_eq!(images[0].estimated_decoded_bytes, 80_000_000);
     }
 
     #[test]
@@ -2865,6 +3183,7 @@ pub fn run() {
             reveal_in_explorer,
             resolve_preview_main,
             typst_preview_source_stats,
+            // TODO(v0.5.3): typst_preview_oversized_images,
             ensure_toolchain,
             get_toolchain_status,
             list_system_fonts,

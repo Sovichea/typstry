@@ -80,16 +80,24 @@ The previous PDF text-matching fallback was removed. It was not deterministic en
 
 ## Render modes
 
-v0.5.2 enables only `on-save`: the PDF preview compiles after a successful
-save. Existing `on-type` preferences migrate to `on-save`. On-type preview is
-temporarily disabled after repeated PDF replacement was found to provide poor
-interaction latency and unsafe WebView resource growth.
+v0.5.2 supports both PDF render modes:
 
-v0.5.3 will reintroduce on-type updates through bounded SVG live preview for
-qualified small documents. Documents that exceed the measured page or resource
-budget will remain on PDF-on-save automatically.
+- `on-type` keeps edits in memory and updates the PDF after the configured
+  debounce interval. It is intended for responsive iteration on short
+  documents.
+- `on-save` updates only after a successful save and remains preferable for
+  long or resource-intensive documents.
+
+Typsastra will continue qualifying the current PDF-on-type implementation before
+deciding whether a separate bounded SVG renderer provides enough additional
+value. SVG preview is an experiment, not a committed v0.5.3 replacement.
 
 Imported files currently preview through their configured main document. Independent standalone roots remain disabled pending the portable v0.5.3 Full Document/Active File implementation plan; `V1X-P.1` owns later qualification and hardening.
+
+The experimental decoded-image preflight remains disabled in v0.5.2 while its
+format probing and dependency discovery are corrected and qualified. Typsastra
+does not automatically hide, downsample, convert, or block source images.
+Non-destructive detection and author confirmation are planned for v0.5.3.
 
 PDF forward and inverse sync use one hidden Tinymist web-preview task solely for its source-map data plane. The task ID ends in `-source-map`; Typsastra serializes concurrent startup requests and calls `tinymist.doKillPreview` before replacing a stale task. Do not start a normal-task fallback: Tinymist can reject a second registration against the same compiler instance with `cannot register preview to the compiler instance`.
 

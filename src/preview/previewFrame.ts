@@ -311,6 +311,7 @@ export class PreviewFrame {
         this.pdfWorker = pdfjs.PDFWorker.create({ name: "typsastra-preview" });
       }
       const bytes = decodeBase64(base64Data);
+      const pdfByteLength = bytes.byteLength;
       const loadingTask = pdfjs.getDocument({
         data: bytes,
         worker: this.pdfWorker as InstanceType<typeof pdfjs.PDFWorker>,
@@ -350,7 +351,8 @@ export class PreviewFrame {
       nextLoadingTask = null;
       this.pendingPdfLoadingTask = null;
       this.pageDimensions = nextDimensions;
-      this.currentPdfBytes = bytes.byteLength;
+      // PDF.js transfers this buffer to its worker, detaching it after load.
+      this.currentPdfBytes = pdfByteLength;
       this.mountedUrl = identity;
       this.mountedSessionKey = sessionKey;
       if (this.isFitToWidth) this.previewZoomPercent = this.computeFitToWidthPercent();
@@ -369,7 +371,10 @@ export class PreviewFrame {
       this.onPerformance?.({
         name: "preview.load",
         milliseconds: performance.now() - startedAt,
-        detail: { pageCount: pdfDoc.numPages, pdfBytes: bytes.byteLength }
+        detail: {
+          pageCount: pdfDoc.numPages,
+          pdfBytes: pdfByteLength
+        }
       });
       // The old page remains visible while the replacement is prepared, then
       // release its document resources before this generation completes. The
@@ -1283,8 +1288,13 @@ export class PreviewFrame {
     message: string;
     confirmLabel: string;
     onConfirm: () => void | Promise<void>;
+    preservePreview?: boolean;
   }): void {
-    this.setMessage("");
+    if (options.preservePreview && this.currentUrl) {
+      this.setMessageOverlay("");
+    } else {
+      this.setMessage("");
+    }
     const host = this.messageHost;
     if (!host) return;
     const placeholder = document.createElement("div");

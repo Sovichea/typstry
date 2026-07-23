@@ -2506,12 +2506,12 @@
                                 <label for="settings-preview-render-mode"
                                     >Render preview</label
                                 >
-                                <select id="settings-preview-render-mode" disabled>
-                                    <option value="on-type" disabled>On type (returns in v0.5.3)</option>
+                                <select id="settings-preview-render-mode">
+                                    <option value="on-type">On type</option>
                                     <option value="on-save">On save</option>
                                 </select>
                                 <small
-                                    >v0.5.2 updates the PDF preview only after saving. On-type preview will return in v0.5.3 with bounded SVG rendering for small documents.</small
+                                    >On type updates the PDF preview after typing pauses. On save minimizes background compilation.</small
                                 >
                             </div>
                             <!-- TODO: Re-enable in prerelease v0.9.0 after improving performance and timeout reliability -->
@@ -2556,11 +2556,10 @@
                                     min="50"
                                     max="2000"
                                     step="10"
-                                    disabled
                                 />
                                 <small
-                                    >Temporarily unavailable while on-type
-                                    preview is disabled for v0.5.2.</small
+                                    >Delay after the latest edit before an
+                                    on-type preview update starts.</small
                                 >
                             </div>
                             <div class="settings-field">
