@@ -24,6 +24,7 @@ import { editingPolicyRegistry } from "./editingPolicies/registry";
 import { showInvisibleCharacters } from "./invisibles";
 import { TYPSASTRA_GREEN, TYPSASTRA_GREEN_GLOW } from "../ui/brandColors";
 import { wrappedLineIndentation } from "./wrappedIndent";
+import { contextualDoubleQuoteExtension } from "./quoteEditing";
 
 export const themeCompartment = new Compartment();
 export const wrapCompartment = new Compartment();
@@ -97,7 +98,7 @@ function typstFoldMarkerDOM(open: boolean): HTMLElement {
 }
 
 const preventEscapedBracketAutoClose = EditorView.inputHandler.of((view, from, to, text) => {
-  const bracketsToPrevent = ["$", "(", "[", "{", '"', "'", "*", "_"];
+  const bracketsToPrevent = ["$", "(", "[", "{", "'", "*", "_"];
   if (bracketsToPrevent.includes(text)) {
     if (from > 0 && view.state.doc.sliceString(from - 1, from) === "\\") {
       view.dispatch({
@@ -283,6 +284,7 @@ export function getEditorExtensions(
     graphemeSelectionBoundaryFilter,
     showZwsCompartment.of(showZeroWidthSpaces),
     preventEscapedBracketAutoClose,
+    contextualDoubleQuoteExtension,
     EditorView.domEventHandlers({
       mousedown: (event, view) => {
         if ((event.ctrlKey || event.metaKey) && event.button === 0) {
