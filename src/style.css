@@ -3253,6 +3253,10 @@ button.welcome-item:disabled {
 }
 
 /* CodeMirror autocomplete */
+.cm-tooltip {
+  z-index: 12000 !important;
+}
+
 .cm-tooltip.cm-tooltip-autocomplete,
 .cm-tooltip-autocomplete {
   overflow: hidden;

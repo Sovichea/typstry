@@ -1,6 +1,6 @@
 import { Extension, Compartment, EditorSelection, EditorState, StateEffect, RangeSetBuilder, Prec } from "@codemirror/state";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate } from "@codemirror/view";
+import { lineNumbers, highlightActiveLineGutter, highlightActiveLine, drawSelection, dropCursor, keymap, EditorView, ViewPlugin, Decoration, DecorationSet, ViewUpdate, tooltips } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, insertTab } from "@codemirror/commands";
 import {
   SearchQuery,
@@ -600,6 +600,7 @@ export function getEditorExtensions(
     indentationGuidesCompartment.of(visibleIndentationMarkers()),
     tabSizeCompartment.of([EditorState.tabSize.of(2), indentUnit.of("  ")]),
     wrapCompartment.of(EditorView.lineWrapping),
+    tooltips({ parent: document.body }),
     search({
       top: true,
       scrollToMatch: range => EditorView.scrollIntoView(range, { y: "center" })

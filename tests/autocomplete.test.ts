@@ -13,6 +13,15 @@ import {
 } from "../src/editor/autocomplete";
 
 describe("language word completion context", () => {
+  test("mounts editor tooltips above preview overlays", async () => {
+    const source = await Bun.file(new URL("../src/editor/extensions.ts", import.meta.url)).text();
+    const css = await Bun.file(new URL("../src/style.css", import.meta.url)).text();
+
+    expect(source).toContain("tooltips({ parent: document.body })");
+    expect(css).toContain(".cm-tooltip {");
+    expect(css).toContain("z-index: 12000 !important");
+  });
+
   test("allows prose and content-block text", () => {
     expect(allowsLanguageWordCompletionOnLine("This paragraph has sch", 19)).toBe(true);
     expect(allowsLanguageWordCompletionOnLine('#figure(image("photo.png"))[The capt', 33)).toBe(true);
