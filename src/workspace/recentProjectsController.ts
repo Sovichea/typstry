@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { filePathKey } from "../platform/paths";
 import { createAppIcon } from "../ui/icons";
 
@@ -55,6 +56,33 @@ export function filterRecentProjects(projects: readonly string[], query: string)
     .map(result => result.path);
 }
 
+export function removeRecentProject(projects: readonly string[], path: string): string[] {
+  const removedKey = filePathKey(path);
+  return projects.filter(project => filePathKey(project) !== removedKey);
+}
+
+export async function recentProjectPathAvailable(
+  path: string,
+  pathExists: (path: string) => boolean | Promise<boolean>
+): Promise<boolean> {
+  try {
+    return await pathExists(path);
+  } catch {
+    // A transient backend failure must not silently remove a valid project.
+    // Let the normal workspace-opening path report the underlying error.
+    return true;
+  }
+}
+
+export async function notifyBeforeRemovingRecentProject(
+  path: string,
+  notify: (path: string) => void | Promise<void>,
+  remove: (path: string) => void
+): Promise<void> {
+  await notify(path);
+  remove(path);
+}
+
 function normalizeSearchText(value: string): string {
   return value.normalize("NFC").toLocaleLowerCase();
 }
@@ -110,7 +138,12 @@ export class RecentProjectsController {
   private popupList: HTMLElement | null = null;
   private popupSelectionIndex = 0;
 
-  constructor(private readonly onOpen: (path: string) => void | Promise<void>) {}
+  constructor(
+    private readonly onOpen: (path: string) => void | Promise<void>,
+    private readonly onMissing: (path: string) => void | Promise<void> = () => {},
+    private readonly pathExists: (path: string) => boolean | Promise<boolean> =
+      path => invoke<boolean>("workspace_path_exists", { path })
+  ) {}
 
   public initialize(): void {
     this.popupOverlay = document.getElementById("recent-projects-overlay");
@@ -147,7 +180,7 @@ export class RecentProjectsController {
   public openAt(index: number): boolean {
     const path = this.read()[index];
     if (!path) return false;
-    this.openProject(path);
+    void this.openProject(path);
     return true;
   }
 
@@ -161,9 +194,21 @@ export class RecentProjectsController {
     window.requestAnimationFrame(() => this.popupSearch?.focus());
   }
 
-  private openProject(path: string): void {
+  private async openProject(path: string): Promise<void> {
+    if (!await recentProjectPathAvailable(path, this.pathExists)) {
+      await notifyBeforeRemovingRecentProject(path, this.onMissing, missingPath => {
+        const remaining = removeRecentProject(this.read(), missingPath);
+        localStorage.setItem(storageKey, JSON.stringify(remaining));
+        this.render();
+        if (!this.popupOverlay?.classList.contains("hidden")) {
+          this.popupSelectionIndex = 0;
+          this.renderPopupList();
+        }
+      });
+      return;
+    }
     this.closePopup();
-    void this.onOpen(path);
+    await this.onOpen(path);
   }
 
   private closePopup(): void {

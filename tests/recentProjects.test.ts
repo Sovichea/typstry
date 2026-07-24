@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { filterRecentProjects, normalizeRecentProjects, recentProjectNavigationIndex, recentProjectShortcutIndex } from "../src/workspace/recentProjectsController";
+import {
+  filterRecentProjects,
+  normalizeRecentProjects,
+  notifyBeforeRemovingRecentProject,
+  recentProjectNavigationIndex,
+  recentProjectPathAvailable,
+  recentProjectShortcutIndex,
+  removeRecentProject
+} from "../src/workspace/recentProjectsController";
 
 describe("recent project shortcuts", () => {
   const event = (code: string, modifiers: Partial<KeyboardEvent> = {}) => ({
@@ -55,5 +63,42 @@ describe("recent project shortcuts", () => {
     expect(recentProjectNavigationIndex(2, 4, "ArrowUp")).toBe(1);
     expect(recentProjectNavigationIndex(0, 4, "ArrowUp")).toBe(0);
     expect(recentProjectNavigationIndex(0, 0, "ArrowDown")).toBeNull();
+  });
+
+  test("removes a missing project using platform-aware path identity", () => {
+    const projects = [
+      "C:\\Work\\Current",
+      "C:\\Work\\Missing",
+      "/home/writer/project"
+    ];
+    expect(removeRecentProject(projects, "c:/work/missing")).toEqual([
+      projects[0],
+      projects[2]
+    ]);
+  });
+
+  test("removes only paths confirmed missing and preserves entries on backend failure", async () => {
+    expect(await recentProjectPathAvailable("missing", async () => false)).toBeFalse();
+    expect(await recentProjectPathAvailable("current", async () => true)).toBeTrue();
+    expect(await recentProjectPathAvailable("unknown", async () => {
+      throw new Error("backend unavailable");
+    })).toBeTrue();
+  });
+
+  test("notifies the user before removing a missing recent project", async () => {
+    const events: string[] = [];
+    await notifyBeforeRemovingRecentProject(
+      "C:\\Work\\Missing",
+      async path => {
+        events.push(`notify:${path}`);
+      },
+      path => {
+        events.push(`remove:${path}`);
+      }
+    );
+    expect(events).toEqual([
+      "notify:C:\\Work\\Missing",
+      "remove:C:\\Work\\Missing"
+    ]);
   });
 });

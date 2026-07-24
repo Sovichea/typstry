@@ -470,7 +470,20 @@ export class TypsastraWorkspaceController {
   );
   private readonly documentLanguageService = new DocumentLanguageService();
   private readonly workspaceStateStore = new WorkspaceStateStore();
-  private readonly recentProjectsController = new RecentProjectsController(path => this.openWorkspace(path));
+  private readonly recentProjectsController = new RecentProjectsController(
+    path => this.openWorkspace(path),
+    async path => {
+      await this.appDialogController.show({
+        title: "Recent Project Not Found",
+        subtitle: fileNameFromPath(path),
+        description: `Typsastra could not find this project folder:\n\n${path}\n\nIt will be removed from your recent projects.`,
+        actions: [
+          { id: "remove", label: "Remove from Recent Projects", primary: true }
+        ],
+        cancelAction: "remove"
+      });
+    }
+  );
   private readonly workspaceWatcher = new WorkspaceWatcher(
     change => this.enqueueWorkspaceChange(change),
     error => this.reportWorkspaceWatchError(error)
